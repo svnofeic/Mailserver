@@ -1,0 +1,53 @@
+using DnsClient;
+using Mailserver.Core;
+using Mailserver.Core.Accounts;
+using Mailserver.Core.Data;
+using Mailserver.Core.Dkim;
+using Mailserver.Core.Queue;
+using Mailserver.Core.Routing;
+using Mailserver.Core.Security;
+using Mailserver.Core.Storage;
+using Mailserver.Smtp.Delivery;
+using Mailserver.Smtp.Receiving;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+
+namespace Mailserver.Smtp;
+
+public static class ServiceCollectionExtensions
+{
+    /// <summary>Registers storage, routing, SMTP servers and the delivery queue.</summary>
+    public static IServiceCollection AddMailserver(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<MailserverOptions>(configuration.GetSection(MailserverOptions.SectionName));
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(sp =>
+        {
+            var paths = new DataPaths(sp.GetRequiredService<IOptions<MailserverOptions>>().Value.DataDirectory);
+            paths.EnsureCreated();
+            return paths;
+        });
+        services.AddSingleton(sp =>
+        {
+            var database = new Database(sp.GetRequiredService<DataPaths>());
+            database.Migrate();
+            return database;
+        });
+        services.AddSingleton<AccountStore>();
+        services.AddSingleton<MailboxStore>();
+        services.AddSingleton<OutboundQueue>();
+        services.AddSingleton<DkimKeyStore>();
+        services.AddSingleton<OutgoingMessagePreparer>();
+        services.AddSingleton<MessageRouter>();
+        services.AddSingleton<AuthThrottle>();
+        services.AddSingleton<CertificateProvider>();
+        services.AddSingleton<ILookupClient>(_ => new LookupClient(new LookupClientOptions { UseCache = true, Timeout = TimeSpan.FromSeconds(10) }));
+        services.AddSingleton<RemoteDeliveryClient>();
+        services.AddSingleton<DeliveryService>();
+
+        services.AddHostedService<SmtpHostedService>();
+        services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());
+        return services;
+    }
+}

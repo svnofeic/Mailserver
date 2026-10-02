@@ -1,0 +1,33 @@
+namespace Mailserver.Core;
+
+/// <summary>
+/// Resolves the on-disk layout below the data directory.
+/// </summary>
+public sealed class DataPaths
+{
+    public DataPaths(string dataDirectory)
+    {
+        // A Windows service starts in C:\Windows\System32, so relative paths are anchored to the application directory.
+        Root = Path.IsPathRooted(dataDirectory)
+            ? dataDirectory
+            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, dataDirectory));
+    }
+
+    public string Root { get; }
+
+    public string DatabaseFile => Path.Combine(Root, "mailserver.db");
+
+    public string MailRoot => Path.Combine(Root, "mail");
+
+    public string QueueRoot => Path.Combine(Root, "queue");
+
+    public string DkimRoot => Path.Combine(Root, "dkim");
+
+    public void EnsureCreated()
+    {
+        Directory.CreateDirectory(Root);
+        Directory.CreateDirectory(MailRoot);
+        Directory.CreateDirectory(QueueRoot);
+        Directory.CreateDirectory(DkimRoot);
+    }
+}
