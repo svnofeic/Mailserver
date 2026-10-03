@@ -86,7 +86,7 @@ Oder selbst bauen, auf einem Entwicklungsrechner mit .NET 10 SDK:
 Den Ordner `publish` auf den Server kopieren und dort in einer PowerShell als Administrator ausführen:
 
 ```powershell
-.\install.ps1 -Package C:\Temp\publish     # installiert nach C:\Mailserver
+.\install.ps1                              # im entpackten Paketordner; installiert nach C:\Mailserver
 notepad C:\Mailserver\appsettings.json     # Hostname und Tls eintragen
 ```
 

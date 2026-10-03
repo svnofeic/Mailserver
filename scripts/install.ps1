@@ -7,25 +7,36 @@
     - opens the firewall for SMTP (25), submission (587), SMTPS (465), IMAP (143), IMAPS (993) and the web interface (9443)
     - restricts the data folder to SYSTEM and Administrators
 .EXAMPLE
+    .\install.ps1                              # from the unpacked package folder
+.EXAMPLE
     .\install.ps1 -Package C:\Temp\publish
 #>
 #Requires -RunAsAdministrator
 param(
-    [Parameter(Mandatory)] [string]$Package,
+    # Defaults to the folder this script is in (it ships inside the package).
+    [string]$Package = $PSScriptRoot,
     [string]$InstallDir = 'C:\Mailserver',
     [string]$ServiceName = 'Mailserver'
 )
 
 $ErrorActionPreference = 'Stop'
 
+if (-not (Test-Path (Join-Path $Package 'Mailserver.exe'))) {
+    throw "No Mailserver.exe in '$Package'. Run install.ps1 from the unpacked package folder or pass -Package <folder>."
+}
+
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($service -and $service.Status -ne 'Stopped') {
+$wasRunning = $service -and $service.Status -ne 'Stopped'
+if ($wasRunning) {
     Write-Host "Stopping $ServiceName ..."
     Stop-Service -Name $ServiceName
     $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(60))
 }
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+if ((Resolve-Path $Package).Path.TrimEnd('\') -eq (Resolve-Path $InstallDir).Path.TrimEnd('\')) {
+    throw "The package folder is the install folder. Unpack the new package elsewhere (e.g. C:\Temp\mailserver) and run install.ps1 there."
+}
 $keepConfig = Test-Path (Join-Path $InstallDir 'appsettings.json')
 Get-ChildItem -Path $Package | Where-Object { -not ($keepConfig -and $_.Name -eq 'appsettings.json') } |
     Copy-Item -Destination $InstallDir -Recurse -Force
@@ -56,5 +67,10 @@ foreach ($rule in @(
 }
 
 Write-Host "Installed to $InstallDir."
-Write-Host "Next: edit $InstallDir\appsettings.json (Hostname, Tls), then: Start-Service $ServiceName"
+if ($wasRunning) {
+    Start-Service -Name $ServiceName
+    Write-Host "Updated; $ServiceName was running and has been started again."
+} else {
+    Write-Host "Next: edit $InstallDir\appsettings.json (Hostname, Tls), then: Start-Service $ServiceName"
+}
 Write-Host "Web interface: https://<hostname>:9443  (grant admin rights first: mailadmin user admin <address> on)"

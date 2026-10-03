@@ -25,7 +25,7 @@ Umstellung oder auf einem eigenen Server testen (siehe unten).
    ```powershell
    cd C:\Temp\mailserver
    Get-ChildItem -Recurse | Unblock-File
-   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Package C:\Temp\mailserver
+   powershell -ExecutionPolicy Bypass -File .\install.ps1
    Set-Service Mailserver -StartupType Manual    # während des Tests nicht automatisch starten
    ```
 
@@ -135,6 +135,19 @@ ausgehender Port 25 freigeschaltet ist (bei neuen VPS oft gesperrt) und den PTR-
 
 Bei Problemen helfen: die Konsolenausgabe bzw. Einträge aus der Ereignisanzeige, die Ausgabe von `mailadmin`, bei
 Zustellproblemen der Bericht von mail-tester.com oder die Kopfzeilen der empfangenen Mail.
+
+## Neue Version einspielen
+
+Neues Paket herunterladen und in einen **neuen, leeren** Ordner entpacken (nicht nach `C:\Mailserver`), dann dort:
+
+```powershell
+cd C:\Temp\mailserver-neu
+Get-ChildItem -Recurse | Unblock-File
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Das Skript stoppt den Dienst, ersetzt die Programmdateien, behält `appsettings.json` und den Ordner `data` und startet
+den Dienst wieder, falls er lief. Läuft der Server gerade im Konsolenfenster, dieses vorher mit `Strg+C` beenden.
 
 ## Testbetrieb beenden
 
