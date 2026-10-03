@@ -28,7 +28,8 @@ public sealed record Draft(
     string Body,
     IReadOnlyList<OutgoingAttachment> Attachments,
     string? InReplyTo = null,
-    IReadOnlyList<string>? References = null);
+    IReadOnlyList<string>? References = null,
+    string? BodyHtml = null);
 
 public sealed class ComposeException(string message) : Exception(message);
 
@@ -130,14 +131,23 @@ public sealed class WebmailSender(
             throw new ComposeException($"Höchstens {MaxRecipients} Empfänger pro Nachricht.");
         }
 
-        var builder = new BodyBuilder { TextBody = draft.Body.Replace("\r\n", "\n").Replace("\n", "\r\n") };
+        var builder = new BodyBuilder();
+        var html = string.IsNullOrWhiteSpace(draft.BodyHtml) ? null : MailRenderer.SanitizeComposed(draft.BodyHtml);
+        var text = string.IsNullOrWhiteSpace(draft.Body) && html is not null ? MailRenderer.HtmlToText(html) : draft.Body;
+        builder.TextBody = text.Replace("\r\n", "\n").Replace("\n", "\r\n");
+        if (html is not null)
+        {
+            // Formatted mail: HTML plus a plain text alternative for clients that prefer text.
+            builder.HtmlBody = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head>" +
+                               "<body style=\"font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5;\">" + html + "</body></html>";
+        }
         foreach (var attachment in draft.Attachments)
         {
             builder.Attachments.Add(attachment.FileName, attachment.Content, ContentType.Parse(attachment.ContentType));
         }
 
         message.Body = builder.ToMessageBody();
-        var size = draft.Attachments.Sum(a => (long)a.Content.Length) + draft.Body.Length;
+        var size = draft.Attachments.Sum(a => (long)a.Content.Length) + draft.Body.Length + (draft.BodyHtml?.Length ?? 0);
         if (size > options.Value.MaxMessageSizeBytes * 3 / 4)
         {
             throw new ComposeException($"Die Nachricht ist zu groß (höchstens {Format.Size(options.Value.MaxMessageSizeBytes * 3 / 4)} inkl. Anhängen).");

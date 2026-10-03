@@ -23,6 +23,9 @@ public sealed class ComposeForm
     public string? Bcc { get; set; }
     public string? Subject { get; set; }
     public string? Body { get; set; }
+
+    /// <summary>Filled by the editor script; empty when JavaScript is off (then the plain text field is used).</summary>
+    public string? BodyHtml { get; set; }
     public bool KeepAttachments { get; set; } = true;
 }
 
@@ -131,7 +134,7 @@ public sealed class ComposeModel(
         }
 
         return new Draft(Form.From, Form.To ?? "", Form.Cc, Form.Bcc, Form.Subject ?? "", Form.Body ?? "", attachments,
-            Form.InReplyTo, Form.References?.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            Form.InReplyTo, Form.References?.Split(' ', StringSplitOptions.RemoveEmptyEntries), Form.BodyHtml);
     }
 
     private void Prefill(string mode, MimeMessage original)
@@ -161,6 +164,7 @@ public sealed class ComposeModel(
                 Form.Body = $"\n\nAm {date} schrieb {original.From}:\n" + string.Join('\n', quoted.Split('\n').Select(l => "> " + l.TrimEnd('\r')));
                 Form.InReplyTo = original.MessageId;
                 Form.References = string.Join(' ', original.References.Append(original.MessageId ?? "").Where(r => r.Length > 0));
+                Form.BodyHtml = $"<p><br></p><p>Am {Encode(date)} schrieb {Encode(original.From.ToString())}:</p>{Quote(original)}";
                 SelectSenderMatching(original);
                 break;
             }
@@ -172,6 +176,9 @@ public sealed class ComposeModel(
                     .Append($"Von: {original.From}\nDatum: {date}\nBetreff: {subject}\nAn: {original.To}\n")
                     .Append(original.Cc.Count > 0 ? $"Cc: {original.Cc}\n" : "")
                     .Append('\n').Append(quoted).ToString();
+                Form.BodyHtml = "<p><br></p><p>---------- Weitergeleitete Nachricht ----------<br>" +
+                                $"Von: {Encode(original.From.ToString())}<br>Datum: {Encode(date)}<br>Betreff: {Encode(subject)}<br>An: {Encode(original.To.ToString())}" +
+                                (original.Cc.Count > 0 ? $"<br>Cc: {Encode(original.Cc.ToString())}" : "") + "</p>" + Quote(original);
                 SelectSenderMatching(original);
                 break;
             case "draft":
@@ -181,10 +188,30 @@ public sealed class ComposeModel(
                 Form.Bcc = original.Bcc.ToString();
                 Form.Subject = subject;
                 Form.Body = original.TextBody ?? MailRenderer.PlainText(original);
+                Form.BodyHtml = original.HtmlBody is { } draftHtml ? MailRenderer.SanitizeComposed(BodyContent(draftHtml)) : null;
                 Form.InReplyTo = original.InReplyTo;
                 Form.References = string.Join(' ', original.References);
                 break;
         }
+    }
+
+    private static string Encode(string text) => System.Net.WebUtility.HtmlEncode(text);
+
+    /// <summary>The original message as a quoted block: its formatted HTML if it has one, otherwise its text.</summary>
+    private static string Quote(MimeMessage original)
+    {
+        var content = original.HtmlBody is { } html
+            ? MailRenderer.SanitizeComposed(BodyContent(html))
+            : Encode(original.TextBody ?? "").Replace("\r\n", "\n").Replace("\n", "<br>");
+        return $"<blockquote style=\"margin:0 0 0 .8ex;border-left:2px solid #ccc;padding-left:1ex\">{content}</blockquote>";
+    }
+
+    /// <summary>The part inside &lt;body&gt;, so a quoted document does not bring its own head and styles.</summary>
+    private static string BodyContent(string html)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(html, @"<body[^>]*>(.*)</body>", System.Text.RegularExpressions.RegexOptions.Singleline |
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(2));
+        return match.Success ? match.Groups[1].Value : html;
     }
 
     /// <summary>When replying to mail sent to one of the user's aliases, answer from that alias.</summary>
@@ -202,6 +229,8 @@ public sealed class ComposeModel(
 
     private void Prepare()
     {
+        // Posted editor content is shown again after an error; it goes back into the page only after sanitizing.
+        Form.BodyHtml = string.IsNullOrWhiteSpace(Form.BodyHtml) ? null : MailRenderer.SanitizeComposed(Form.BodyHtml);
         Senders = sender.SenderAddresses(CurrentAccount);
         if (Form.Mode is "forward" or "draft" && Original() is { } original)
         {

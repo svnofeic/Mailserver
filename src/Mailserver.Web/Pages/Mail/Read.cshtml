@@ -26,7 +26,7 @@
                 <button type="submit" name="op" value="unread" class="secondary">Ungelesen</button>
                 <button type="submit" name="op" value="@(Model.Stored.HasFlag("\\Flagged") ? "unflag" : "flag")" class="secondary">@(Model.Stored.HasFlag("\\Flagged") ? "Markierung entfernen" : "Markieren")</button>
                 <select name="target" aria-label="Zielordner">
-                    @foreach (var (folder, _) in Model.Folders.Where(x => x.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Format.FolderName(folder.Name)</option> }
+                    @foreach (var (folder, _) in Model.Folders.Where(x => x.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
                 </select>
                 <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
             </form>

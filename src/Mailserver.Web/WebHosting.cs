@@ -85,6 +85,7 @@ public static class WebHosting
         services.AddSingleton<Webmail.WebmailStore>();
         services.AddSingleton<Webmail.WebmailSender>();
         services.AddSingleton<Webmail.MailActions>();
+        services.AddSingleton<Webmail.FolderManager>();
         services.AddAuthorizationBuilder().AddPolicy(AdminPolicy, policy => policy.RequireClaim(AdminClaim, "true"));
         services.AddAntiforgery(antiforgery =>
         {
@@ -112,7 +113,7 @@ public static class WebHosting
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";
             headers["Content-Security-Policy"] =
-                "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+                "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
             // Pages with forms get no-cache headers from the antiforgery system; everything else is marked here.
             context.Response.OnStarting(() =>
             {
@@ -147,8 +148,19 @@ public static class WebHosting
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapRazorPages();
+        app.MapGet("/assets/editor.js", (HttpContext context) =>
+        {
+            context.Response.Headers.CacheControl = "public, max-age=3600";
+            return Results.Text(EditorScript.Value, "text/javascript; charset=utf-8");
+        }).AllowAnonymous();
         return app;
     }
+
+    private static readonly Lazy<string> EditorScript = new(() =>
+    {
+        using var stream = typeof(WebHosting).Assembly.GetManifestResourceStream("editor.js")!;
+        return new StreamReader(stream).ReadToEnd();
+    });
 
     public static ClaimsPrincipal CreatePrincipal(Account account, string stamp) =>
         new(new ClaimsIdentity(

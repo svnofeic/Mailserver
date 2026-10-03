@@ -312,3 +312,130 @@ public sealed class WebmailTests : IAsyncLifetime
         await smtp.DisconnectAsync(true);
     }
 }
+
+public sealed class WebmailEditorAndFolderTests : IAsyncLifetime
+{
+    private TestServer _server = null!;
+    private WebClient _web = null!;
+
+    public async Task InitializeAsync()
+    {
+        _server = await TestServer.StartAsync();
+        _web = new WebClient(_server.WebPort);
+        await _web.LoginAsync("alice@example.test", TestServer.Password);
+    }
+
+    public async Task DisposeAsync()
+    {
+        _web.Dispose();
+        await _server.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Compose_page_loads_editor_script_from_own_server()
+    {
+        var page = await _web.GetAsync("/Mail/Compose");
+        Assert.Contains("<script src=\"/assets/editor.js\"></script>", _web.LastPage);
+        Assert.Contains("name=\"Form.BodyHtml\"", _web.LastPage);
+        Assert.Contains("script-src 'self'", page.Headers.GetValues("Content-Security-Policy").Single());
+
+        var script = await _web.GetAsync("/assets/editor.js");
+        Assert.Equal("text/javascript", script.Content.Headers.ContentType!.MediaType);
+        Assert.Contains("contentEditable", _web.LastPage);
+    }
+
+    [Fact]
+    public async Task Formatted_mail_is_sanitized_and_sent_with_text_alternative()
+    {
+        await _web.PostMultipartAsync("/Mail/Compose", "/Mail/Compose?handler=Send",
+            [("Form.From", "alice@example.test"), ("Form.To", "bob@example.test"), ("Form.Subject", "Formatiert"),
+             ("Form.Body", "Hallo Bob wichtig"),
+             ("Form.BodyHtml", "<p>Hallo <b>Bob</b> <span style=\"color: rgb(180, 35, 24);\">wichtig</span></p><ul><li>Punkt</li></ul>" +
+                               "<script>alert(1)</script><a href=\"javascript:alert(1)\" onclick=\"x()\">Link</a><img src=\"data:image/png;base64,AAAA\">")]);
+
+        var received = MimeMessage.Load(new MemoryStream(Encoding.UTF8.GetBytes(await _server.ReadAsync(Assert.Single(_server.Inbox("bob"))))));
+        Assert.Equal("Hallo Bob wichtig", received.TextBody.Trim());
+        var html = received.HtmlBody;
+        Assert.Contains("<b>Bob</b>", html);
+        Assert.Contains("180, 35, 24", html); // text colour kept (the sanitizer may normalise rgb/rgba)
+        Assert.Contains("<li>Punkt</li>", html);
+        Assert.DoesNotContain("<script", html);
+        Assert.DoesNotContain("javascript:", html);
+        Assert.DoesNotContain("onclick", html);
+        Assert.DoesNotContain("data:image", html);
+    }
+
+    [Fact]
+    public async Task Reply_quotes_original_formatting()
+    {
+        var builder = new BodyBuilder { HtmlBody = "<html><head><style>p{}</style></head><body><p>Original <i>kursiv</i></p></body></html>", TextBody = "Original kursiv" };
+        var original = new MimeMessage { Subject = "Frage", Body = builder.ToMessageBody() };
+        original.From.Add(MailboxAddress.Parse("kunde@remote.test"));
+        original.To.Add(MailboxAddress.Parse("alice@example.test"));
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"), Encoding.UTF8.GetBytes(original.ToString()));
+
+        var uid = _server.Inbox("alice").Single().Uid;
+        await _web.GetAsync($"/Mail/Compose?mode=reply&folder=INBOX&uid={uid}");
+        var hidden = System.Text.RegularExpressions.Regex.Match(_web.LastPage, "name=\"Form.BodyHtml\" value=\"([^\"]*)\"").Groups[1].Value;
+        var html = System.Net.WebUtility.HtmlDecode(hidden);
+        Assert.Contains("<blockquote", html);
+        Assert.Contains("<i>kursiv</i>", html);
+        Assert.DoesNotContain("<style", html);
+        Assert.Contains("schrieb", html);
+    }
+
+    [Fact]
+    public async Task Creates_renames_and_deletes_folders()
+    {
+        await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Create", ("name", "Projekte"), ("parent", ""));
+        await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Create", ("name", "Kunde Müller"), ("parent", "Projekte"));
+        var account = _server.User("alice");
+        Assert.NotNull(_server.HostMailboxes.GetFolder(account.Id, "Projekte/Kunde Müller"));
+        Assert.Contains("Ordner „Projekte/Kunde Müller“ angelegt", _web.LastPage);
+
+        // A rule that files mail into the folder follows the rename.
+        var rules = _server.Services.GetRequiredService<Mailserver.Core.Rules.RuleStore>();
+        rules.Add("alice@example.test", "Müller", [new(Mailserver.Core.Rules.RuleField.From, Mailserver.Core.Rules.RuleOperator.Contains, "mueller")],
+            Mailserver.Core.Rules.RuleAction.Move, "Projekte/Kunde Müller");
+
+        await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Rename", ("name", "Projekte"), ("newName", "Aufträge"));
+        Assert.NotNull(_server.HostMailboxes.GetFolder(account.Id, "Aufträge/Kunde Müller"));
+        Assert.Equal("Aufträge/Kunde Müller", rules.List("alice@example.test").Single().Argument);
+
+        await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Delete", ("name", "Aufträge"));
+        Assert.Contains("zuerst die Unterordner", _web.LastPage);
+
+        var sub = _server.HostMailboxes.GetFolder(account.Id, "Aufträge/Kunde Müller")!;
+        await _server.HostMailboxes.AppendAsync(sub, Encoding.ASCII.GetBytes("Subject: x\r\n\r\ny"));
+        await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Delete", ("name", "Aufträge/Kunde Müller"));
+        Assert.Null(_server.HostMailboxes.GetFolder(account.Id, "Aufträge/Kunde Müller"));
+        var trash = _server.HostMailboxes.GetFolder(account.Id, "Trash")!;
+        Assert.Single(_server.HostMailboxes.ListMessages(trash.Id));
+        Assert.Contains("in den Papierkorb verschoben", _web.LastPage);
+    }
+
+    [Theory]
+    [InlineData("Create", "name", "Sent", "existiert bereits")]
+    [InlineData("Create", "name", "a/b", "Schrägstrich")]
+    [InlineData("Create", "name", "Stern*", "nicht enthalten")]
+    [InlineData("Rename", "name", "INBOX", "Systemordner")]
+    [InlineData("Delete", "name", "Trash", "Systemordner")]
+    public async Task Protects_system_folders_and_rejects_bad_names(string handler, string field, string value, string error)
+    {
+        await _web.PostAsync("/Mail/Folders", $"/Mail/Folders?handler={handler}", (field, value), ("parent", ""), ("newName", "Neu"));
+        Assert.Contains(error, _web.LastPage);
+        Assert.NotNull(_server.HostMailboxes.GetFolder(_server.User("alice").Id, "Trash"));
+    }
+
+    [Fact]
+    public async Task Subfolders_appear_indented_in_navigation()
+    {
+        await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Create", ("name", "Archiv"), ("parent", ""));
+        await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Create", ("name", "2025"), ("parent", "Archiv"));
+
+        await _web.GetAsync("/Mail");
+        Assert.Contains("href=\"/Mail?folder=Archiv%2F2025\"", _web.LastPage);
+        Assert.Contains("Archiv › 2025", _web.LastPage);
+        Assert.Contains("Ordner verwalten", _web.LastPage);
+    }
+}

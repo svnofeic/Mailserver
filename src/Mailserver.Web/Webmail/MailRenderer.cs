@@ -60,6 +60,33 @@ public static partial class MailRenderer
         return Regex.Replace(WebUtility.HtmlDecode(html), @"\n{3,}", "\n\n", RegexOptions.None, TimeSpan.FromSeconds(2)).Trim();
     }
 
+    /// <summary>
+    /// HTML written in the webmail editor (or quoted from another mail) before it is sent: formatting only, no scripts, styles
+    /// blocks, forms or embedded data: images.
+    /// </summary>
+    public static string SanitizeComposed(string html)
+    {
+        var sanitizer = new HtmlSanitizer();
+        sanitizer.AllowedSchemes.Add("mailto");
+        foreach (var tag in new[] { "form", "input", "button", "textarea", "select", "option", "style" })
+        {
+            sanitizer.AllowedTags.Remove(tag);
+        }
+
+        sanitizer.AllowedAttributes.Remove("id");
+        sanitizer.FilterUrl += (_, e) =>
+        {
+            if (e.OriginalUrl.StartsWith("cid:", StringComparison.OrdinalIgnoreCase) || e.OriginalUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                e.SanitizedUrl = null;
+            }
+        };
+        return sanitizer.Sanitize(html);
+    }
+
+    /// <summary>Plain text for an HTML fragment (used for the text part of HTML mails).</summary>
+    public static string HtmlToText(string html) => PlainText(new MimeMessage { Body = new TextPart("html") { Text = html } });
+
     public static string Sanitize(string html, IReadOnlyDictionary<string, string> inlineImages)
     {
         var sanitizer = new HtmlSanitizer();

@@ -1,6 +1,6 @@
 @page
 @model Mailserver.Web.Pages.Mail.IndexModel
-@{ ViewData["Title"] = Format.FolderName(Model.Folder.Name); }
+@{ ViewData["Title"] = Mailserver.Web.Webmail.FolderDisplay.Leaf(Model.Folder.Name); }
 <div class="mail">
     <aside>
         <p><a class="button" href="/Mail/Compose" style="width: 100%; text-align: center">Neue Mail</a></p>
@@ -8,7 +8,7 @@
     </aside>
     <section>
         <div class="toolbar">
-            <h1 style="margin: 0" class="grow">@Format.FolderName(Model.Folder.Name)</h1>
+            <h1 style="margin: 0" class="grow">@Mailserver.Web.Webmail.FolderDisplay.Path(Model.Folder.Name)</h1>
             <form method="get" action="/Mail" class="row">
                 <input type="hidden" name="folder" value="@Model.Folder.Name" />
                 <input name="q" value="@Model.Search" placeholder="Absender, Empfänger, Betreff" aria-label="Suche" />
@@ -33,7 +33,7 @@
                 }
                 <button type="submit" name="op" value="delete" class="secondary">@(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
                 <select name="target" aria-label="Zielordner">
-                    @foreach (var (folder, _) in Model.Folders.Where(f => f.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Format.FolderName(folder.Name)</option> }
+                    @foreach (var (folder, _) in Model.Folders.Where(f => f.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
                 </select>
                 <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
                 <span class="grow"></span>

@@ -10,7 +10,7 @@ belegt; der Port lässt sich unter `Mailserver:Web:HttpsPort` ändern. Anmelden 
 
 | Seite | Inhalt |
 |---|---|
-| **Mail** | Webmail: Ordner, Nachrichtenliste mit Suche und Mehrfachauswahl, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Anhängen, Entwürfe, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
+| **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen, Entwürfe, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
@@ -48,7 +48,8 @@ entziehen; die Domain des eigenen Postfachs kann nicht gelöscht werden.
 - Fehlgeschlagene Anmeldungen zählen zur gemeinsamen IP-Sperre von SMTP und IMAP und erscheinen im Verlauf.
 - Die Sitzung endet nach 60 Minuten Inaktivität (`Mailserver:Web:SessionTimeout`) und sofort, wenn Passwort,
   Aktiv-Status oder Admin-Recht des Postfachs geändert werden.
-- Strenge Content-Security-Policy, kein JavaScript, keine externen Ressourcen, Clickjacking-Schutz, HSTS.
+- Strenge Content-Security-Policy: JavaScript nur vom eigenen Server (einzig der Mail-Editor), keine externen Ressourcen,
+  Clickjacking-Schutz, HSTS.
 - Die Schlüssel für Sitzungs-Cookies liegen in `data\keys` (unter Windows zusätzlich mit DPAPI geschützt).
 
 Wer die Weboberfläche nicht aus dem Internet erreichbar machen will: Firewall-Regel „Mailserver Web 8443“ auf bestimmte IPs
@@ -68,9 +69,16 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
 - **Senden** geht denselben Weg wie aus dem Mailprogramm: nur mit eigener Adresse oder eigenem Alias als Absender, DKIM-Signatur,
   Kopie im Ordner „Gesendet“, Eintrag im Verlauf. Höchstens 100 Empfänger pro Nachricht; Anhänge bis zu ¾ der maximalen Mailgröße.
 - **Spam/Kein Spam** verschiebt die Mail und zählt als Rückmeldung für die Spam-Statistik.
-- Geschrieben wird als reiner Text (kein Formatierungs-Editor). Beim Antworten wird die Originalnachricht zitiert.
+- **Editor:** fett, kursiv, unterstrichen, durchgestrichen, Überschrift, Listen, Zitat, Einzug, Links, Textfarbe, Formatierung
+  entfernen, rückgängig/wiederholen (auch Strg+B/I/U/Z). Formatierte Mails gehen als HTML mit zusätzlicher Textversion raus; der Server
+  bereinigt das HTML vor dem Versand. Beim Antworten und Weiterleiten wird die Originalnachricht mit ihrer Formatierung zitiert.
+  Der Editor ist ein kleines eigenes Skript, das vom Mailserver selbst kommt (keine fremden Bibliotheken, kein CDN); die
+  Sicherheitsrichtlinie der Seite erlaubt nur Skripte vom eigenen Server. Ohne JavaScript bleibt ein einfaches Textfeld.
+- **Ordner verwalten** (Link unter der Ordnerliste): Ordner und Unterordner anlegen, umbenennen und löschen. Systemordner
+  (Posteingang, Gesendet, Entwürfe, Papierkorb, Spam) sind geschützt. Beim Löschen wandern enthaltene Mails in den Papierkorb;
+  Unterordner müssen zuerst gelöscht werden. Beim Umbenennen werden Regeln, die Mails in den Ordner verschieben, automatisch angepasst.
 
 ## Grenzen
 
-- Webmail kann keine Ordner anlegen oder umbenennen (das geht im Mailprogramm) und schreibt nur reinen Text.
+- Bilder lassen sich nicht in den Text einfügen, nur als Anhang senden (eingefügte Bilder werden beim Senden entfernt).
 - Keine Zwei-Faktor-Anmeldung.

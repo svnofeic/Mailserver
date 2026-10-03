@@ -3,18 +3,21 @@
 <nav class="folders" aria-label="Ordner">
     @foreach (var (folder, status) in Model.Folders)
     {
-        <a class="@(folder.Name == Model.Current ? "active" : "")" href="/Mail?folder=@Uri.EscapeDataString(folder.Name)">
-            <span>@Format.FolderName(folder.Name)</span>
+        <a class="@(folder.Name == Model.Current ? "active" : "")" href="/Mail?folder=@Uri.EscapeDataString(folder.Name)"
+           style="padding-left: @(10 + 14 * Mailserver.Web.Webmail.FolderDisplay.Depth(folder.Name))px">
+            <span>@Mailserver.Web.Webmail.FolderDisplay.Leaf(folder.Name)</span>
             @if (status.Unseen > 0 && folder.Name is not ("Sent" or "Drafts" or "Trash")) { <span class="count">@status.Unseen</span> }
         </a>
     }
+    <a class="small muted" href="/Mail/Folders" style="margin-top: 4px">Ordner verwalten …</a>
 </nav>
 <form method="get" action="/Mail" class="folder-select card" style="padding: 8px">
     <select name="folder" aria-label="Ordner" style="width: 100%">
         @foreach (var (folder, status) in Model.Folders)
         {
-            <option value="@folder.Name" selected="@(folder.Name == Model.Current)">@Format.FolderName(folder.Name)@(status.Unseen > 0 ? $" ({status.Unseen})" : "")</option>
+            <option value="@folder.Name" selected="@(folder.Name == Model.Current)">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)@(status.Unseen > 0 ? $" ({status.Unseen})" : "")</option>
         }
     </select>
     <button type="submit" class="secondary" style="margin-top: 6px">Öffnen</button>
+    <a class="small" href="/Mail/Folders" style="margin-left: 8px">Ordner verwalten</a>
 </form>

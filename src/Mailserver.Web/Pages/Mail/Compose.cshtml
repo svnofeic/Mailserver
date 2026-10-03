@@ -8,6 +8,7 @@
     <input type="hidden" name="Form.OriginalUid" value="@Model.Form.OriginalUid" />
     <input type="hidden" name="Form.InReplyTo" value="@Model.Form.InReplyTo" />
     <input type="hidden" name="Form.References" value="@Model.Form.References" />
+    <input type="hidden" name="Form.BodyHtml" value="@Model.Form.BodyHtml" />
     <div class="field"><label for="from">Von</label>
         <select id="from" name="Form.From">@foreach (var address in Model.Senders) { <option value="@address" selected="@(Model.Form.From == address)">@address</option> }</select></div>
     <div class="field"><label for="to">An</label><input id="to" name="Form.To" value="@Model.Form.To" autocomplete="email" placeholder="name@beispiel.de, …" /></div>
@@ -31,3 +32,4 @@
         <a class="button secondary" href="/Mail">Verwerfen</a>
     </div>
 </form>
+<script src="/assets/editor.js"></script>

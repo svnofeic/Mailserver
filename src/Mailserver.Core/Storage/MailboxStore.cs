@@ -55,6 +55,36 @@ public sealed class MailboxStore(Database database, DataPaths paths)
 
     public static readonly IReadOnlyList<string> DefaultFolders = [Inbox, "Sent", "Drafts", "Trash", "Junk"];
 
+    /// <summary>Folders the server and mail clients rely on; they cannot be renamed or deleted.</summary>
+    public static bool IsSystemFolder(string name) => DefaultFolders.Contains(NormalizeFolderName(name));
+
+    /// <summary>German error text for an unusable folder name, or null if it is fine.</summary>
+    public static string? ValidateFolderName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "Bitte einen Ordnernamen angeben.";
+        }
+
+        if (name.Length > 200)
+        {
+            return "Der Ordnername ist zu lang.";
+        }
+
+        var segments = name.Split(HierarchyDelimiter);
+        if (segments.Any(segment => segment.Trim().Length == 0 || segment != segment.Trim()))
+        {
+            return "Ordnernamen dürfen nicht leer sein und nicht mit Leerzeichen beginnen oder enden.";
+        }
+
+        if (name.Any(c => char.IsControl(c) || c is '*' or '%' or '\\' or '"'))
+        {
+            return "Ordnernamen dürfen die Zeichen * % \\ \" nicht enthalten.";
+        }
+
+        return null;
+    }
+
     private const string FolderColumns = "id, account_id, name, uid_validity, uid_next, subscribed, change_counter";
     private const string MessageColumns = "id, folder_id, uid, flags, internal_date_utc, size, file_name";
 

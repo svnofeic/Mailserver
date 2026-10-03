@@ -1,0 +1,60 @@
+@page
+@model Mailserver.Web.Pages.Mail.FoldersModel
+@{ ViewData["Title"] = "Ordner verwalten"; }
+<div class="mail">
+    <aside>
+        <p><a class="button" href="/Mail/Compose" style="width: 100%; text-align: center">Neue Mail</a></p>
+        <partial name="_Folders" model="(Model.Folders, string.Empty)" />
+    </aside>
+    <section>
+        <h1>Ordner verwalten</h1>
+
+        <h2 style="margin-top: 0">Neuer Ordner</h2>
+        <form method="post" asp-page-handler="Create" class="row card">
+            <label>Name<input name="name" required maxlength="100" placeholder="z. B. Rechnungen" /></label>
+            <label>Ablegen in
+                <select name="parent">
+                    <option value="">(oberste Ebene)</option>
+                    @foreach (var (folder, _) in Model.Folders) { <option value="@folder.Name">@FolderDisplay.Path(folder.Name)</option> }
+                </select>
+            </label>
+            <button type="submit">Anlegen</button>
+        </form>
+
+        <h2>Vorhandene Ordner</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Ordner</th><th class="num">Nachrichten</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var (folder, status) in Model.Folders)
+                {
+                    var system = Mailserver.Core.Storage.MailboxStore.IsSystemFolder(folder.Name);
+                    <tr>
+                        <td style="padding-left: @(10 + 18 * FolderDisplay.Depth(folder.Name))px">@FolderDisplay.Leaf(folder.Name)@if (system) { <span class="muted small"> · Systemordner</span> }</td>
+                        <td class="num">@status.Messages</td>
+                        <td class="small">
+                            @if (!system)
+                            {
+                                <details class="confirm" style="margin-right: 8px"><summary style="color: var(--accent)">Umbenennen</summary>
+                                    <form method="post" asp-page-handler="Rename" class="inline">
+                                        <input type="hidden" name="name" value="@folder.Name" />
+                                        <input name="newName" value="@FolderDisplay.Leaf(folder.Name)" required maxlength="100" aria-label="Neuer Name" />
+                                        <button type="submit">Speichern</button>
+                                    </form>
+                                </details>
+                                <details class="confirm"><summary>Löschen</summary>
+                                    <form method="post" asp-page-handler="Delete" class="inline">
+                                        <input type="hidden" name="name" value="@folder.Name" />
+                                        <button type="submit" class="danger">Löschen@(status.Messages > 0 ? $" ({status.Messages} Nachrichten → Papierkorb)" : "")</button>
+                                    </form>
+                                </details>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <p class="small muted">Neue Ordner erscheinen auch sofort in Outlook, Thunderbird und am Handy (dort ggf. Ordnerliste aktualisieren bzw. abonnieren).</p>
+    </section>
+</div>
