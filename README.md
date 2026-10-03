@@ -37,6 +37,7 @@ tests/
 scripts/
   publish.ps1          Erzeugt ein eigenständiges Windows-Paket (keine .NET-Installation nötig)
   install.ps1          Installiert bzw. aktualisiert den Windows-Dienst und die Firewall-Regeln
+  update.ps1           Lädt die neueste Version von GitHub und installiert sie
 ```
 
 Daten (Standard: `C:\Mailserver\data`):
@@ -74,8 +75,9 @@ Für ein Backup sichert man den ganzen `data`-Ordner. Die Datenbank sollte man d
 
 ## Installation
 
-**Fertiges Paket:** GitHub → Actions → neuester Lauf von „CI“ → Artifacts → `mailserver-win-x64` (enthält
-`install.ps1` und die Anleitungen). Zum Ausprobieren neben SmarterMail: [docs/testbetrieb.md](docs/testbetrieb.md).
+**Fertiges Paket:** [mailserver-win-x64.zip](https://github.com/svnofeic/Mailserver/releases/download/latest/mailserver-win-x64.zip)
+(wird bei jedem Push neu gebaut, enthält `install.ps1`, `update.ps1` und die Anleitungen). Aktualisieren:
+`C:\Mailserver\update.ps1` in einer PowerShell als Administrator. Zum Ausprobieren neben SmarterMail: [docs/testbetrieb.md](docs/testbetrieb.md).
 
 Oder selbst bauen, auf einem Entwicklungsrechner mit .NET 10 SDK:
 

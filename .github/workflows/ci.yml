@@ -17,24 +17,42 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet test Mailserver.slnx -c Release
 
-  # Ready-to-install Windows package (self-contained, no .NET needed on the server):
-  # Actions -> run -> Artifacts -> mailserver-win-x64
+  # Ready-to-install Windows package (self-contained, no .NET needed on the server).
+  # Pushes also publish it as the GitHub release "latest", which scripts/update.ps1 downloads:
+  # https://github.com/svnofeic/Mailserver/releases/download/latest/mailserver-win-x64.zip
   package:
     needs: test
     runs-on: windows-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-latest
+      cancel-in-progress: false
+    env:
+      VERSION: 1.0.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: dotnet publish src/Mailserver.Service -c Release -r win-x64 --self-contained -o publish
-      - run: dotnet publish src/Mailserver.Admin -c Release -r win-x64 --self-contained -o publish
+      - run: dotnet publish src/Mailserver.Service -c Release -r win-x64 --self-contained -o publish -p:Version=${{ env.VERSION }} -p:SourceRevisionId=${{ github.sha }}
+      - run: dotnet publish src/Mailserver.Admin -c Release -r win-x64 --self-contained -o publish -p:Version=${{ env.VERSION }} -p:SourceRevisionId=${{ github.sha }}
       - run: |
-          Copy-Item scripts/install.ps1 publish/
+          Copy-Item scripts/install.ps1, scripts/update.ps1 publish/
           New-Item -ItemType Directory publish/docs | Out-Null
           Copy-Item docs/*.md, README.md publish/docs/
+          "$env:VERSION ($('${{ github.sha }}'.Substring(0, 7)))" | Set-Content publish/version.txt
       - uses: actions/upload-artifact@v4
         with:
           name: mailserver-win-x64
           path: publish
           retention-days: 30
+      - name: Publish release "latest"
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Compress-Archive -Path publish/* -DestinationPath mailserver-win-x64.zip
+          gh release delete latest --yes --cleanup-tag 2>$null
+          $notes = "Version $(Get-Content publish/version.txt), Branch ${{ github.ref_name }}.`n`nAuf dem Server aktualisieren: C:\Mailserver\update.ps1 (PowerShell als Administrator)."
+          gh release create latest mailserver-win-x64.zip scripts/update.ps1 --target ${{ github.sha }} --title "Mailserver $(Get-Content publish/version.txt)" --notes $notes

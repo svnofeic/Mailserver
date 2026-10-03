@@ -22,4 +22,5 @@ builder.AddMailserverWeb();
 
 var app = builder.Build();
 app.UseMailserverWeb();
+app.Logger.LogInformation("Mailserver version {Version}", BuildInfo.Version);
 app.Run();

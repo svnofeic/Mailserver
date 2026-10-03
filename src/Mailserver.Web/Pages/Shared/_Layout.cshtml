@@ -50,6 +50,7 @@
         .sidebar nav details a { padding-left: 29px; font-size: 14px; }
         .who { display: flex; flex-direction: column; gap: 8px; font-size: 13px; padding: 12px 16px 16px; border-top: 1px solid #343b49; overflow-wrap: anywhere; }
         .who form { margin: 0; }
+        .who .version { color: #8b93a3; font-size: 12px; }
         .who button { background: transparent; color: var(--nav-text); border: 1px solid #4a5263; width: 100%; }
         @@media (min-width: 901px) {
             .shell.signed-in { display: grid; grid-template-columns: 230px minmax(0, 1fr); }
@@ -203,6 +204,7 @@
             <div class="who">
                 <span>@User.Identity!.Name</span>
                 <form method="post" asp-page="/Logout"><button type="submit">Abmelden</button></form>
+                <span class="version">Version @Mailserver.Core.BuildInfo.Version</span>
             </div>
         </div>
     }

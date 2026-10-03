@@ -18,8 +18,8 @@ Umstellung oder auf einem eigenen Server testen (siehe unten).
 
 ## 1. Paket holen und installieren
 
-1. Auf GitHub im Repository unter **Actions** den neuesten erfolgreichen Lauf von **CI** öffnen und unten bei
-   **Artifacts** `mailserver-win-x64` herunterladen (ZIP, ca. 50 MB).
+1. Das Paket herunterladen: <https://github.com/svnofeic/Mailserver/releases/download/latest/mailserver-win-x64.zip>
+   (ca. 50 MB, keine Anmeldung nötig).
 2. Auf den Server kopieren, nach `C:\Temp\mailserver` entpacken. In einer **PowerShell als Administrator**:
 
    ```powershell
@@ -138,16 +138,25 @@ Zustellproblemen der Bericht von mail-tester.com oder die Kopfzeilen der empfang
 
 ## Neue Version einspielen
 
-Neues Paket herunterladen und in einen **neuen, leeren** Ordner entpacken (nicht nach `C:\Mailserver`), dann dort:
+Jede neue Version liegt automatisch als Download bereit:
+<https://github.com/svnofeic/Mailserver/releases/tag/latest>. In einer **PowerShell als Administrator**:
 
 ```powershell
-cd C:\Temp\mailserver-neu
-Get-ChildItem -Recurse | Unblock-File
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+C:\Mailserver\update.ps1
 ```
 
-Das Skript stoppt den Dienst, ersetzt die Programmdateien, behält `appsettings.json` und den Ordner `data` und startet
-den Dienst wieder, falls er lief. Läuft der Server gerade im Konsolenfenster, dieses vorher mit `Strg+C` beenden.
+Das Skript lädt das neueste Paket, vergleicht die Version (`C:\Mailserver\version.txt`), stoppt den Dienst, ersetzt die
+Programmdateien, behält `appsettings.json` und den Ordner `data` und startet den Dienst wieder, falls er lief.
+Läuft der Server im Konsolenfenster, dieses vorher mit `Strg+C` beenden. Die laufende Version steht in der
+Weboberfläche unten in der Seitenleiste.
+
+**Beim ersten Mal** gibt es `update.ps1` noch nicht im Installationsordner – dann einmalig:
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+Invoke-WebRequest https://github.com/svnofeic/Mailserver/releases/download/latest/update.ps1 -OutFile C:\Mailserver\update.ps1 -UseBasicParsing
+powershell -ExecutionPolicy Bypass -File C:\Mailserver\update.ps1
+```
 
 ## Testbetrieb beenden
 

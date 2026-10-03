@@ -25,6 +25,13 @@ if (-not (Test-Path (Join-Path $Package 'Mailserver.exe'))) {
     throw "No Mailserver.exe in '$Package'. Run install.ps1 from the unpacked package folder or pass -Package <folder>."
 }
 
+# A server started by hand in a console window keeps its files locked.
+$console = Get-Process -Name 'Mailserver' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($InstallDir, [StringComparison]::OrdinalIgnoreCase) -and $_.SessionId -ne 0 }
+if ($console) {
+    throw "Mailserver.exe is running in a console window (PID $($console.Id -join ', ')). Stop it with Ctrl+C first."
+}
+
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 $wasRunning = $service -and $service.Status -ne 'Stopped'
 if ($wasRunning) {
