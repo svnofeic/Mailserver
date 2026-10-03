@@ -362,7 +362,11 @@ public sealed partial class ImapSession(
 
             if (completed == timeout)
             {
-                await connection.WriteAsync("* BYE Autologout; idle for too long\r\n", cancellationToken);
+                // Task.Delay also completes when the service stops; that is not the client's idle timeout.
+                using var writeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await connection.WriteAsync(cancellationToken.IsCancellationRequested
+                    ? "* BYE Server shutting down\r\n"
+                    : "* BYE Autologout; idle for too long\r\n", writeTimeout.Token);
                 _logout = true;
                 return;
             }
