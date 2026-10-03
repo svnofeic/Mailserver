@@ -45,6 +45,9 @@ Passwort, mit dem er sich bei SmarterMail anmeldet, auch für das neue Postfach.
 
 ## Ablauf
 
+> Umzug auf einen **neuen Server** (z. B. wegen Betriebssystem-Upgrade): erst mit `mailadmin export` sichern und auf
+> dem neuen Server mit `mailadmin import export` einspielen – siehe [sicherung-export.md](sicherung-export.md).
+
 ### 1. Vorbereiten (ohne Ausfallzeit)
 
 Den neuen Mailserver installieren (siehe README), aber **den Dienst noch nicht starten** – SmarterMail belegt die Ports.

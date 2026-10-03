@@ -141,7 +141,7 @@ public sealed class ImapImporter(AccountStore accounts, MailboxStore mailboxes, 
         return new FolderImportResult(folder.FullName, targetName, total, imported, skipped, failed);
     }
 
-    private static async Task<List<IMailFolder>> ListSourceFoldersAsync(ImapClient client, CancellationToken cancellationToken)
+    internal static async Task<List<IMailFolder>> ListSourceFoldersAsync(ImapClient client, CancellationToken cancellationToken)
     {
         var folders = new List<IMailFolder> { client.Inbox };
         foreach (var ns in client.PersonalNamespaces)
@@ -156,24 +156,24 @@ public sealed class ImapImporter(AccountStore accounts, MailboxStore mailboxes, 
     }
 
     /// <summary>Maps a source folder to its name here: special folders by attribute or well-known name, others keep their path.</summary>
-    public static string MapFolderName(IMailFolder folder)
-    {
-        if (folder.Attributes.HasFlag(FolderAttributes.Inbox) || folder.FullName.Equals("INBOX", StringComparison.OrdinalIgnoreCase))
-        {
-            return MailboxStore.Inbox;
-        }
+    public static string MapFolderName(IMailFolder folder) =>
+        MapFolderName(folder.FullName, folder.DirectorySeparator, SpecialUse(folder));
 
-        var special = folder.Attributes switch
-        {
-            var a when a.HasFlag(FolderAttributes.Sent) => "Sent",
-            var a when a.HasFlag(FolderAttributes.Drafts) => "Drafts",
-            var a when a.HasFlag(FolderAttributes.Trash) => "Trash",
-            var a when a.HasFlag(FolderAttributes.Junk) => "Junk",
-            var a when a.HasFlag(FolderAttributes.Archive) => "Archive",
-            _ => null,
-        };
-        return special ?? MapFolderPath(folder.FullName, folder.DirectorySeparator);
-    }
+    /// <param name="specialUse">"INBOX", "Sent", "Drafts", "Trash", "Junk", "Archive" or null, see <see cref="SpecialUse"/>.</param>
+    public static string MapFolderName(string fullName, char separator, string? specialUse) =>
+        specialUse ?? (fullName.Equals("INBOX", StringComparison.OrdinalIgnoreCase) ? MailboxStore.Inbox : MapFolderPath(fullName, separator));
+
+    /// <summary>The special role a source folder announces through its attributes, as a folder name here.</summary>
+    public static string? SpecialUse(IMailFolder folder) => folder.Attributes switch
+    {
+        var a when a.HasFlag(FolderAttributes.Inbox) => MailboxStore.Inbox,
+        var a when a.HasFlag(FolderAttributes.Sent) => "Sent",
+        var a when a.HasFlag(FolderAttributes.Drafts) => "Drafts",
+        var a when a.HasFlag(FolderAttributes.Trash) => "Trash",
+        var a when a.HasFlag(FolderAttributes.Junk) => "Junk",
+        var a when a.HasFlag(FolderAttributes.Archive) => "Archive",
+        _ => null,
+    };
 
     public static string MapFolderPath(string fullName, char separator)
     {
@@ -192,7 +192,7 @@ public sealed class ImapImporter(AccountStore accounts, MailboxStore mailboxes, 
         return string.Join(MailboxStore.HierarchyDelimiter, segments.Select(s => s.Replace(MailboxStore.HierarchyDelimiter, '-')));
     }
 
-    private static string ConvertFlags(MessageFlags flags, IEnumerable<string>? keywords)
+    internal static string ConvertFlags(MessageFlags flags, IEnumerable<string>? keywords)
     {
         var result = new List<string>();
         if (flags.HasFlag(MessageFlags.Seen)) result.Add(StoredFlags.Seen);

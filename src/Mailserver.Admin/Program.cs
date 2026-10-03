@@ -12,6 +12,20 @@ using Microsoft.Extensions.Configuration;
 
 // mailadmin — command line administration. Reads the same appsettings.json as the service (next to the executable).
 
+// The export runs on the old server and needs neither configuration nor database.
+if (args is ["export", ..])
+{
+    try
+    {
+        return await ExportAsync(args);
+    }
+    catch (Exception ex) when (ex is FormatException or ArgumentException or IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine($"Fehler: {ex.Message}");
+        return 1;
+    }
+}
+
 var configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: true)
@@ -294,6 +308,16 @@ int Run(string[] a)
                   spamlog export <datei.csv> [--since 30d]
                   spamlog cleanup
 
+                  export <host> <datei> <zielordner> [--port 993] [--starttls] [--insecure-cert] [--dav <url>] [--no-dav]
+                      Sichert Postfächer von einem IMAP-Server (z. B. SmarterMail) als .eml-Dateien mit Ordnern, Flags und
+                      Datum, dazu Kontakte (.vcf) und Kalender/Aufgaben (.ics) per CardDAV/CalDAV. <datei> wie bei
+                      "import imap". Mehrfach ausführbar: es kommen nur neue Nachrichten dazu. Ohne --dav wird
+                      https://<host>/ und http://<host>:9998/ (SmarterMail) versucht.
+
+                  import export <exportordner> [<datei>] [--dry-run]
+                      Spielt eine mit "export" erstellte Sicherung in diesen Server ein. Fehlende Postfächer werden mit dem
+                      Passwort aus <datei> ("adresse;passwort") angelegt oder es wird abgefragt.
+
                   import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
                       Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). <datei> enthält pro Zeile
                       "adresse;passwort" (ohne Passwort wird es abgefragt). Fehlende Domains und Postfächer werden
@@ -305,6 +329,11 @@ int Run(string[] a)
 
 async Task<int> ImportAsync(string[] a)
 {
+    if (a is ["import", "export", ..])
+    {
+        return await ImportExportAsync(a);
+    }
+
     if (a is not ["import", "imap", var host, var file, ..])
     {
         return Fail("Aufruf: mailadmin import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]");
@@ -317,14 +346,7 @@ async Task<int> ImportAsync(string[] a)
         a.Contains("--starttls") ? MailKit.Security.SecureSocketOptions.StartTls : MailKit.Security.SecureSocketOptions.SslOnConnect,
         a.Contains("--insecure-cert"));
 
-    var users = new List<(EmailAddress Address, string Password)>();
-    foreach (var line in File.ReadAllLines(file).Select(l => l.Trim()).Where(l => l.Length > 0 && !l.StartsWith('#')))
-    {
-        var separator = line.IndexOf(';');
-        var address = EmailAddress.Parse(separator < 0 ? line : line[..separator]);
-        users.Add((address, separator < 0 ? ReadHidden($"Passwort für {address}: ") : line[(separator + 1)..]));
-    }
-
+    var users = ReadAccountFile(file);
     var importer = new ImapImporter(accounts, mailboxes, new ImportLog(database));
     var errors = 0;
     foreach (var (address, password) in users)
@@ -356,6 +378,58 @@ async Task<int> ImportAsync(string[] a)
         Console.WriteLine($"Hinweis: {file} enthält Passwörter im Klartext – nach der Migration löschen.");
     }
 
+    return errors == 0 ? 0 : 1;
+}
+
+async Task<int> ImportExportAsync(string[] a)
+{
+    if (a is not ["import", "export", var directory, ..])
+    {
+        return Fail("Aufruf: mailadmin import export <exportordner> [<datei>] [--dry-run]");
+    }
+
+    var dryRun = a.Contains("--dry-run");
+    var passwords = a.Length > 3 && !a[3].StartsWith("--")
+        ? ReadAccountFile(a[3]).ToDictionary(u => u.Address.ToString(), u => u.Password, StringComparer.OrdinalIgnoreCase)
+        : [];
+    var found = ExportImporter.FindAccounts(directory);
+    if (found.Count == 0)
+    {
+        return Fail($"In {directory} wurde keine Sicherung gefunden (Unterordner mit {ExportManifest.FileName}).");
+    }
+
+    var importer = new ExportImporter(accounts, mailboxes, new ImportLog(database));
+    var errors = 0;
+    foreach (var (address, accountDirectory) in found)
+    {
+        Console.WriteLine($"{address}{(dryRun ? " (Probelauf)" : "")}");
+        if (!accounts.IsLocalDomain(address.Domain) && !dryRun)
+        {
+            var selector = $"mail{DateTime.UtcNow:yyyyMM}";
+            var domain = accounts.AddDomain(address.Domain, selector);
+            dkim.GenerateKey(domain.Name, selector);
+            Console.WriteLine($"  Domain {domain.Name} angelegt. DNS-Einträge: mailadmin dns {domain.Name}");
+        }
+
+        var password = passwords.GetValueOrDefault(address.ToString());
+        if (password is null && !dryRun && accounts.FindAccount(address) is null)
+        {
+            password = ReadHidden($"Neues Passwort für {address}: ");
+        }
+
+        var result = await importer.ImportAsync(accountDirectory, password, dryRun, Console.WriteLine);
+        if (result.Error is not null)
+        {
+            Console.Error.WriteLine($"  FEHLER: {result.Error}");
+            errors++;
+            continue;
+        }
+
+        errors += result.Failed > 0 ? 1 : 0;
+        Console.WriteLine($"  {(result.AccountCreated ? "Postfach angelegt, " : "")}{result.Imported} Nachrichten übernommen.");
+    }
+
+    Console.WriteLine(errors == 0 ? "Fertig." : $"Fertig, {errors} Postfach/Postfächer mit Fehlern – Ausgabe oben prüfen.");
     return errors == 0 ? 0 : 1;
 }
 
@@ -487,6 +561,89 @@ void CheckScope(string scope)
     {
         throw new ArgumentException($"{scope} ist weder Postfach noch Domain dieses Servers.");
     }
+}
+
+static async Task<int> ExportAsync(string[] a)
+{
+    if (a is not ["export", var host, var file, var target, ..] || target.StartsWith("--"))
+    {
+        return Fail("Aufruf: mailadmin export <host> <datei> <zielordner> [--port 993] [--starttls] [--insecure-cert] [--dav <url>] [--no-dav]");
+    }
+
+    var insecure = a.Contains("--insecure-cert");
+    var source = new ImapSource(
+        host,
+        int.Parse(Option(a, "--port") ?? "993"),
+        a.Contains("--starttls") ? MailKit.Security.SecureSocketOptions.StartTls : MailKit.Security.SecureSocketOptions.SslOnConnect,
+        insecure);
+    var davServers = a.Contains("--no-dav") ? []
+        : Option(a, "--dav") is { } davUrl ? [new Uri(davUrl)]
+        : new[] { new Uri($"https://{host}/"), new Uri($"http://{host}:9998/") };
+
+    Directory.CreateDirectory(target);
+    var exporter = new MailboxExporter();
+    var davExporter = new DavExporter();
+    var errors = 0;
+    foreach (var (address, password) in ReadAccountFile(file))
+    {
+        Console.WriteLine(address);
+        var result = await exporter.ExportAsync(source, address, password, target, Console.WriteLine);
+        if (result.Error is not null)
+        {
+            Console.Error.WriteLine($"  FEHLER: {result.Error}");
+            errors++;
+            continue;
+        }
+
+        errors += result.Failed > 0 ? 1 : 0;
+        Console.WriteLine($"  {result.Exported} Nachrichten neu gesichert, {result.Total} insgesamt in {result.Directory}");
+
+        DavExportResult? dav = null;
+        foreach (var server in davServers)
+        {
+            dav = await davExporter.ExportAsync(server, address, password, target, insecure, Console.WriteLine);
+            if (dav.ServerFound)
+            {
+                break;
+            }
+        }
+
+        if (dav is null)
+        {
+            continue;
+        }
+
+        if (!dav.ServerFound)
+        {
+            Console.Error.WriteLine($"  WARNUNG: Kontakte/Kalender nicht gesichert, kein CalDAV/CardDAV unter " +
+                                    $"{string.Join(" oder ", davServers.Select(s => s.ToString()))} gefunden (Adresse mit --dav angeben).");
+            continue;
+        }
+
+        foreach (var warning in dav.Warnings)
+        {
+            Console.Error.WriteLine($"  WARNUNG: {warning}");
+        }
+
+        Console.WriteLine($"  {dav.Contacts} Kontakte, {dav.CalendarItems} Termine/Aufgaben gesichert.");
+    }
+
+    Console.WriteLine(errors == 0 ? $"Fertig. Sicherung in {Path.GetFullPath(target)}" : $"Fertig, {errors} Postfach/Postfächer mit Fehlern – Ausgabe oben prüfen.");
+    Console.WriteLine($"Hinweis: {file} enthält Passwörter im Klartext – danach löschen.");
+    return errors == 0 ? 0 : 1;
+}
+
+static List<(EmailAddress Address, string Password)> ReadAccountFile(string file)
+{
+    var users = new List<(EmailAddress Address, string Password)>();
+    foreach (var line in File.ReadAllLines(file).Select(l => l.Trim()).Where(l => l.Length > 0 && !l.StartsWith('#')))
+    {
+        var separator = line.IndexOf(';');
+        var address = EmailAddress.Parse(separator < 0 ? line : line[..separator]);
+        users.Add((address, separator < 0 ? ReadHidden($"Passwort für {address}: ") : line[(separator + 1)..]));
+    }
+
+    return users;
 }
 
 static string? Option(string[] a, string name)
