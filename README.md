@@ -9,12 +9,11 @@ Ein eigener Mailserver in C#/.NET 10 für Windows Server. Er ersetzt SmarterMail
 | **M1 – SMTP** | Empfang auf Port 25, Submission auf 587/465 mit Login, Zustellung nach außen mit MX-Lookup und Wiederholungen, DKIM-Signatur, Aliase und Weiterleitungen, Unzustellbarkeitsmeldungen, Quota, Schutz vor Brute-Force, Verwaltungs-Tool `mailadmin` | ✅ fertig |
 | **M2 – IMAP** | IMAP-Server (Port 993 und 143 mit STARTTLS) für Outlook, Thunderbird und Smartphones: Ordner inkl. Unterordnern und Umlauten, Flags, Suche, Kopieren/Verschieben, Push über IDLE | ✅ fertig |
 | **M3 – Spamschutz** | SPF-, DKIM- und DMARC-Prüfung eingehender Mails, DNS-Blacklists, Greylisting, Junk-Ordner, Rate-Limits | offen |
-| **M4 – Migration** | Import aus SmarterMail (Build 8853) per IMAP: Postfächer, Ordner, Flags | ⏳ als Nächstes |
+| **M4 – Migration** | `mailadmin import imap`: Postfächer aus SmarterMail (oder jedem IMAP-Server) mit Ordnern, Flags und Datum, wiederholbar für den letzten Abgleich. Anleitung: [docs/umzug-smartermail.md](docs/umzug-smartermail.md) | ✅ fertig |
 | **M5 – Komfort** | Web-Oberfläche zur Verwaltung, Autodiscover/Autoconfig, MTA-STS, Monitoring | offen |
 
-> **Wichtig:** Bis die Datenübernahme (M4) fertig ist, läuft SmarterMail weiter. Beide Server können nicht gleichzeitig
-> dieselben Ports (25, 587, 465, 143, 993) belegen. Zum Testen kann man den neuen Server auf einem anderen Server betreiben
-> oder in `appsettings.json` andere Ports setzen.
+> **Umzug von SmarterMail:** siehe [docs/umzug-smartermail.md](docs/umzug-smartermail.md). Beide Server können nicht
+> gleichzeitig dieselben Ports (25, 587, 465, 143, 993) belegen; der Import läuft deshalb, bevor der neue Dienst startet.
 
 ## Aufbau
 
@@ -25,6 +24,7 @@ src/
   Mailserver.Smtp      SMTP-Server (Port 25 und 587/465) und Zustell-Dienst (MX bzw. Smarthost)
   Mailserver.Imap      IMAP-Server (Port 993 und 143): Protokoll, MIME-Struktur, Sitzungen, IDLE
   Mailserver.Service   Windows-Dienst (Mailserver.exe)
+  Mailserver.Migration Import von anderen IMAP-Servern (SmarterMail)
   Mailserver.Admin     Kommandozeilen-Verwaltung (mailadmin.exe)
 tests/
   Mailserver.Tests     Unit- und Integrationstests mit echten SMTP-Sitzungen
@@ -126,6 +126,7 @@ Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer 
 mailadmin domain add|list|remove        mailadmin user add|passwd|quota|enable|disable|remove|list
 mailadmin dns <domain>                  mailadmin alias add|remove|list
 mailadmin dkim rotate|activate          mailadmin queue list|retry
+mailadmin import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
 ```
 
 Logs: Ausgabe in der Konsole und Warnungen sowie Fehler in der Windows-Ereignisanzeige (Quelle "Mailserver").

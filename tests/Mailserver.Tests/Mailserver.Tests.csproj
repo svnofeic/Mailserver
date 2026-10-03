@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mailserver.Smtp\Mailserver.Smtp.csproj" />
     <ProjectReference Include="..\..\src\Mailserver.Imap\Mailserver.Imap.csproj" />
+    <ProjectReference Include="..\..\src\Mailserver.Migration\Mailserver.Migration.csproj" />
   </ItemGroup>
 
 </Project>

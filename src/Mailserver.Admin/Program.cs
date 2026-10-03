@@ -2,8 +2,10 @@ using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Data;
 using Mailserver.Core.Dkim;
+using Mailserver.Core.Migration;
 using Mailserver.Core.Queue;
 using Mailserver.Core.Storage;
+using Mailserver.Migration;
 using Microsoft.Extensions.Configuration;
 
 // mailadmin — command line administration. Reads the same appsettings.json as the service (next to the executable).
@@ -25,9 +27,9 @@ var queue = new OutboundQueue(database, paths);
 
 try
 {
-    return Run(args);
+    return args is ["import", ..] ? await ImportAsync(args) : Run(args);
 }
-catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or Microsoft.Data.Sqlite.SqliteException)
+catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or IOException or Microsoft.Data.Sqlite.SqliteException)
 {
     Console.Error.WriteLine($"Fehler: {ex.Message}");
     return 1;
@@ -164,9 +166,70 @@ int Run(string[] a)
                   alias remove <adresse> | alias list
 
                   queue list | queue retry
+
+                  import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
+                      Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). <datei> enthält pro Zeile
+                      "adresse;passwort" (ohne Passwort wird es abgefragt). Fehlende Domains und Postfächer werden
+                      angelegt, das Passwort wird übernommen. Mehrfach ausführbar: es kommen nur neue Nachrichten dazu.
                 """);
             return a.Length == 0 ? 0 : 1;
     }
+}
+
+async Task<int> ImportAsync(string[] a)
+{
+    if (a is not ["import", "imap", var host, var file, ..])
+    {
+        return Fail("Aufruf: mailadmin import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]");
+    }
+
+    var dryRun = a.Contains("--dry-run");
+    var source = new ImapSource(
+        host,
+        int.Parse(Option(a, "--port") ?? "993"),
+        a.Contains("--starttls") ? MailKit.Security.SecureSocketOptions.StartTls : MailKit.Security.SecureSocketOptions.SslOnConnect,
+        a.Contains("--insecure-cert"));
+
+    var users = new List<(EmailAddress Address, string Password)>();
+    foreach (var line in File.ReadAllLines(file).Select(l => l.Trim()).Where(l => l.Length > 0 && !l.StartsWith('#')))
+    {
+        var separator = line.IndexOf(';');
+        var address = EmailAddress.Parse(separator < 0 ? line : line[..separator]);
+        users.Add((address, separator < 0 ? ReadHidden($"Passwort für {address}: ") : line[(separator + 1)..]));
+    }
+
+    var importer = new ImapImporter(accounts, mailboxes, new ImportLog(database));
+    var errors = 0;
+    foreach (var (address, password) in users)
+    {
+        Console.WriteLine($"{address}{(dryRun ? " (Probelauf)" : "")}");
+        if (!accounts.IsLocalDomain(address.Domain) && !dryRun)
+        {
+            var selector = $"mail{DateTime.UtcNow:yyyyMM}";
+            var domain = accounts.AddDomain(address.Domain, selector);
+            dkim.GenerateKey(domain.Name, selector);
+            Console.WriteLine($"  Domain {domain.Name} angelegt. DNS-Einträge: mailadmin dns {domain.Name}");
+        }
+
+        var result = await importer.ImportAsync(source, address, password, dryRun, Console.WriteLine);
+        if (result.Error is not null)
+        {
+            Console.Error.WriteLine($"  FEHLER: {result.Error}");
+            errors++;
+            continue;
+        }
+
+        errors += result.Failed > 0 ? 1 : 0;
+        Console.WriteLine($"  {(result.AccountCreated ? "Postfach angelegt, " : "")}{result.Imported} Nachrichten übernommen.");
+    }
+
+    Console.WriteLine(errors == 0 ? "Fertig." : $"Fertig, {errors} Postfach/Postfächer mit Fehlern – Ausgabe oben prüfen.");
+    if (!dryRun)
+    {
+        Console.WriteLine($"Hinweis: {file} enthält Passwörter im Klartext – nach der Migration löschen.");
+    }
+
+    return errors == 0 ? 0 : 1;
 }
 
 void PrintDns(string name)

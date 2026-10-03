@@ -74,6 +74,17 @@ public sealed class Database
         -- Incremented on every change to a folder or its messages, so IMAP sessions can skip resyncing unchanged folders.
         ALTER TABLE folders ADD COLUMN change_counter INTEGER NOT NULL DEFAULT 0;
         """,
+        """
+        -- Messages taken over from another server, so repeated imports only copy what is new.
+        CREATE TABLE import_log (
+            account_id    INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            source_folder TEXT NOT NULL,
+            uid_validity  INTEGER NOT NULL,
+            uid           INTEGER NOT NULL,
+            imported_utc  TEXT NOT NULL,
+            PRIMARY KEY (account_id, source_folder, uid_validity, uid)
+        );
+        """,
     ];
 
     private readonly string _connectionString;
