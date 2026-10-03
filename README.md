@@ -113,7 +113,10 @@ Danach die DNS-Einträge setzen, die `mailadmin dns example.de` ausgibt (MX, SPF
 | Postausgang (SMTP) | `mail.example.de` | 587 | STARTTLS |
 
 Benutzername ist immer die vollständige E-Mail-Adresse. Ordner für Gesendet, Entwürfe, Papierkorb und Spam erkennen die
-Programme automatisch (SPECIAL-USE).
+Programme automatisch (SPECIAL-USE). Programme, die eigene Namen verwenden (z. B. Outlook „Gesendete Elemente“,
+„Gelöschte Elemente“, „Junk-E-Mail“ oder ältere Apple-Mail-Versionen „Sent Messages“, „Deleted Messages“), landen
+trotzdem in denselben Ordnern – der Server ordnet diese Namen den Systemordnern zu, statt Doppelte anzulegen. So zeigen
+Webmail, Handy und PC überall dieselben Ordner.
 
 Unterstützte IMAP-Erweiterungen: LITERAL+, SASL-IR, ID, ENABLE, IDLE, NAMESPACE, UNSELECT, UIDPLUS, MOVE, CHILDREN, SPECIAL-USE.
 Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer Postfächer), QUOTA, geteilte Ordner und Sieve-Filter.

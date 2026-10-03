@@ -43,6 +43,47 @@ public sealed class ImapProtocolTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Outlook_style_folder_names_map_to_the_special_folders()
+    {
+        await using var imap = await RawImap.LoginAsync(_server.ImapsPort);
+        var alice = _server.User("alice").Id;
+        var foldersBefore = _server.HostMailboxes.ListFolders(alice).Count;
+
+        // Creating "Gesendete Elemente" succeeds without a second Sent folder …
+        Assert.StartsWith("a1 OK", (await imap.CommandAsync("a1 CREATE \"Gesendete Elemente\"")).Last());
+        Assert.Equal(foldersBefore, _server.HostMailboxes.ListFolders(alice).Count);
+
+        // … is found when asked for by name, but not listed twice …
+        Assert.Contains(await imap.CommandAsync("a2 LIST \"\" \"Gesendete Elemente\""), l => l.Contains("\\Sent") && l.Contains("\"Gesendete Elemente\""));
+        Assert.DoesNotContain(await imap.CommandAsync("a3 LIST \"\" \"*\""), l => l.Contains("Gesendete Elemente"));
+
+        // … and what the program stores there lands in Sent, visible to webmail and every other device.
+        const string message = "From: alice@example.test\r\nSubject: Outlook\r\n\r\nHallo\r\n";
+        Assert.StartsWith("a4 OK", (await imap.CommandAsync($"a4 APPEND \"Gesendete Elemente\" (\\Seen) {{{message.Length}+}}\r\n{message}")).Last());
+        Assert.Single(_server.HostMailboxes.ListMessages(_server.HostMailboxes.GetFolder(alice, "Sent")!.Id));
+        Assert.Contains("* STATUS \"Gesendete Elemente\" (MESSAGES 1)", await imap.CommandAsync("a5 STATUS \"Gesendete Elemente\" (MESSAGES)"));
+
+        // Deleting in such a program moves to "Gelöschte Elemente" = Trash.
+        await DeliverAsync("Weg damit");
+        await imap.CommandAsync("a6 SELECT INBOX");
+        Assert.StartsWith("a7 OK", (await imap.CommandAsync("a7 MOVE 1 \"Deleted Items\"")).Last());
+        Assert.Single(_server.HostMailboxes.ListMessages(_server.HostMailboxes.GetFolder(alice, "Trash")!.Id));
+        Assert.Contains(await imap.CommandAsync("a8 SELECT Papierkorb"), l => l == "* 1 EXISTS");
+    }
+
+    [Fact]
+    public async Task Existing_folder_with_an_alias_name_is_used_as_is()
+    {
+        var alice = _server.User("alice").Id;
+        _server.HostMailboxes.CreateFolder(alice, "Spam");
+        await using var imap = await RawImap.LoginAsync(_server.ImapsPort);
+
+        Assert.Contains(await imap.CommandAsync("a1 LIST \"\" \"*\""), l => l.EndsWith("\"Spam\""));
+        Assert.Contains(await imap.CommandAsync("a2 SELECT Spam"), l => l == "* 0 EXISTS");
+        Assert.Single(await imap.CommandAsync("a3 LIST \"\" Spam"), l => l.Contains("\"Spam\""));
+    }
+
+    [Fact]
     public async Task Examine_is_read_only()
     {
         await DeliverAsync("Nur lesen");

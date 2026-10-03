@@ -35,7 +35,9 @@ public sealed class MailboxExportTests : IAsyncLifetime
 
         using var client = await ConnectSourceAsync();
         var root = client.GetFolder(client.PersonalNamespaces[0]);
-        var sentItems = await root.CreateAsync("Sent Items", true);
+        // Created on the server directly: over IMAP this server maps "Sent Items" to its own special folder.
+        _source.HostMailboxes.CreateFolder(_source.User("alice").Id, "Sent Items");
+        var sentItems = await client.GetFolderAsync("Sent Items");
         var projects = await client.Inbox.CreateAsync("Projekte: 2024?", true);
 
         await client.Inbox.AppendAsync(new AppendRequest(Message("Willkommen"), MessageFlags.Seen) { InternalDate = OldDate });

@@ -32,8 +32,12 @@ public sealed class ImapImportTests : IAsyncLifetime
         // Folder layout as SmarterMail creates it.
         using var client = await ConnectSourceAsync();
         var root = client.GetFolder(client.PersonalNamespaces[0]);
-        var sentItems = await root.CreateAsync("Sent Items", true);
-        var deletedItems = await root.CreateAsync("Deleted Items", true);
+        // Created on the server directly: over IMAP this server maps "Sent Items" to its own special folder.
+        _source.HostMailboxes.CreateFolder(_source.User("alice").Id, "Sent Items");
+        var sentItems = await client.GetFolderAsync("Sent Items");
+        // Created on the server directly: over IMAP this server maps "Deleted Items" to its own special folder.
+        _source.HostMailboxes.CreateFolder(_source.User("alice").Id, "Deleted Items");
+        var deletedItems = await client.GetFolderAsync("Deleted Items");
         var projects = await client.Inbox.CreateAsync("Projekte", true);
 
         await client.Inbox.AppendAsync(new AppendRequest(Message("Willkommen"), MessageFlags.Seen) { InternalDate = OldDate });

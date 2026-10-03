@@ -42,13 +42,9 @@ public sealed class SentCopyTests : IAsyncLifetime
         var folder = folderName == "Sent" ? imap.GetFolder(SpecialFolder.Sent) : await imap.GetFolder(imap.PersonalNamespaces[0]).CreateAsync(folderName, true);
         await folder.AppendAsync(new AppendRequest(message, MailKit.MessageFlags.Seen));
 
-        var target = _server.HostMailboxes.GetFolder(_server.User("alice").Id, folderName)!;
-        var copy = Assert.Single(_server.HostMailboxes.ListMessages(target.Id));
+        // "Sent Messages" is an alias of Sent, so in both cases exactly the program's copy remains in Sent.
+        var copy = Assert.Single(Sent());
         Assert.Contains("Bcc: geheim@remote.test", await _server.ReadAsync(copy));
-        if (folderName != "Sent")
-        {
-            Assert.Empty(Sent());
-        }
     }
 
     [Fact]

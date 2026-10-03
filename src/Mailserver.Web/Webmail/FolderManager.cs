@@ -15,6 +15,11 @@ public sealed class FolderManager(MailboxStore mailboxes, RuleStore rules)
             return new(null, "Der Name darf keinen Schrägstrich enthalten – für Unterordner bitte den übergeordneten Ordner auswählen.");
         }
 
+        if (fullName is not null && mailboxes.AliasTarget(account.Id, fullName) is { } special)
+        {
+            return new(null, $"„{fullName}“ gibt es schon: das ist der Ordner „{Format.FolderName(special)}“.");
+        }
+
         if (MailboxStore.ValidateFolderName(fullName) is { } error)
         {
             return new(null, error);

@@ -55,6 +55,34 @@ public sealed class MailboxStore(Database database, DataPaths paths)
 
     public static readonly IReadOnlyList<string> DefaultFolders = [Inbox, "Sent", "Drafts", "Trash", "Junk"];
 
+    /// <summary>
+    /// Names other mail programs (Outlook, older Apple Mail, German clients) use for the special folders. Programs that
+    /// ignore SPECIAL-USE would otherwise create a second "Sent", "Trash" … next to the real one, and webmail and the
+    /// other devices would no longer show the same content.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> SpecialFolderAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Sent Items"] = "Sent", ["Sent Messages"] = "Sent", ["Sent Mail"] = "Sent", ["Gesendet"] = "Sent",
+        ["Gesendete Elemente"] = "Sent", ["Gesendete Objekte"] = "Sent", ["Gesendete Nachrichten"] = "Sent",
+        ["Deleted Items"] = "Trash", ["Deleted Messages"] = "Trash", ["Gelöschte Elemente"] = "Trash",
+        ["Gelöschte Objekte"] = "Trash", ["Gelöschte Nachrichten"] = "Trash", ["Papierkorb"] = "Trash", ["Bin"] = "Trash",
+        ["Junk E-Mail"] = "Junk", ["Junk-E-Mail"] = "Junk", ["Junk Email"] = "Junk", ["Spam"] = "Junk", ["Werbung"] = "Junk",
+        ["Bulk Mail"] = "Junk",
+        ["Entwürfe"] = "Drafts", ["Draft"] = "Drafts",
+        ["Archiv"] = "Archive", ["Archives"] = "Archive",
+    };
+
+    /// <summary>
+    /// The folder a client means: the folder itself if it exists, otherwise the special folder an alias such as
+    /// "Gesendete Elemente" stands for (if that one exists), otherwise the name unchanged.
+    /// </summary>
+    public string ResolveFolderName(long accountId, string name) =>
+        GetFolder(accountId, name) is null && AliasTarget(accountId, name) is { } target ? target : name;
+
+    /// <summary>The existing special folder <paramref name="name"/> is an alias for, or null.</summary>
+    public string? AliasTarget(long accountId, string name) =>
+        SpecialFolderAliases.TryGetValue(name, out var target) && GetFolder(accountId, target) is not null ? target : null;
+
     /// <summary>Folders the server and mail clients rely on; they cannot be renamed or deleted.</summary>
     public static bool IsSystemFolder(string name) => DefaultFolders.Contains(NormalizeFolderName(name));
 

@@ -415,6 +415,7 @@ public sealed class WebmailEditorAndFolderTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("Create", "name", "Gelöschte Elemente", "gibt es schon")]
     [InlineData("Create", "name", "Sent", "existiert bereits")]
     [InlineData("Create", "name", "a/b", "Schrägstrich")]
     [InlineData("Create", "name", "Stern*", "nicht enthalten")]

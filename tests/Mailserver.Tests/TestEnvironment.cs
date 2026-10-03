@@ -62,6 +62,13 @@ public class TestData : IDisposable
 /// <summary>Runs the complete mail server host on free local ports, with a fake remote MX as smart host.</summary>
 public sealed class TestServer : IAsyncDisposable
 {
+    /// <summary>
+    /// Dozens of test servers run in parallel; with inotify-based file watching they exceed the per-user limit (often 128)
+    /// on Linux. Polling (every few seconds) is enough for the configuration reload tests.
+    /// </summary>
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void UsePollingFileWatcher() => Environment.SetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER", "1");
+
     public const string Domain = "example.test";
     public const string Password = "correct horse battery";
 
@@ -106,7 +113,12 @@ public sealed class TestServer : IAsyncDisposable
         var imapsPort = GetFreePort();
         var webPort = GetFreePort();
 
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = AppContext.BaseDirectory });
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ContentRootPath = AppContext.BaseDirectory,
+            // appsettings.json is not used here; not watching it saves inotify instances when many test servers run in parallel.
+            Args = ["--hostBuilder:reloadConfigOnChange=false"],
+        });
         builder.Logging.ClearProviders();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {

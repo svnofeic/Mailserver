@@ -377,6 +377,9 @@ public sealed partial class ImapSession(
         await connection.WriteAsync(response.ToMemory(), cancellationToken);
     }
 
+    /// <summary>Decodes a folder name and maps aliases such as "Gesendete Elemente" to the existing special folder.</summary>
+    private string ResolveFolderName(ImapToken token) => mailboxes.ResolveFolderName(_account!.Id, DecodeFolderName(token));
+
     private static string DecodeFolderName(ImapToken token)
     {
         var name = token.AsString();

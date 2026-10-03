@@ -294,7 +294,7 @@ public sealed partial class ImapSession
             return;
         }
 
-        var target = mailboxes.GetFolder(_account!.Id, DecodeFolderName(args[1]));
+        var target = mailboxes.GetFolder(_account!.Id, ResolveFolderName(args[1]));
         if (target is null)
         {
             await Respond(command, null, "NO [TRYCREATE] Target folder does not exist", cancellationToken);
@@ -390,7 +390,7 @@ public sealed partial class ImapSession
             }
         }
 
-        var folder = mailboxes.GetFolder(_account!.Id, DecodeFolderName(args[0]));
+        var folder = mailboxes.GetFolder(_account!.Id, ResolveFolderName(args[0]));
         if (folder is null)
         {
             await Respond(command, null, "NO [TRYCREATE] Folder does not exist", cancellationToken);

@@ -27,7 +27,7 @@ public sealed partial class ImapSession
 
         // A failed SELECT leaves the session without a selected folder (RFC 3501 6.3.1).
         _selected = null;
-        var folder = mailboxes.GetFolder(_account!.Id, DecodeFolderName(args[0]));
+        var folder = mailboxes.GetFolder(_account!.Id, ResolveFolderName(args[0]));
         if (folder is null)
         {
             await Respond(command, null, "NO [NONEXISTENT] Folder does not exist", cancellationToken);
@@ -89,6 +89,13 @@ public sealed partial class ImapSession
         if (mailboxes.GetFolder(_account!.Id, name) is not null)
         {
             await Respond(command, null, "NO [ALREADYEXISTS] Folder already exists", cancellationToken);
+            return;
+        }
+
+        // "Gesendete Elemente" & co. are the existing special folder: report success instead of creating a duplicate.
+        if (mailboxes.AliasTarget(_account.Id, name) is not null)
+        {
+            await Respond(command, null, "OK CREATE completed", cancellationToken);
             return;
         }
 
@@ -157,7 +164,7 @@ public sealed partial class ImapSession
 
     private async Task SubscribeAsync(ImapCommand command, IReadOnlyList<ImapToken> args, bool subscribe, CancellationToken cancellationToken)
     {
-        var name = DecodeFolderName(RequireArgument(args, 0));
+        var name = ResolveFolderName(RequireArgument(args, 0));
         if (!mailboxes.SetSubscribed(_account!.Id, name, subscribe) && subscribe)
         {
             await Respond(command, null, "NO [NONEXISTENT] Folder does not exist", cancellationToken);
@@ -249,6 +256,19 @@ public sealed partial class ImapSession
 
                 response.Raw($"* {command.Name} ({string.Join(' ', attributes)}) \"/\" ").String(ModifiedUtf7.Encode(name)).Line();
             }
+
+            // A client asking for exactly "Gesendete Elemente" (after creating it) learns that it exists, as an alias of
+            // the special folder. Wildcard listings show only the real folders, so nothing appears twice.
+            foreach (var pattern in patterns.Where(p => !p.Contains('*') && !p.Contains('%')).Select(p => reference + p))
+            {
+                if (!existing.ContainsKey(pattern) && mailboxes.AliasTarget(_account.Id, pattern) is { } target &&
+                    (!lsub || existing[target].Subscribed))
+                {
+                    var specialAttribute = SpecialUse.GetValueOrDefault(target);
+                    response.Raw($"* {command.Name} (\\HasNoChildren{(specialAttribute is null ? "" : " " + specialAttribute)}) \"/\" ")
+                        .String(ModifiedUtf7.Encode(pattern)).Line();
+                }
+            }
         }
 
         response.Raw($"{command.Tag} OK {command.Name} completed\r\n");
@@ -257,7 +277,8 @@ public sealed partial class ImapSession
 
     private async Task StatusAsync(ImapCommand command, IReadOnlyList<ImapToken> args, CancellationToken cancellationToken)
     {
-        var name = DecodeFolderName(RequireArgument(args, 0));
+        var requested = DecodeFolderName(RequireArgument(args, 0));
+        var name = mailboxes.ResolveFolderName(_account!.Id, requested);
         var folder = mailboxes.GetFolder(_account!.Id, name);
         if (folder is null)
         {
@@ -276,7 +297,7 @@ public sealed partial class ImapSession
             _ => throw new ImapParseException($"Unknown STATUS item {item}"),
         });
 
-        var response = new ImapResponse().Raw("* STATUS ").String(ModifiedUtf7.Encode(name)).Raw($" ({string.Join(' ', items)})\r\n");
+        var response = new ImapResponse().Raw("* STATUS ").String(ModifiedUtf7.Encode(requested)).Raw($" ({string.Join(' ', items)})\r\n");
         response.Raw($"{command.Tag} OK STATUS completed\r\n");
         await connection.WriteAsync(response.ToMemory(), cancellationToken);
     }
