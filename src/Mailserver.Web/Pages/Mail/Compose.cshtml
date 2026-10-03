@@ -1,0 +1,33 @@
+@page
+@model Mailserver.Web.Pages.Mail.ComposeModel
+@{ ViewData["Title"] = Model.Title; }
+<h1>@Model.Title</h1>
+<form method="post" enctype="multipart/form-data" class="compose card">
+    <input type="hidden" name="Form.Mode" value="@Model.Form.Mode" />
+    <input type="hidden" name="Form.OriginalFolder" value="@Model.Form.OriginalFolder" />
+    <input type="hidden" name="Form.OriginalUid" value="@Model.Form.OriginalUid" />
+    <input type="hidden" name="Form.InReplyTo" value="@Model.Form.InReplyTo" />
+    <input type="hidden" name="Form.References" value="@Model.Form.References" />
+    <div class="field"><label for="from">Von</label>
+        <select id="from" name="Form.From">@foreach (var address in Model.Senders) { <option value="@address" selected="@(Model.Form.From == address)">@address</option> }</select></div>
+    <div class="field"><label for="to">An</label><input id="to" name="Form.To" value="@Model.Form.To" autocomplete="email" placeholder="name@beispiel.de, …" /></div>
+    <div class="field"><label for="cc">Cc</label><input id="cc" name="Form.Cc" value="@Model.Form.Cc" /></div>
+    <div class="field"><label for="bcc">Bcc</label><input id="bcc" name="Form.Bcc" value="@Model.Form.Bcc" /></div>
+    <div class="field"><label for="subject">Betreff</label><input id="subject" name="Form.Subject" value="@Model.Form.Subject" /></div>
+    <textarea name="Form.Body" aria-label="Nachricht">@Model.Form.Body</textarea>
+    <div class="row" style="margin-top: 10px">
+        <label>Anhänge hinzufügen<input type="file" name="Files" multiple /></label>
+        @if (Model.CarriedAttachments.Count > 0)
+        {
+            <label class="check"><input type="checkbox" name="Form.KeepAttachments" value="true" checked="@Model.Form.KeepAttachments" />
+                @(Model.Form.Mode == "draft" ? "Anhänge des Entwurfs behalten" : "Anhänge der Originalnachricht mitsenden"): @string.Join(", ", Model.CarriedAttachments)</label>
+            <input type="hidden" name="Form.KeepAttachments" value="false" />
+        }
+    </div>
+    <p class="small muted">Höchstens @Format.Size(Model.MaxAttachmentBytes) insgesamt. Bei einem Fehler müssen Anhänge erneut ausgewählt werden.</p>
+    <div class="toolbar">
+        <button type="submit" asp-page-handler="Send">Senden</button>
+        <button type="submit" asp-page-handler="Draft" class="secondary">Als Entwurf speichern</button>
+        <a class="button secondary" href="/Mail">Verwerfen</a>
+    </div>
+</form>

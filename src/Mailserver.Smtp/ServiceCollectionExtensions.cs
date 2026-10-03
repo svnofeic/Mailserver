@@ -48,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<OutgoingMessagePreparer>();
         services.AddSingleton<RuleStore>();
         services.AddSingleton<SpamLog>();
+        services.AddSingleton<SpamFeedback>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AuthThrottle>();
         services.AddSingleton<CertificateProvider>();

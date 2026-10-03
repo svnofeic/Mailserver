@@ -1,0 +1,20 @@
+@using Mailserver.Core.Storage
+@model (IReadOnlyList<(Folder Folder, FolderStatus Status)> Folders, string Current)
+<nav class="folders" aria-label="Ordner">
+    @foreach (var (folder, status) in Model.Folders)
+    {
+        <a class="@(folder.Name == Model.Current ? "active" : "")" href="/Mail?folder=@Uri.EscapeDataString(folder.Name)">
+            <span>@Format.FolderName(folder.Name)</span>
+            @if (status.Unseen > 0 && folder.Name is not ("Sent" or "Drafts" or "Trash")) { <span class="count">@status.Unseen</span> }
+        </a>
+    }
+</nav>
+<form method="get" action="/Mail" class="folder-select card" style="padding: 8px">
+    <select name="folder" aria-label="Ordner" style="width: 100%">
+        @foreach (var (folder, status) in Model.Folders)
+        {
+            <option value="@folder.Name" selected="@(folder.Name == Model.Current)">@Format.FolderName(folder.Name)@(status.Unseen > 0 ? $" ({status.Unseen})" : "")</option>
+        }
+    </select>
+    <button type="submit" class="secondary" style="margin-top: 6px">Öffnen</button>
+</form>

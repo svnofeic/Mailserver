@@ -82,6 +82,9 @@ public static class WebHosting
             cookie.SlidingExpiration = true;
             cookie.Events.OnValidatePrincipal = ValidatePrincipalAsync;
         });
+        services.AddSingleton<Webmail.WebmailStore>();
+        services.AddSingleton<Webmail.WebmailSender>();
+        services.AddSingleton<Webmail.MailActions>();
         services.AddAuthorizationBuilder().AddPolicy(AdminPolicy, policy => policy.RequireClaim(AdminClaim, "true"));
         services.AddAntiforgery(antiforgery =>
         {
@@ -109,7 +112,7 @@ public static class WebHosting
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";
             headers["Content-Security-Policy"] =
-                "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+                "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
             // Pages with forms get no-cache headers from the antiforgery system; everything else is marked here.
             context.Response.OnStarting(() =>
             {
@@ -123,6 +126,19 @@ public static class WebHosting
             if (context.Request.IsHttps)
             {
                 headers["Strict-Transport-Security"] = "max-age=31536000";
+            }
+
+            await next();
+        });
+        app.Use(async (context, next) =>
+        {
+            // Webmail uploads can be as large as a message; everything else keeps the small default limit. This has to happen
+            // before anything reads the form (antiforgery validation does so early).
+            if (HttpMethods.IsPost(context.Request.Method) && context.Request.Path.StartsWithSegments("/Mail/Compose") &&
+                context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit)
+            {
+                var maxMessageSize = context.RequestServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<MailserverOptions>>().Value.MaxMessageSizeBytes;
+                limit.MaxRequestBodySize = maxMessageSize + 1024 * 1024;
             }
 
             await next();

@@ -1,0 +1,88 @@
+@page
+@model Mailserver.Web.Pages.Mail.IndexModel
+@{ ViewData["Title"] = Format.FolderName(Model.Folder.Name); }
+<div class="mail">
+    <aside>
+        <p><a class="button" href="/Mail/Compose" style="width: 100%; text-align: center">Neue Mail</a></p>
+        <partial name="_Folders" model="(Model.Folders, Model.Folder.Name)" />
+    </aside>
+    <section>
+        <div class="toolbar">
+            <h1 style="margin: 0" class="grow">@Format.FolderName(Model.Folder.Name)</h1>
+            <form method="get" action="/Mail" class="row">
+                <input type="hidden" name="folder" value="@Model.Folder.Name" />
+                <input name="q" value="@Model.Search" placeholder="Absender, Empfänger, Betreff" aria-label="Suche" />
+                <button type="submit" class="secondary">Suchen</button>
+            </form>
+        </div>
+
+        <form method="post" asp-page-handler="Bulk">
+            <input type="hidden" name="folder" value="@Model.Folder.Name" />
+            <input type="hidden" name="page" value="@Model.PageNumber" />
+            <div class="toolbar small">
+                <button type="submit" name="op" value="read" class="secondary">Gelesen</button>
+                <button type="submit" name="op" value="unread" class="secondary">Ungelesen</button>
+                <button type="submit" name="op" value="flag" class="secondary">Markieren</button>
+                @if (Model.Folder.Name == "Junk")
+                {
+                    <button type="submit" name="op" value="notspam" class="secondary">Kein Spam</button>
+                }
+                else
+                {
+                    <button type="submit" name="op" value="spam" class="secondary">Spam</button>
+                }
+                <button type="submit" name="op" value="delete" class="secondary">@(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
+                <select name="target" aria-label="Zielordner">
+                    @foreach (var (folder, _) in Model.Folders.Where(f => f.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Format.FolderName(folder.Name)</option> }
+                </select>
+                <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
+                <span class="grow"></span>
+                <span class="muted">@Model.Total Nachricht(en)</span>
+            </div>
+
+            @if (Model.Items.Count == 0)
+            {
+                <div class="card muted">@(Model.Search is null ? "Dieser Ordner ist leer." : "Keine Nachricht gefunden.")</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="messages">
+                        <tbody>
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr class="@(item.Seen ? "" : "unread")">
+                                <td class="sel"><input type="checkbox" name="uids" value="@item.Message.Uid" aria-label="Auswählen" /></td>
+                                <td class="from small">@(Model.ShowRecipients ? item.Summary.To : item.Summary.From)</td>
+                                <td class="subject">
+                                    <a href="/Mail/Read?folder=@Uri.EscapeDataString(Model.Folder.Name)&uid=@item.Message.Uid">
+                                        @if (item.Flagged) { <span class="mark" title="markiert">★</span> }
+                                        @if (item.Answered) { <span class="muted" title="beantwortet">↩</span> }
+                                        @item.Summary.Subject
+                                        @if (item.Summary.HasAttachments) { <span class="muted" title="Anhang">📎</span> }
+                                    </a>
+                                </td>
+                                <td class="date small muted">@Format.Time(item.Message.InternalDate)</td>
+                                <td class="size num small muted">@Format.Size(item.Message.Size)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </form>
+
+        @if (Model.PageCount > 1)
+        {
+            <div class="toolbar">
+                @if (Model.PageNumber > 0) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber - 1)">← Neuere</a> }
+                <span class="muted">Seite @(Model.PageNumber + 1) von @Model.PageCount</span>
+                @if (Model.PageNumber + 1 < Model.PageCount) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber + 1)">Ältere →</a> }
+            </div>
+        }
+        @if (Model.Folder.Name == "Junk")
+        {
+            <p class="small muted">Mails, die fälschlich hier gelandet sind, mit „Kein Spam“ in den Posteingang holen – das hilft beim Verbessern des Spamfilters.</p>
+        }
+    </section>
+</div>

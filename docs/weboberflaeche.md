@@ -10,6 +10,7 @@ belegt; der Port lässt sich unter `Mailserver:Web:HttpsPort` ändern. Anmelden 
 
 | Seite | Inhalt |
 |---|---|
+| **Mail** | Webmail: Ordner, Nachrichtenliste mit Suche und Mehrfachauswahl, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Anhängen, Entwürfe, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
@@ -54,7 +55,22 @@ Wer die Weboberfläche nicht aus dem Internet erreichbar machen will: Firewall-R
 beschränken, `Mailserver:Web:ListenAddresses` auf `127.0.0.1` setzen (dann nur per RDP auf dem Server) oder
 `Mailserver:Web:Enabled` auf `false`.
 
+## Webmail
+
+Für unterwegs, wenn das eigene Gerät nicht greifbar ist. Alles läuft über denselben Speicher wie IMAP – gelesene, verschobene
+oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
+
+- **Sichere Anzeige:** HTML-Mails werden serverseitig bereinigt (Skripte, Formulare, Event-Handler, `javascript:`-Links, eingebettete
+  Frames werden entfernt) und zusätzlich in einem abgeschotteten Rahmen ohne Skriptausführung angezeigt.
+- **Externe Bilder** sind standardmäßig blockiert, weil sie dem Absender verraten, dass und wann die Mail gelesen wurde. Ein Klick auf
+  „Bilder anzeigen“ lädt sie für diese Mail nach. In der Mail eingebettete Bilder werden immer angezeigt.
+- **Anhänge** werden immer als Download ausgeliefert, nie im Browser geöffnet.
+- **Senden** geht denselben Weg wie aus dem Mailprogramm: nur mit eigener Adresse oder eigenem Alias als Absender, DKIM-Signatur,
+  Kopie im Ordner „Gesendet“, Eintrag im Verlauf. Höchstens 100 Empfänger pro Nachricht; Anhänge bis zu ¾ der maximalen Mailgröße.
+- **Spam/Kein Spam** verschiebt die Mail und zählt als Rückmeldung für die Spam-Statistik.
+- Geschrieben wird als reiner Text (kein Formatierungs-Editor). Beim Antworten wird die Originalnachricht zitiert.
+
 ## Grenzen
 
-- Kein Webmail (Mails lesen/schreiben im Browser) – dafür bleiben Outlook, Thunderbird und Smartphone-Apps.
+- Webmail kann keine Ordner anlegen oder umbenennen (das geht im Mailprogramm) und schreibt nur reinen Text.
 - Keine Zwei-Faktor-Anmeldung.

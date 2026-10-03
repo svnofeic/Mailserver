@@ -49,6 +49,42 @@ public sealed partial class WebClient : IDisposable
         return response;
     }
 
+    /// <summary>Like <see cref="PostAsync"/>, as multipart/form-data with files.</summary>
+    public async Task<HttpResponseMessage> PostMultipartAsync(string formPage, string action, (string Name, string Value)[] fields,
+        params (string Name, string FileName, byte[] Content)[] files)
+    {
+        await GetAsync(formPage);
+        var token = Token().Match(LastPage);
+        using var content = new MultipartFormDataContent();
+        foreach (var (name, value) in fields)
+        {
+            content.Add(new StringContent(value), name);
+        }
+
+        if (token.Success)
+        {
+            content.Add(new StringContent(WebUtility.HtmlDecode(token.Groups[1].Value)), "__RequestVerificationToken");
+        }
+
+        foreach (var (name, fileName, bytes) in files)
+        {
+            var file = new ByteArrayContent(bytes);
+            file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+            content.Add(file, name, fileName);
+        }
+
+        var response = await _http.PostAsync(action, content);
+        LastPage = await response.Content.ReadAsStringAsync();
+        if (response.StatusCode == HttpStatusCode.Redirect && response.Headers.Location is { } location)
+        {
+            await GetAsync(location.ToString());
+        }
+
+        return response;
+    }
+
+    public async Task<byte[]> GetBytesAsync(string path) => await _http.GetByteArrayAsync(path);
+
     public async Task LoginAsync(string email, string password)
     {
         var response = await PostAsync("/Login", "/Login", ("email", email), ("password", password));

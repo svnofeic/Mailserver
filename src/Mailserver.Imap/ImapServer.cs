@@ -26,6 +26,7 @@ public sealed class ImapServer(
     FolderWatcher watcher,
     CertificateProvider certificates,
     SpamLog spamLog,
+    SpamFeedback spamFeedback,
     ILogger<ImapServer> logger) : BackgroundService
 {
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(30);
@@ -119,7 +120,7 @@ public sealed class ImapServer(
 
                 await using var connection = new ImapConnection(stream);
                 var session = new ImapSession(connection, remote, implicitTls, hasCertificate && !implicitTls ? AuthenticateTlsAsync : null,
-                    accounts, mailboxes, throttle, watcher, spamLog, options.Value, logger);
+                    accounts, mailboxes, throttle, watcher, spamLog, spamFeedback, options.Value, logger);
                 await session.RunAsync(stoppingToken);
             }
         }

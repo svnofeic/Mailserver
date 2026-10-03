@@ -18,7 +18,7 @@ public sealed class LoginModel(AccountStore accounts, AuthThrottle throttle, Spa
     {
         if (User.Identity?.IsAuthenticated == true)
         {
-            return Redirect("/");
+            return Redirect("/Mail");
         }
 
         ReturnUrl = returnUrl;
@@ -56,6 +56,6 @@ public sealed class LoginModel(AccountStore accounts, AuthThrottle throttle, Spa
         var principal = WebHosting.CreatePrincipal(account, accounts.GetSecurityStamp(account.Id)!);
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
         logger.LogInformation("Web login {User} from {Ip}", account.Address, ip);
-        return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+        return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/Mail");
     }
 }

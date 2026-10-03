@@ -24,6 +24,7 @@ public sealed partial class ImapSession(
     AuthThrottle throttle,
     FolderWatcher watcher,
     SpamLog spamLog,
+    SpamFeedback spamFeedback,
     MailserverOptions options,
     ILogger logger)
 {

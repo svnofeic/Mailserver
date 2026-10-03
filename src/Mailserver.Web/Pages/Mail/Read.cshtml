@@ -1,0 +1,71 @@
+@page
+@model Mailserver.Web.Pages.Mail.ReadModel
+@{ ViewData["Title"] = Model.Subject; var f = Uri.EscapeDataString(Model.Folder.Name); var uid = Model.Stored.Uid; }
+<div class="mail">
+    <aside>
+        <p><a class="button" href="/Mail/Compose" style="width: 100%; text-align: center">Neue Mail</a></p>
+        <partial name="_Folders" model="(Model.Folders, Model.Folder.Name)" />
+    </aside>
+    <section>
+        <div class="toolbar small">
+            <a class="button secondary" href="/Mail?folder=@f">← @Format.FolderName(Model.Folder.Name)</a>
+            @if (Model.Folder.Name == "Drafts")
+            {
+                <a class="button" href="/Mail/Compose?mode=draft&folder=@f&uid=@uid">Entwurf bearbeiten</a>
+            }
+            else
+            {
+                <a class="button" href="/Mail/Compose?mode=reply&folder=@f&uid=@uid">Antworten</a>
+                <a class="button secondary" href="/Mail/Compose?mode=replyall&folder=@f&uid=@uid">Allen antworten</a>
+                <a class="button secondary" href="/Mail/Compose?mode=forward&folder=@f&uid=@uid">Weiterleiten</a>
+            }
+            <form method="post" asp-page="/Mail/Read" asp-page-handler="Action" asp-route-folder="@Model.Folder.Name" asp-route-uid="@uid" class="row">
+                <button type="submit" name="op" value="delete" class="secondary">@(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
+                @if (Model.Folder.Name == "Junk") { <button type="submit" name="op" value="notspam" class="secondary">Kein Spam</button> }
+                else { <button type="submit" name="op" value="spam" class="secondary">Spam</button> }
+                <button type="submit" name="op" value="unread" class="secondary">Ungelesen</button>
+                <button type="submit" name="op" value="@(Model.Stored.HasFlag("\\Flagged") ? "unflag" : "flag")" class="secondary">@(Model.Stored.HasFlag("\\Flagged") ? "Markierung entfernen" : "Markieren")</button>
+                <select name="target" aria-label="Zielordner">
+                    @foreach (var (folder, _) in Model.Folders.Where(x => x.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Format.FolderName(folder.Name)</option> }
+                </select>
+                <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h1 style="margin-top: 0">@Model.Subject</h1>
+            <dl class="headers">
+                <dt>Von</dt><dd>@Model.Mail.From</dd>
+                <dt>An</dt><dd>@Model.Mail.To</dd>
+                @if (Model.Mail.Cc.Count > 0) { <dt>Cc</dt><dd>@Model.Mail.Cc</dd> }
+                @if (Model.Mail.Bcc.Count > 0) { <dt>Bcc</dt><dd>@Model.Mail.Bcc</dd> }
+                <dt>Datum</dt><dd>@Format.Time(Model.Mail.Date == default ? Model.Stored.InternalDate : Model.Mail.Date)</dd>
+                @if (Model.SpamScore is not null) { <dt>Spam-Score</dt><dd>@Model.SpamScore</dd> }
+            </dl>
+        </div>
+
+        @if (Model.HasRemoteContent && !Model.ShowImages)
+        {
+            <div class="notice warn small">Externe Bilder wurden zum Schutz Ihrer Privatsphäre blockiert (sie verraten dem Absender, dass die Mail gelesen wurde).
+                <a href="/Mail/Read?folder=@f&uid=@uid&images=1">Bilder anzeigen</a></div>
+        }
+        <iframe class="mailbody" title="Nachricht" src="/Mail/Body?folder=@f&uid=@uid&images=@(Model.ShowImages ? 1 : 0)"
+                sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+
+        @if (Model.Attachments.Count > 0)
+        {
+            <h2>Anhänge</h2>
+            <div class="table-wrap"><table><tbody>
+                @for (var i = 0; i < Model.Attachments.Count; i++)
+                {
+                    <tr>
+                        <td>📎 <a href="/Mail/Attachment?folder=@f&uid=@uid&index=@i">@Model.Attachments[i].Name</a></td>
+                        <td class="small muted">@Model.Attachments[i].Type</td>
+                        <td class="num small muted">@Format.Size(Model.Attachments[i].Size)</td>
+                    </tr>
+                }
+            </tbody></table></div>
+        }
+        <p class="small"><a href="/Mail/Attachment?folder=@f&uid=@uid&source=1">Quelltext herunterladen (.eml)</a></p>
+    </section>
+</div>
