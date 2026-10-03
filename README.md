@@ -8,7 +8,7 @@ Ein eigener Mailserver in C#/.NET 10 für Windows Server. Er ersetzt SmarterMail
 |---|---|---|
 | **M1 – SMTP** | Empfang auf Port 25, Submission auf 587/465 mit Login, Zustellung nach außen mit MX-Lookup und Wiederholungen, DKIM-Signatur, Aliase und Weiterleitungen, Unzustellbarkeitsmeldungen, Quota, Schutz vor Brute-Force, Verwaltungs-Tool `mailadmin` | ✅ fertig |
 | **M2 – IMAP** | IMAP-Server (Port 993 und 143 mit STARTTLS) für Outlook, Thunderbird und Smartphones: Ordner inkl. Unterordnern und Umlauten, Flags, Suche, Kopieren/Verschieben, Push über IDLE | ✅ fertig |
-| **M3 – Spamschutz** | SPF-, DKIM- und DMARC-Prüfung eingehender Mails, DNS-Blacklists, Greylisting, Junk-Ordner, Rate-Limits | offen |
+| **M3 – Spamschutz & Regeln** | SPF, DKIM und DMARC für eingehende Mails, DNS-Blacklists, Greylisting, Spam-Score mit Junk-Ordner. Eigene Regeln pro Postfach, Domain oder global, z. B. "Betreff enthält … → Spam / endgültig löschen / Ordner". Anleitung: [docs/spamschutz-und-regeln.md](docs/spamschutz-und-regeln.md) | ✅ fertig |
 | **M4 – Migration** | `mailadmin import imap`: Postfächer aus SmarterMail (oder jedem IMAP-Server) mit Ordnern, Flags und Datum, wiederholbar für den letzten Abgleich. Anleitung: [docs/umzug-smartermail.md](docs/umzug-smartermail.md) | ✅ fertig |
 | **M5 – Komfort** | Web-Oberfläche zur Verwaltung, Autodiscover/Autoconfig, MTA-STS, Monitoring | offen |
 
@@ -21,6 +21,7 @@ Ein eigener Mailserver in C#/.NET 10 für Windows Server. Er ersetzt SmarterMail
 src/
   Mailserver.Core      Domains/Konten/Aliase (SQLite), Postfach-Speicher (.eml-Dateien), Warteschlange,
                        DKIM, Routing, Bounces, Zertifikate, Login-Sperren
+  Mailserver.AntiSpam  SPF, DKIM- und DMARC-Prüfung, DNS-Blacklists, Greylisting, Spam-Score
   Mailserver.Smtp      SMTP-Server (Port 25 und 587/465) und Zustell-Dienst (MX bzw. Smarthost)
   Mailserver.Imap      IMAP-Server (Port 993 und 143): Protokoll, MIME-Struktur, Sitzungen, IDLE
   Mailserver.Service   Windows-Dienst (Mailserver.exe)
@@ -119,6 +120,7 @@ Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer 
 | `Mailserver:Delivery:SmartHost` | Optionaler Relay-Server (`Host`, `Port`, `Username`, `Password`, `Security`) |
 | `Mailserver:Delivery:MaxQueueLifetime` | Wie lange eine Mail zugestellt werden soll, bevor sie zurückgeht (Standard 5 Tage) |
 | `Mailserver:Security:*` | Login-Sperren, Spoofing-Schutz, Hop-Limit |
+| `Mailserver:Spam:*` | Spamfilter: Schwellen für Junk/Löschen, Blacklists, Greylisting, vertrauenswürdige Netze |
 
 ### Verwaltung
 
@@ -127,6 +129,7 @@ mailadmin domain add|list|remove        mailadmin user add|passwd|quota|enable|d
 mailadmin dns <domain>                  mailadmin alias add|remove|list
 mailadmin dkim rotate|activate          mailadmin queue list|retry
 mailadmin import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
+mailadmin rule add|list|remove|enable|disable|test   (siehe docs/spamschutz-und-regeln.md)
 ```
 
 Logs: Ausgabe in der Konsole und Warnungen sowie Fehler in der Windows-Ereignisanzeige (Quelle "Mailserver").

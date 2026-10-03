@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using Mailserver.AntiSpam;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Routing;
@@ -26,6 +27,7 @@ public sealed class SmtpHostedService(
     OutgoingMessagePreparer preparer,
     AuthThrottle throttle,
     CertificateProvider certificates,
+    SpamFilter spamFilter,
     ILoggerFactory loggerFactory) : BackgroundService
 {
     private readonly ILogger _logger = loggerFactory.CreateLogger<SmtpHostedService>();
@@ -101,8 +103,8 @@ public sealed class SmtpHostedService(
             : new RejectingAuthenticator());
         provider.Add(isSubmission
             ? new SubmissionMailboxFilter(accounts)
-            : new InboundMailboxFilter(accounts, mailboxes, options));
-        provider.Add((IMessageStore)new RoutingMessageStore(router, preparer, options, loggerFactory.CreateLogger<RoutingMessageStore>(), isSubmission));
+            : new InboundMailboxFilter(accounts, mailboxes, spamFilter, options));
+        provider.Add((IMessageStore)new RoutingMessageStore(router, preparer, spamFilter, options, loggerFactory.CreateLogger<RoutingMessageStore>(), isSubmission));
 
         var server = new SmtpServer.SmtpServer(builder.Build(), provider);
         server.SessionCreated += (_, e) => SessionInfo.Track(e.Context);
@@ -113,7 +115,7 @@ public sealed class SmtpHostedService(
     private static void AddEndpoints(SmtpServerOptionsBuilder builder, MailserverOptions settings, int port, bool implicitTls, bool requireAuth,
         ICertificateFactory? certificateFactory)
     {
-        foreach (var address in settings.Smtp.ListenAddresses)
+        foreach (var address in settings.Smtp.EffectiveListenAddresses)
         {
             builder.Endpoint(endpoint =>
             {

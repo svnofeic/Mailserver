@@ -1,10 +1,12 @@
 using DnsClient;
+using Mailserver.AntiSpam;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Data;
 using Mailserver.Core.Dkim;
 using Mailserver.Core.Queue;
 using Mailserver.Core.Routing;
+using Mailserver.Core.Rules;
 using Mailserver.Core.Security;
 using Mailserver.Core.Storage;
 using Mailserver.Smtp.Delivery;
@@ -39,12 +41,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<OutboundQueue>();
         services.AddSingleton<DkimKeyStore>();
         services.AddSingleton<OutgoingMessagePreparer>();
+        services.AddSingleton<RuleStore>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AuthThrottle>();
         services.AddSingleton<CertificateProvider>();
         services.AddSingleton<ILookupClient>(_ => new LookupClient(new LookupClientOptions { UseCache = true, Timeout = TimeSpan.FromSeconds(10) }));
         services.AddSingleton<RemoteDeliveryClient>();
         services.AddSingleton<DeliveryService>();
+        services.AddAntiSpam();
 
         services.AddHostedService<SmtpHostedService>();
         services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());

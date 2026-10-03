@@ -4,6 +4,7 @@ using Mailserver.Core.Data;
 using Mailserver.Core.Dkim;
 using Mailserver.Core.Migration;
 using Mailserver.Core.Queue;
+using Mailserver.Core.Rules;
 using Mailserver.Core.Storage;
 using Mailserver.Migration;
 using Microsoft.Extensions.Configuration;
@@ -24,6 +25,7 @@ var accounts = new AccountStore(database);
 var mailboxes = new MailboxStore(database, paths);
 var dkim = new DkimKeyStore(paths);
 var queue = new OutboundQueue(database, paths);
+var rules = new RuleStore(database);
 
 try
 {
@@ -133,6 +135,47 @@ int Run(string[] a)
 
             return 0;
 
+        case ["rule", "add", var scope, .. var definition]:
+        {
+            var parsed = RuleParser.Parse(definition);
+            CheckScope(scope);
+            var rule = rules.Add(scope, parsed.Name, parsed.Conditions, parsed.Action, parsed.Argument, parsed.MatchAll, parsed.Stop, parsed.Priority);
+            return Ok($"Regel {rule.Id} angelegt: {rule.Name}");
+        }
+
+        case ["rule", "list", ..]:
+            foreach (var rule in rules.List(a.Length > 2 ? a[2] : null))
+            {
+                Console.WriteLine($"[{rule.Id}] {rule.Scope,-30} Prio {rule.Priority,-4} {(rule.Enabled ? "aktiv  " : "inaktiv")} {rule.Name}");
+                foreach (var condition in rule.Conditions)
+                {
+                    Console.WriteLine($"      {(rule.MatchAll ? "und" : "oder")} {condition}");
+                }
+
+                Console.WriteLine($"      dann {RuleActionText.Describe(rule.Action, rule.Argument)}{(rule.Stop ? "" : " (weiter prüfen)")}");
+            }
+
+            return 0;
+
+        case ["rule", "remove", var id]:
+            return rules.Remove(long.Parse(id)) ? Ok("Regel gelöscht.") : Fail("Regel nicht gefunden.");
+
+        case ["rule", "enable" or "disable", var id]:
+            return rules.SetEnabled(long.Parse(id), a[1] == "enable") ? Ok("Gespeichert.") : Fail("Regel nicht gefunden.");
+
+        case ["rule", "test", var address, var file, ..]:
+        {
+            var applicable = rules.GetRulesFor(EmailAddress.Parse(address));
+            var score = double.Parse(Option(a, "--score") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+            var message = MimeKit.MimeMessage.Load(file);
+            var decision = RuleEngine.Decide(applicable, new RuleSubject(message, score), score >= options.Spam.JunkThreshold);
+            Console.WriteLine($"Betreff:  {message.Subject}");
+            Console.WriteLine($"Treffer:  {(decision.MatchedRules.Count == 0 ? "keine Regel" : string.Join(", ", decision.MatchedRules))}");
+            Console.WriteLine(decision.Discard ? "Ergebnis: wird endgültig gelöscht" : $"Ergebnis: Ordner {decision.Folder}" +
+                (decision.Flags.Count > 0 ? $", Flags {string.Join(' ', decision.Flags)}" : ""));
+            return 0;
+        }
+
         case ["queue", "list"]:
             foreach (var entry in queue.List())
             {
@@ -166,6 +209,15 @@ int Run(string[] a)
                   alias remove <adresse> | alias list
 
                   queue list | queue retry
+
+                  rule add <bereich> --if <feld> <operator> <wert> ... --then <aktion>
+                      bereich: * (alle Postfächer), eine Domain oder eine Adresse. Beispiele:
+                      rule add * --if betreff enthält "Sie haben gewonnen" --then löschen
+                      rule add max@example.de --if von endet "@newsletter.example" --then verschieben "Newsletter"
+                      rule add example.de --if score über 12 --then löschen
+                      rule add max@example.de --if von endet "@kunde.de" --then kein-spam
+                  rule list [bereich] | rule remove <id> | rule enable|disable <id>
+                  rule test <adresse> <datei.eml> [--score <n>]   zeigt, was mit einer Nachricht passieren würde
 
                   import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
                       Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). <datei> enthält pro Zeile
@@ -250,6 +302,20 @@ void PrintDns(string name)
 
     Console.WriteLine($"  PTR (beim VPS-Anbieter): <IPv4>  ->  {host}");
     Console.WriteLine("  DMARC nach erfolgreichen Tests auf p=quarantine bzw. p=reject verschärfen.");
+}
+
+void CheckScope(string scope)
+{
+    if (scope == RuleStore.GlobalScope)
+    {
+        return;
+    }
+
+    var exists = scope.Contains('@') ? accounts.FindAccount(EmailAddress.Parse(scope)) is not null : accounts.IsLocalDomain(scope);
+    if (!exists)
+    {
+        throw new ArgumentException($"{scope} ist weder Postfach noch Domain dieses Servers.");
+    }
 }
 
 static string? Option(string[] a, string name)

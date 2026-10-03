@@ -84,7 +84,9 @@ public sealed class TestServer : IAsyncDisposable
     public string HostDirectory { get; }
     public IServiceProvider Services => _host.Services;
 
-    public static async Task<TestServer> StartAsync()
+    /// <param name="settings">Additional configuration, e.g. spam filter settings.</param>
+    /// <param name="services">Service overrides registered before the defaults (e.g. a fake DNS resolver).</param>
+    public static async Task<TestServer> StartAsync(IDictionary<string, string?>? settings = null, Action<IServiceCollection>? services = null)
     {
         var directory = Path.Combine(Path.GetTempPath(), "mailserver-tests", Guid.NewGuid().ToString("N"));
         System.IO.Directory.CreateDirectory(directory);
@@ -116,6 +118,12 @@ public sealed class TestServer : IAsyncDisposable
             ["Mailserver:Delivery:SmartHost:Port"] = remote.Port.ToString(),
             ["Mailserver:Delivery:SmartHost:Security"] = "None",
         });
+        if (settings is not null)
+        {
+            builder.Configuration.AddInMemoryCollection(settings);
+        }
+
+        services?.Invoke(builder.Services);
         builder.Services.AddMailserver(builder.Configuration);
         builder.Services.AddImapServer();
         var host = builder.Build();

@@ -10,6 +10,8 @@
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="MailKit" Version="4.18.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -24,6 +26,7 @@
     <ProjectReference Include="..\..\src\Mailserver.Smtp\Mailserver.Smtp.csproj" />
     <ProjectReference Include="..\..\src\Mailserver.Imap\Mailserver.Imap.csproj" />
     <ProjectReference Include="..\..\src\Mailserver.Migration\Mailserver.Migration.csproj" />
+    <ProjectReference Include="..\..\src\Mailserver.AntiSpam\Mailserver.AntiSpam.csproj" />
   </ItemGroup>
 
 </Project>

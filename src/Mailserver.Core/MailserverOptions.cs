@@ -24,6 +24,8 @@ public sealed class MailserverOptions
     public DeliveryOptions Delivery { get; set; } = new();
 
     public SecurityOptions Security { get; set; } = new();
+
+    public SpamOptions Spam { get; set; } = new();
 }
 
 public sealed class TlsOptions
@@ -45,8 +47,14 @@ public sealed class TlsOptions
 
 public sealed class SmtpOptions
 {
-    /// <summary>Addresses to bind to, e.g. "0.0.0.0" and "::".</summary>
-    public string[] ListenAddresses { get; set; } = ["0.0.0.0"];
+    /// <summary>Addresses to bind to, e.g. "0.0.0.0" and "::". Empty means "0.0.0.0".</summary>
+    /// <remarks>
+    /// List settings have no non-empty defaults on purpose: the configuration binder appends configured entries to a default
+    /// array instead of replacing it, which would bind "0.0.0.0" twice.
+    /// </remarks>
+    public string[] ListenAddresses { get; set; } = [];
+
+    public IReadOnlyList<string> EffectiveListenAddresses => ListenAddressDefaults.Resolve(ListenAddresses);
 
     /// <summary>MX port for mail from other servers. 0 disables it.</summary>
     public int InboundPort { get; set; } = 25;
@@ -65,8 +73,10 @@ public sealed class SmtpOptions
 
 public sealed class ImapOptions
 {
-    /// <summary>Addresses to bind to, e.g. "0.0.0.0" and "::".</summary>
-    public string[] ListenAddresses { get; set; } = ["0.0.0.0"];
+    /// <summary>Addresses to bind to, e.g. "0.0.0.0" and "::". Empty means "0.0.0.0".</summary>
+    public string[] ListenAddresses { get; set; } = [];
+
+    public IReadOnlyList<string> EffectiveListenAddresses => ListenAddressDefaults.Resolve(ListenAddresses);
 
     /// <summary>IMAP with STARTTLS. Logins are only accepted after STARTTLS. 0 disables it.</summary>
     public int Port { get; set; } = 143;
@@ -125,4 +135,74 @@ public sealed class SecurityOptions
 
     /// <summary>Messages with more Received headers than this are rejected (mail loop protection).</summary>
     public int MaxHopCount { get; set; } = 30;
+}
+
+public sealed class SpamOptions
+{
+    /// <summary>Master switch for SPF/DKIM/DMARC checks, blocklists, greylisting and scoring of mail received on port 25.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Senders in these networks (CIDR) skip all checks, e.g. a backup MX or a monitoring host.</summary>
+    public string[] TrustedNetworks { get; set; } = [];
+
+    /// <summary>Connections from this machine (127.0.0.0/8, ::1) skip all checks.</summary>
+    public bool TrustLoopback { get; set; } = true;
+
+    /// <summary>From this score on, a message is spam and goes to the recipient's Junk folder.</summary>
+    public double JunkThreshold { get; set; } = 5.0;
+
+    /// <summary>From this score on, a message is discarded without delivery. 0 disables discarding.</summary>
+    public double DeleteThreshold { get; set; } = 0;
+
+    /// <summary>Rejects messages whose sender domain publishes DMARC p=reject and that fail DMARC.</summary>
+    public bool EnforceDmarcReject { get; set; } = true;
+
+    /// <summary>Rejects at MAIL FROM when SPF says "fail" (-all). Off by default: DMARC and scoring handle it more gracefully.</summary>
+    public bool RejectSpfFail { get; set; }
+
+    /// <summary>Set to false to query no blocklists at all.</summary>
+    public bool DnsBlocklistsEnabled { get; set; } = true;
+
+    /// <summary>Blocklists to query. Empty means the defaults (Spamhaus ZEN: reject, SpamCop: +3).</summary>
+    public DnsBlocklistOptions[] DnsBlocklists { get; set; } = [];
+
+    public IReadOnlyList<DnsBlocklistOptions> EffectiveDnsBlocklists =>
+        !DnsBlocklistsEnabled ? [] :
+        DnsBlocklists.Length > 0 ? DnsBlocklists :
+        [
+            new() { Zone = "zen.spamhaus.org", Action = "Reject" },
+            new() { Zone = "bl.spamcop.net", Action = "Score", Score = 3 },
+        ];
+
+    public GreylistingOptions Greylisting { get; set; } = new();
+}
+
+public sealed class DnsBlocklistOptions
+{
+    public string Zone { get; set; } = "";
+
+    /// <summary>"Reject" refuses the connection's mail, "Score" adds <see cref="Score"/> to the spam score.</summary>
+    public string Action { get; set; } = "Score";
+
+    public double Score { get; set; } = 5;
+}
+
+public sealed class GreylistingOptions
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>How long an unknown sender must wait before a retry is accepted.</summary>
+    public TimeSpan Delay { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>How long a sender/recipient pair stays known after its last message.</summary>
+    public TimeSpan Expiry { get; set; } = TimeSpan.FromDays(36);
+
+    /// <summary>Senders whose SPF check passes are not greylisted (large providers retry slowly).</summary>
+    public bool SkipOnSpfPass { get; set; } = true;
+}
+
+internal static class ListenAddressDefaults
+{
+    public static IReadOnlyList<string> Resolve(string[] configured) =>
+        configured.Length == 0 ? ["0.0.0.0"] : configured.Select(a => a.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 }

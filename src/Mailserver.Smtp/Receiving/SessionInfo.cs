@@ -9,6 +9,19 @@ namespace Mailserver.Smtp.Receiving;
 internal static class SessionInfo
 {
     private const string HeloKey = "Mailserver:Helo";
+    private const string InboundKey = "Mailserver:Inbound";
+
+    /// <summary>Spam filter state for this session, created on first use.</summary>
+    public static Mailserver.AntiSpam.InboundSession GetInbound(ISessionContext context)
+    {
+        if (!context.Properties.TryGetValue(InboundKey, out var value) || value is not Mailserver.AntiSpam.InboundSession session)
+        {
+            session = new Mailserver.AntiSpam.InboundSession(GetRemoteAddress(context), GetHelo(context));
+            context.Properties[InboundKey] = session;
+        }
+
+        return session;
+    }
 
     public static IPAddress? GetRemoteAddress(ISessionContext context) =>
         context.Properties.TryGetValue(EndpointListener.RemoteEndPointKey, out var value) && value is IPEndPoint endpoint

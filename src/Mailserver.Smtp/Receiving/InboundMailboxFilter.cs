@@ -1,3 +1,4 @@
+using Mailserver.AntiSpam;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Storage;
@@ -12,17 +13,30 @@ namespace Mailserver.Smtp.Receiving;
 /// <summary>
 /// Port 25: accepts mail for local recipients only. Never relays.
 /// </summary>
-internal sealed class InboundMailboxFilter(AccountStore accounts, MailboxStore mailboxes, IOptions<MailserverOptions> options) : IMailboxFilter
+internal sealed class InboundMailboxFilter(AccountStore accounts, MailboxStore mailboxes, SpamFilter spamFilter, IOptions<MailserverOptions> options)
+    : IMailboxFilter
 {
-    public Task<bool> CanAcceptFromAsync(ISessionContext context, IMailbox from, int size, CancellationToken cancellationToken)
+    public async Task<bool> CanAcceptFromAsync(ISessionContext context, IMailbox from, int size, CancellationToken cancellationToken)
     {
+        var session = SessionInfo.GetInbound(context);
+        if (await spamFilter.CheckConnectionAsync(session, cancellationToken) is { } blocked)
+        {
+            throw Reject(SmtpReplyCode.TransactionFailed, blocked);
+        }
+
         if (options.Value.Security.RejectUnauthenticatedLocalSender &&
             !string.IsNullOrEmpty(from.Host) && accounts.IsLocalDomain(from.Host))
         {
             throw Reject(SmtpReplyCode.MailboxUnavailable, "5.7.1 Use the submission port with authentication to send as a local domain");
         }
 
-        return Task.FromResult(true);
+        var sender = string.IsNullOrEmpty(from.User) ? "" : from.AsAddress();
+        if (await spamFilter.CheckSenderAsync(session, sender, cancellationToken) is { } spfRejection)
+        {
+            throw Reject(SmtpReplyCode.MailboxUnavailable, spfRejection);
+        }
+
+        return true;
     }
 
     public Task<bool> CanDeliverToAsync(ISessionContext context, IMailbox to, IMailbox from, CancellationToken cancellationToken)
@@ -46,6 +60,12 @@ internal sealed class InboundMailboxFilter(AccountStore accounts, MailboxStore m
         if (resolution.ExternalAddresses.Count == 0 && resolution.LocalAccounts.All(a => mailboxes.IsOverQuota(a)))
         {
             throw Reject(SmtpReplyCode.InsufficientStorage, "4.2.2 Mailbox full");
+        }
+
+        if (!spamFilter.AcceptRecipient(SessionInfo.GetInbound(context), recipient.ToString()))
+        {
+            var delay = options.Value.Spam.Greylisting.Delay;
+            throw Reject(SmtpReplyCode.Aborted, $"4.7.1 Greylisted, please try again in {Math.Max(1, (int)Math.Ceiling(delay.TotalMinutes))} minutes");
         }
 
         return Task.FromResult(true);

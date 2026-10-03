@@ -36,7 +36,7 @@ public sealed class ImapServer(
         var hasCertificate = certificates.GetCertificate() is not null;
         var listeners = new List<Task>();
 
-        foreach (var address in settings.Imap.ListenAddresses.Select(IPAddress.Parse))
+        foreach (var address in settings.Imap.EffectiveListenAddresses.Select(IPAddress.Parse))
         {
             if (settings.Imap.Port > 0)
             {

@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using Mailserver.AntiSpam;
 using Mailserver.Core;
 using Mailserver.Core.Routing;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ namespace Mailserver.Smtp.Receiving;
 internal sealed class RoutingMessageStore(
     MessageRouter router,
     OutgoingMessagePreparer preparer,
+    SpamFilter spamFilter,
     IOptions<MailserverOptions> options,
     ILogger<RoutingMessageStore> logger,
     bool isSubmission) : IMessageStore
@@ -34,15 +36,25 @@ internal sealed class RoutingMessageStore(
             }
 
             var recipients = transaction.To.Select(m => EmailAddress.Parse(m.AsAddress())).ToList();
-            var message = Concat(BuildReceivedHeader(context, recipients), body);
-
+            var sender = string.IsNullOrEmpty(transaction.From?.User) ? "" : transaction.From.AsAddress();
             if (isSubmission)
             {
-                message = await preparer.PrepareAsync(message, cancellationToken);
+                var submitted = await preparer.PrepareAsync(Concat(BuildReceivedHeader(context, recipients), body), cancellationToken);
+                await router.RouteAsync(submitted, sender, recipients, allowRelay: true, cancellationToken);
+                return SmtpResponse.Ok;
             }
 
-            var sender = string.IsNullOrEmpty(transaction.From?.User) ? "" : transaction.From.AsAddress();
-            await router.RouteAsync(message, sender, recipients, allowRelay: isSubmission, cancellationToken);
+            // DKIM is verified on the message exactly as received, before headers are added or removed.
+            var session = SessionInfo.GetInbound(context);
+            var result = await spamFilter.CheckMessageAsync(session, body, cancellationToken);
+            if (result.Rejection is not null)
+            {
+                return new SmtpResponse(SmtpReplyCode.MailboxUnavailable, result.Rejection);
+            }
+
+            var cleaned = session.Trusted ? body : HeaderEditor.RemoveFields(body, spamFilter.IsSpoofableHeader);
+            var message = Concat(Concat(BuildReceivedHeader(context, recipients), Encoding.ASCII.GetBytes(result.Headers)), cleaned);
+            await router.RouteAsync(message, sender, recipients, allowRelay: false, cancellationToken, result.Verdict);
             return SmtpResponse.Ok;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

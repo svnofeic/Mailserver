@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Mailserver.Admin/Mailserver.Admin.csproj" />
+    <Project Path="src/Mailserver.AntiSpam/Mailserver.AntiSpam.csproj" />
     <Project Path="src/Mailserver.Core/Mailserver.Core.csproj" />
     <Project Path="src/Mailserver.Imap/Mailserver.Imap.csproj" />
     <Project Path="src/Mailserver.Migration/Mailserver.Migration.csproj" />

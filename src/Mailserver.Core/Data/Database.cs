@@ -85,6 +85,29 @@ public sealed class Database
             PRIMARY KEY (account_id, source_folder, uid_validity, uid)
         );
         """,
+        """
+        -- Filter rules. scope: '*' (all mailboxes), a domain, or a mailbox address.
+        CREATE TABLE rules (
+            id          INTEGER PRIMARY KEY,
+            scope       TEXT NOT NULL COLLATE NOCASE,
+            name        TEXT NOT NULL,
+            priority    INTEGER NOT NULL DEFAULT 100,
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            match_all   INTEGER NOT NULL DEFAULT 1,
+            conditions  TEXT NOT NULL,
+            action      TEXT NOT NULL,
+            argument    TEXT,
+            stop        INTEGER NOT NULL DEFAULT 1,
+            created_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE greylist (
+            triplet        TEXT PRIMARY KEY,
+            first_seen_utc TEXT NOT NULL,
+            last_seen_utc  TEXT NOT NULL,
+            passed         INTEGER NOT NULL DEFAULT 0
+        );
+        """,
     ];
 
     private readonly string _connectionString;
