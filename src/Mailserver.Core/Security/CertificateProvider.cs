@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace Mailserver.Core.Security;
 
 /// <summary>
-/// Supplies the TLS server certificate from a PFX file or the Windows certificate store and reloads it periodically,
+/// Supplies the TLS server certificate from a PFX file or the Windows certificate stores (My, Plesk's WebHosting) and reloads it periodically,
 /// so renewed Let's Encrypt certificates (win-acme) are used without a restart.
 /// </summary>
 public sealed class CertificateProvider(IOptions<MailserverOptions> options, TimeProvider timeProvider, ILogger<CertificateProvider> logger)
@@ -68,14 +68,34 @@ public sealed class CertificateProvider(IOptions<MailserverOptions> options, Tim
             return null;
         }
 
-        var subject = tls.StoreSubject ?? options.Value.Hostname;
-        using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
-        store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
+        // Plesk keeps its Let's Encrypt certificates in "WebHosting"; win-acme and manual imports use "My".
+        // Matching uses the subject alternative names (incl. wildcards), because Plesk certificates usually carry
+        // the domain as subject and mail.<domain> only as an additional name.
+        var hostname = tls.StoreSubject ?? options.Value.Hostname;
         var now = DateTime.Now;
-        return store.Certificates
-            .Find(X509FindType.FindBySubjectName, subject, validOnly: false)
-            .Where(c => c.HasPrivateKey && c.NotBefore <= now && c.NotAfter > now)
-            .OrderByDescending(c => c.NotAfter)
-            .FirstOrDefault();
+        X509Certificate2? best = null;
+        foreach (var storeName in new[] { "My", "WebHosting" })
+        {
+            using var store = new X509Store(storeName, StoreLocation.LocalMachine);
+            try
+            {
+                store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
+            }
+            catch (System.Security.Cryptography.CryptographicException)
+            {
+                continue; // store does not exist on this machine
+            }
+
+            foreach (var candidate in store.Certificates)
+            {
+                if (candidate.HasPrivateKey && candidate.NotBefore <= now && candidate.NotAfter > now &&
+                    candidate.MatchesHostname(hostname) && (best is null || candidate.NotAfter > best.NotAfter))
+                {
+                    best = candidate;
+                }
+            }
+        }
+
+        return best;
     }
 }

@@ -38,11 +38,13 @@ internal sealed class RoutingMessageStore(
 
             var recipients = transaction.To.Select(m => EmailAddress.Parse(m.AsAddress())).ToList();
             var sender = string.IsNullOrEmpty(transaction.From?.User) ? "" : transaction.From.AsAddress();
-            if (isSubmission)
+            var relay = !isSubmission && options.Value.Smtp.IsRelayClient(SessionInfo.GetRemoteAddress(context));
+            if (isSubmission || relay)
             {
                 var submitted = await preparer.PrepareAsync(Concat(BuildReceivedHeader(context, recipients), body), cancellationToken);
                 await router.RouteAsync(submitted, sender, recipients, allowRelay: true, cancellationToken);
-                LogSubmission(context, sender, recipients, submitted);
+                LogSubmission(context, sender, recipients, submitted,
+                    relay ? "Relay ohne Anmeldung (Smtp:RelayNetworks)" : $"angemeldet als {context.Authentication.User}");
                 return SmtpResponse.Ok;
             }
 
@@ -66,7 +68,7 @@ internal sealed class RoutingMessageStore(
         }
     }
 
-    private void LogSubmission(ISessionContext context, string sender, IReadOnlyList<EmailAddress> recipients, byte[] message)
+    private void LogSubmission(ISessionContext context, string sender, IReadOnlyList<EmailAddress> recipients, byte[] message, string detail)
     {
         MimeKit.HeaderList headers;
         using (var stream = new MemoryStream(message, writable: false))
@@ -85,7 +87,7 @@ internal sealed class RoutingMessageStore(
             HeaderFrom = headers[MimeKit.HeaderId.From],
             Subject = headers[MimeKit.HeaderId.Subject],
             MessageId = MimeKit.Utils.MimeUtils.EnumerateReferences(headers[MimeKit.HeaderId.MessageId] ?? "").FirstOrDefault(),
-            Detail = $"angemeldet als {context.Authentication.User}",
+            Detail = detail,
         });
     }
 

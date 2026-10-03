@@ -3,8 +3,8 @@
 Der Mailserver bringt eine Weboberfläche mit – für **Benutzer** (eigenes Postfach) und für **Administratoren** (der ganze
 Server). Sie läuft im selben Windows-Dienst, braucht keine weitere Software und verwendet dasselbe TLS-Zertifikat wie SMTP/IMAP.
 
-**Adresse:** `https://<hostname>:8443` (z. B. `https://mail.feicht.me:8443`). Port 443 ist auf Windows-Servern meist durch IIS
-belegt; der Port lässt sich unter `Mailserver:Web:HttpsPort` ändern. Anmelden mit E-Mail-Adresse und Postfach-Passwort.
+**Adresse:** `https://<hostname>:9443` (z. B. `https://mail.feicht.me:9443`). Port 443 ist auf Windows-Servern meist durch IIS
+belegt, 8443 und 8880 durch Plesk; der Port lässt sich unter `Mailserver:Web:HttpsPort` ändern. Anmelden mit E-Mail-Adresse und Postfach-Passwort.
 
 ## Für Benutzer
 
@@ -52,7 +52,7 @@ entziehen; die Domain des eigenen Postfachs kann nicht gelöscht werden.
   Clickjacking-Schutz, HSTS.
 - Die Schlüssel für Sitzungs-Cookies liegen in `data\keys` (unter Windows zusätzlich mit DPAPI geschützt).
 
-Wer die Weboberfläche nicht aus dem Internet erreichbar machen will: Firewall-Regel „Mailserver Web 8443“ auf bestimmte IPs
+Wer die Weboberfläche nicht aus dem Internet erreichbar machen will: Firewall-Regel „Mailserver Web 9443“ auf bestimmte IPs
 beschränken, `Mailserver:Web:ListenAddresses` auf `127.0.0.1` setzen (dann nur per RDP auf dem Server) oder
 `Mailserver:Web:Enabled` auf `false`.
 

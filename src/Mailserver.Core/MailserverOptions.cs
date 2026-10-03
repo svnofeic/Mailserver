@@ -38,8 +38,8 @@ public sealed class TlsOptions
     public string? PfxPassword { get; set; }
 
     /// <summary>
-    /// Subject name to look up in LocalMachine\My (Windows). The newest valid certificate wins,
-    /// so renewals by win-acme are picked up automatically. Defaults to <see cref="MailserverOptions.Hostname"/>.
+    /// Host name to look up in LocalMachine\My and LocalMachine\WebHosting (Windows, matched against subject and
+    /// alternative names). The newest valid certificate wins, so renewals by win-acme or Plesk are picked up automatically. Defaults to <see cref="MailserverOptions.Hostname"/>.
     /// </summary>
     public string? StoreSubject { get; set; }
 
@@ -72,6 +72,16 @@ public sealed class SmtpOptions
     public bool AllowInsecureAuthentication { get; set; }
 
     public TimeSpan SessionTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Address ranges (CIDR) that may send through port 25 without authentication, to any recipient and as any sender,
+    /// e.g. "127.0.0.1/32" for websites on this server that use PHP mail() via localhost. Empty by default.
+    /// Only list addresses you fully control: every host in these ranges is an open relay.
+    /// </summary>
+    public string[] RelayNetworks { get; set; } = [];
+
+    public bool IsRelayClient(System.Net.IPAddress? address) =>
+        address is not null && RelayNetworks.Select(Security.NetworkRange.Parse).Any(range => range.Contains(address));
 }
 
 public sealed class WebOptions
@@ -85,7 +95,7 @@ public sealed class WebOptions
     public IReadOnlyList<string> EffectiveListenAddresses => ListenAddressDefaults.Resolve(ListenAddresses);
 
     /// <summary>HTTPS port of the web interface. 443 is usually taken by IIS on Windows servers.</summary>
-    public int HttpsPort { get; set; } = 8443;
+    public int HttpsPort { get; set; } = 9443;
 
     /// <summary>Plain HTTP without TLS. Only for local testing — never enable this in production. 0 disables it.</summary>
     public int InsecureHttpPort { get; set; }

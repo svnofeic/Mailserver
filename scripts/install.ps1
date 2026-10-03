@@ -4,7 +4,7 @@
 .DESCRIPTION
     - copies the package to the install directory (an existing appsettings.json and the data folder are kept)
     - registers the "Mailserver" service with automatic start and restart on failure
-    - opens the firewall for SMTP (25), submission (587), SMTPS (465), IMAP (143), IMAPS (993) and the web interface (8443)
+    - opens the firewall for SMTP (25), submission (587), SMTPS (465), IMAP (143), IMAPS (993) and the web interface (9443)
     - restricts the data folder to SYSTEM and Administrators
 .EXAMPLE
     .\install.ps1 -Package C:\Temp\publish
@@ -49,7 +49,7 @@ foreach ($rule in @(
         @{ Name = 'Mailserver SMTPS 465'; Port = 465 },
         @{ Name = 'Mailserver IMAP 143'; Port = 143 },
         @{ Name = 'Mailserver IMAPS 993'; Port = 993 },
-        @{ Name = 'Mailserver Web 8443'; Port = 8443 })) {
+        @{ Name = 'Mailserver Web 9443'; Port = 9443 })) {
     if (-not (Get-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -DisplayName $rule.Name -Direction Inbound -Protocol TCP -LocalPort $rule.Port -Action Allow | Out-Null
     }
@@ -57,4 +57,4 @@ foreach ($rule in @(
 
 Write-Host "Installed to $InstallDir."
 Write-Host "Next: edit $InstallDir\appsettings.json (Hostname, Tls), then: Start-Service $ServiceName"
-Write-Host "Web interface: https://<hostname>:8443  (grant admin rights first: mailadmin user admin <address> on)"
+Write-Host "Web interface: https://<hostname>:9443  (grant admin rights first: mailadmin user admin <address> on)"

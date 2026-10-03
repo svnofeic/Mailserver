@@ -204,3 +204,50 @@ public sealed class SmtpIntegrationTests : IAsyncLifetime
             CancellationToken cancellationToken = default) => Task.FromResult(GetPublicKey(record));
     }
 }
+
+/// <summary>Local applications (websites using PHP mail() via localhost) listed in Smtp:RelayNetworks.</summary>
+public sealed class RelayNetworkTests : IAsyncLifetime
+{
+    private TestServer _server = null!;
+
+    public async Task InitializeAsync() =>
+        _server = await TestServer.StartAsync(new Dictionary<string, string?> { ["Mailserver:Smtp:RelayNetworks:0"] = "127.0.0.0/8" });
+
+    public async Task DisposeAsync() => await _server.DisposeAsync();
+
+    [Fact]
+    public async Task Relay_client_may_send_as_local_domain_to_remote_and_local_recipients()
+    {
+        using (var client = new SmtpClient { ServerCertificateValidationCallback = (_, _, _, _) => true })
+        {
+            await client.ConnectAsync("127.0.0.1", _server.InboundPort, SecureSocketOptions.None);
+            var message = new MimeMessage { Subject = "Kontaktformular", Body = new TextPart("plain") { Text = "Hallo" } };
+            message.From.Add(MailboxAddress.Parse("alice@example.test"));
+            message.To.Add(MailboxAddress.Parse("someone@remote.test"));
+            message.To.Add(MailboxAddress.Parse("bob@example.test"));
+            await client.SendAsync(message);
+            await client.DisconnectAsync(true);
+        }
+
+        await TestServer.WaitUntilAsync(() => !_server.Remote.Messages.IsEmpty, "remote delivery");
+        var delivered = Assert.Single(_server.Remote.Messages);
+        Assert.Equal(["someone@remote.test"], delivered.To);
+        Assert.Contains("DKIM-Signature: ", delivered.Content);
+        Assert.Single(_server.Inbox("bob"));
+
+        var log = _server.Services.GetService(typeof(Mailserver.Core.SpamLogging.SpamLog)) as Mailserver.Core.SpamLogging.SpamLog;
+        var entry = Assert.Single(log!.Query(new Mailserver.Core.SpamLogging.SpamLogQuery(Stage: Mailserver.Core.SpamLogging.SpamLogStage.Submission)));
+        Assert.Contains("RelayNetworks", entry.Detail);
+    }
+
+    [Fact]
+    public void Relay_networks_match_only_listed_ranges()
+    {
+        var options = new Mailserver.Core.SmtpOptions { RelayNetworks = ["127.0.0.1/32", "10.0.0.0/8"] };
+        Assert.True(options.IsRelayClient(System.Net.IPAddress.Loopback));
+        Assert.True(options.IsRelayClient(System.Net.IPAddress.Parse("10.1.2.3")));
+        Assert.False(options.IsRelayClient(System.Net.IPAddress.Parse("192.0.2.1")));
+        Assert.False(options.IsRelayClient(null));
+        Assert.False(new Mailserver.Core.SmtpOptions().IsRelayClient(System.Net.IPAddress.Loopback));
+    }
+}

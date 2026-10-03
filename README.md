@@ -15,6 +15,9 @@ Ein eigener Mailserver in C#/.NET 10 für Windows Server. Er ersetzt SmarterMail
 
 > **Umzug von SmarterMail:** siehe [docs/umzug-smartermail.md](docs/umzug-smartermail.md). Beide Server können nicht
 > gleichzeitig dieselben Ports (25, 587, 465, 143, 993) belegen; der Import läuft deshalb, bevor der neue Dienst startet.
+>
+> **Server mit Plesk:** Was in Plesk umgestellt werden muss (Mail-Dienst, Webmail, DNS, Zertifikate, Mails von Websites),
+> steht in [docs/plesk.md](docs/plesk.md).
 
 ## Aufbau
 
@@ -27,7 +30,7 @@ src/
   Mailserver.Imap      IMAP-Server (Port 993 und 143): Protokoll, MIME-Struktur, Sitzungen, IDLE
   Mailserver.Service   Windows-Dienst (Mailserver.exe)
   Mailserver.Migration Import von anderen IMAP-Servern (SmarterMail)
-  Mailserver.Web       Weboberfläche mit Webmail für Benutzer und Verwaltung für Admins (HTTPS, Port 8443)
+  Mailserver.Web       Weboberfläche mit Webmail für Benutzer und Verwaltung für Admins (HTTPS, Port 9443)
   Mailserver.Admin     Kommandozeilen-Verwaltung (mailadmin.exe)
 tests/
   Mailserver.Tests     Unit- und Integrationstests mit echten SMTP-Sitzungen
@@ -115,14 +118,15 @@ Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer 
 | Schlüssel | Bedeutung |
 |---|---|
 | `Mailserver:Hostname` | Öffentlicher Name; muss zum PTR-Eintrag und zum Zertifikat passen |
-| `Mailserver:Tls:PfxPath` / `PfxPassword` | PFX-Datei; ist sie leer, wird der Windows-Zertifikatsspeicher nach `Hostname` durchsucht |
+| `Mailserver:Tls:PfxPath` / `PfxPassword` | PFX-Datei; ist sie leer, werden die Windows-Zertifikatsspeicher „My“ und „WebHosting“ (Plesk) nach einem Zertifikat für `Hostname` durchsucht (auch alternative Namen und Wildcards) |
 | `Mailserver:Smtp:ListenAddresses`, `Mailserver:Imap:ListenAddresses` | z. B. `["0.0.0.0", "::"]` für IPv4 und IPv6 |
+| `Mailserver:Smtp:RelayNetworks` | Netze, die über Port 25 ohne Anmeldung versenden dürfen, z. B. `["127.0.0.1/32"]` für Websites auf demselben Server (Standard: leer) |
 | `Mailserver:Imap:Port` / `TlsPort` | 143 (STARTTLS) und 993 (TLS); `0` schaltet einen Port ab |
 | `Mailserver:Imap:MaxConnectionsPerIp` | Gleichzeitige IMAP-Verbindungen pro IP (Standard 30) |
 | `Mailserver:Delivery:SmartHost` | Optionaler Relay-Server (`Host`, `Port`, `Username`, `Password`, `Security`) |
 | `Mailserver:Delivery:MaxQueueLifetime` | Wie lange eine Mail zugestellt werden soll, bevor sie zurückgeht (Standard 5 Tage) |
 | `Mailserver:Security:*` | Login-Sperren, Spoofing-Schutz, Hop-Limit |
-| `Mailserver:Web:*` | Weboberfläche: `HttpsPort` (8443), `ListenAddresses`, `Enabled`, `SessionTimeout` |
+| `Mailserver:Web:*` | Weboberfläche: `HttpsPort` (9443), `ListenAddresses`, `Enabled`, `SessionTimeout` |
 | `Mailserver:Spam:*` | Spamfilter: Schwellen für Junk/Löschen, Blacklists, Greylisting, vertrauenswürdige Netze |
 
 ### Verwaltung
