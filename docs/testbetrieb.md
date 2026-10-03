@@ -86,11 +86,25 @@ cd C:\Mailserver
 Die Meldungen erscheinen direkt im Fenster. Wichtig:
 
 * `Using TLS certificate CN=… valid until …` – Zertifikat gefunden.
-* `No TLS certificate available` – kein passendes Zertifikat: Hostname prüfen oder `Tls:PfxPath` setzen.
+* `No TLS certificate available for …` – kein passendes Zertifikat. `.\mailadmin.exe tls` listet alle Zertifikate und
+  den Grund, warum keines passt (siehe unten „Zertifikat besorgen“).
 * Fehler wie „Only one usage of each socket address“ bzw. „address already in use“ – ein Port ist belegt (meist noch ein Standardport in der appsettings.json).
 
 Läuft alles, mit `Strg+C` beenden und als Dienst starten: `Start-Service Mailserver`. Spätere Meldungen stehen in der
 Ereignisanzeige unter *Windows-Protokolle → Anwendung*, Quelle „Mailserver“.
+
+### Zertifikat besorgen
+
+Zeigt `mailadmin tls` kein Zertifikat für `mail.feicht.me`, ist das von SmarterMail genutzte Zertifikat nicht im
+Windows-Speicher (SmarterMail verwaltet seine Let's-Encrypt-Zertifikate selbst). Zwei Wege:
+
+* **Plesk:** *Websites & Domains → feicht.me → SSL/TLS-Zertifikate → Let's Encrypt* und dabei den Namen
+  `mail.feicht.me` mit einschließen (je nach Plesk-Version „Mail“ / „Webmail“ absichern oder als zusätzlichen Namen).
+  Das Zertifikat landet im Speicher „WebHosting“ und wird automatisch gefunden.
+* **win-acme** (`wacs.exe`): Zertifikat für `mail.feicht.me` erstellen, Speicherort „Windows Certificate Store“.
+  Die Prüfung läuft über Port 80; IIS beantwortet sie, wenn `mail.feicht.me` auf den Server zeigt.
+
+Danach `.\mailadmin.exe tls` erneut ausführen – erscheint „Verwendet wird …“, den Mailserver neu starten.
 
 ## 5. Testliste
 

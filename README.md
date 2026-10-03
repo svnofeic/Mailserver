@@ -139,6 +139,7 @@ mailadmin domain add|list|remove        mailadmin user add|passwd|quota|enable|d
 mailadmin dns <domain>                  mailadmin alias add|remove|list
 mailadmin dkim rotate|activate          mailadmin queue list|retry
 mailadmin user admin <adresse> on|off   Zugang zum Admin-Bereich der Weboberfläche
+mailadmin tls                           zeigt das verwendete TLS-Zertifikat bzw. warum keines passt
 mailadmin import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
 mailadmin export <host> <datei> <zielordner> [--insecure-cert] [--dav <url>]   Sicherung (siehe docs/sicherung-export.md)
 mailadmin import export <exportordner> [<datei>] [--dry-run]                  Sicherung einspielen

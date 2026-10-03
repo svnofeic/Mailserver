@@ -43,7 +43,8 @@ public sealed class CertificateProvider(IOptions<MailserverOptions> options, Tim
 
             if (_current is null)
             {
-                logger.LogWarning("No TLS certificate available");
+                logger.LogWarning("No TLS certificate available for {Hostname}. Run \"mailadmin tls\" to see why.",
+                    options.Value.Tls.StoreSubject ?? options.Value.Hostname);
             }
             else if (_current.NotAfter.ToUniversalTime() < now.UtcDateTime.AddDays(14))
             {
@@ -68,34 +69,99 @@ public sealed class CertificateProvider(IOptions<MailserverOptions> options, Tim
             return null;
         }
 
-        // Plesk keeps its Let's Encrypt certificates in "WebHosting"; win-acme and manual imports use "My".
-        // Matching uses the subject alternative names (incl. wildcards), because Plesk certificates usually carry
-        // the domain as subject and mail.<domain> only as an additional name.
         var hostname = tls.StoreSubject ?? options.Value.Hostname;
+        return Inspect(hostname)
+            .Where(c => c.Problem is null)
+            .OrderByDescending(c => c.Certificate.NotAfter)
+            .Select(c => c.Certificate)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// All certificates in LocalMachine\My and LocalMachine\WebHosting (Windows) with the reason why each one can or cannot
+    /// be used for <paramref name="hostname"/>. Plesk keeps its Let's Encrypt certificates in "WebHosting"; win-acme and
+    /// manual imports use "My". Names are matched against the subject alternative names (incl. wildcards), because
+    /// Plesk certificates usually carry the domain as subject and mail.&lt;domain&gt; only as an additional name.
+    /// </summary>
+    public static IReadOnlyList<CertificateCandidate> Inspect(string hostname)
+    {
+        var result = new List<CertificateCandidate>();
+        if (!OperatingSystem.IsWindows())
+        {
+            return result;
+        }
+
         var now = DateTime.Now;
-        X509Certificate2? best = null;
         foreach (var storeName in new[] { "My", "WebHosting" })
         {
-            using var store = new X509Store(storeName, StoreLocation.LocalMachine);
+            var store = new X509Store(storeName, StoreLocation.LocalMachine);
             try
             {
                 store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
             }
             catch (System.Security.Cryptography.CryptographicException)
             {
+                store.Dispose();
                 continue; // store does not exist on this machine
             }
 
-            foreach (var candidate in store.Certificates)
+            using (store)
             {
-                if (candidate.HasPrivateKey && candidate.NotBefore <= now && candidate.NotAfter > now &&
-                    candidate.MatchesHostname(hostname) && (best is null || candidate.NotAfter > best.NotAfter))
+                foreach (var certificate in store.Certificates)
                 {
-                    best = candidate;
+                    result.Add(new CertificateCandidate(storeName, certificate, Names(certificate), Check(certificate, hostname, now)));
                 }
             }
         }
 
-        return best;
+        return result;
+    }
+
+    private static string? Check(X509Certificate2 certificate, string hostname, DateTime now)
+    {
+        if (!certificate.MatchesHostname(hostname))
+        {
+            return $"gilt nicht für {hostname}";
+        }
+
+        if (certificate.NotAfter <= now)
+        {
+            return $"abgelaufen am {certificate.NotAfter:dd.MM.yyyy}";
+        }
+
+        if (certificate.NotBefore > now)
+        {
+            return $"erst gültig ab {certificate.NotBefore:dd.MM.yyyy}";
+        }
+
+        if (!certificate.HasPrivateKey)
+        {
+            return "kein privater Schlüssel vorhanden";
+        }
+
+        try
+        {
+            using var key = (System.Security.Cryptography.AsymmetricAlgorithm?)certificate.GetRSAPrivateKey() ?? certificate.GetECDsaPrivateKey();
+            return key is null ? "Schlüsseltyp wird nicht unterstützt" : null;
+        }
+        catch (System.Security.Cryptography.CryptographicException ex)
+        {
+            return $"privater Schlüssel nicht lesbar ({ex.Message.Trim()})";
+        }
+    }
+
+    private static IReadOnlyList<string> Names(X509Certificate2 certificate)
+    {
+        var names = certificate.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(e => e.EnumerateDnsNames()).ToList();
+        var commonName = certificate.GetNameInfo(X509NameType.DnsName, forIssuer: false);
+        if (!string.IsNullOrEmpty(commonName) && !names.Contains(commonName, StringComparer.OrdinalIgnoreCase))
+        {
+            names.Insert(0, commonName);
+        }
+
+        return names;
     }
 }
+
+/// <param name="Problem">Why the certificate cannot be used, or null if it can.</param>
+public sealed record CertificateCandidate(string Store, X509Certificate2 Certificate, IReadOnlyList<string> Names, string? Problem);

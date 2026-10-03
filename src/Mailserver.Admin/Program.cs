@@ -108,6 +108,9 @@ int Run(string[] a)
             PrintDns(name);
             return 0;
 
+        case ["tls"]:
+            return CheckTls();
+
         case ["user", "add", var address, ..]:
         {
             var account = accounts.AddAccount(EmailAddress.Parse(address), Option(a, "--password") ?? ReadNewPassword(),
@@ -318,6 +321,8 @@ int Run(string[] a)
                       Spielt eine mit "export" erstellte Sicherung in diesen Server ein. Fehlende Postfächer werden mit dem
                       Passwort aus <datei> ("adresse;passwort") angelegt oder es wird abgefragt.
 
+                  tls                                   zeigt, welches TLS-Zertifikat verwendet wird bzw. warum keines passt
+
                   import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
                       Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). <datei> enthält pro Zeile
                       "adresse;passwort" (ohne Passwort wird es abgefragt). Fehlende Domains und Postfächer werden
@@ -431,6 +436,60 @@ async Task<int> ImportExportAsync(string[] a)
 
     Console.WriteLine(errors == 0 ? "Fertig." : $"Fertig, {errors} Postfach/Postfächer mit Fehlern – Ausgabe oben prüfen.");
     return errors == 0 ? 0 : 1;
+}
+
+int CheckTls()
+{
+    var hostname = options.Tls.StoreSubject ?? options.Hostname;
+    Console.WriteLine($"Gesucht: Zertifikat für {hostname} (Mailserver:Hostname bzw. Tls:StoreSubject)");
+    if (hostname.EndsWith(".example.com", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine("  Hinweis: Hostname ist noch der Platzhalter aus appsettings.json.");
+    }
+
+    if (!string.IsNullOrEmpty(options.Tls.PfxPath))
+    {
+        var path = Path.IsPathRooted(options.Tls.PfxPath) ? options.Tls.PfxPath : Path.Combine(AppContext.BaseDirectory, options.Tls.PfxPath);
+        Console.WriteLine($"PFX-Datei: {path}");
+        try
+        {
+            using var pfx = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12FromFile(path, options.Tls.PfxPassword);
+            Console.WriteLine($"  {pfx.Subject}, gültig bis {pfx.NotAfter:dd.MM.yyyy}, " +
+                              $"{(pfx.MatchesHostname(hostname) ? "passt" : $"gilt NICHT für {hostname}")}");
+            return pfx.MatchesHostname(hostname) ? 0 : 1;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        {
+            return Fail($"  PFX-Datei lässt sich nicht laden: {ex.Message}");
+        }
+    }
+
+    if (!OperatingSystem.IsWindows())
+    {
+        return Fail("Der Zertifikatsspeicher wird nur unter Windows durchsucht; sonst Tls:PfxPath setzen.");
+    }
+
+    var candidates = Mailserver.Core.Security.CertificateProvider.Inspect(hostname);
+    foreach (var c in candidates.OrderBy(c => c.Problem is null ? 0 : 1).ThenBy(c => c.Store))
+    {
+        Console.WriteLine();
+        Console.WriteLine($"  [{c.Store}] {string.Join(", ", c.Names.DefaultIfEmpty(c.Certificate.Subject))}");
+        Console.WriteLine($"      gültig bis {c.Certificate.NotAfter:dd.MM.yyyy}, Aussteller {c.Certificate.GetNameInfo(System.Security.Cryptography.X509Certificates.X509NameType.SimpleName, true)}, {c.Certificate.Thumbprint}");
+        Console.WriteLine($"      {(c.Problem is null ? "-> verwendbar" : $"nicht verwendbar: {c.Problem}")}");
+    }
+
+    var usable = candidates.Where(c => c.Problem is null).OrderByDescending(c => c.Certificate.NotAfter).FirstOrDefault();
+    Console.WriteLine();
+    if (usable is not null)
+    {
+        Console.WriteLine($"Verwendet wird: [{usable.Store}] {usable.Certificate.Thumbprint}, gültig bis {usable.Certificate.NotAfter:dd.MM.yyyy}");
+        return 0;
+    }
+
+    Console.WriteLine($"Kein verwendbares Zertifikat für {hostname} ({candidates.Count} Zertifikate in My und WebHosting geprüft).");
+    Console.WriteLine("Möglichkeiten: in Plesk ein Let's-Encrypt-Zertifikat ausstellen, das " + hostname + " enthält; mit win-acme ein");
+    Console.WriteLine("Zertifikat erzeugen; oder eine vorhandene PFX-Datei unter Mailserver:Tls:PfxPath/PfxPassword eintragen.");
+    return 1;
 }
 
 void PrintDns(string name)
