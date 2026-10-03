@@ -111,7 +111,8 @@ public sealed class ImapImportTests : IAsyncLifetime
         var result = await _importer.ImportAsync(_sourceAddress, Alice, TestServer.Password, dryRun: true);
 
         Assert.Null(result.Error);
-        Assert.Contains(result.Folders, f => f.SourceFolder == "Sent Items" && f.TargetFolder == "Sent" && f.Total == 1);
+        // The source here is this server, which merges "Sent Items" into Sent at login; SmarterMail would report "Sent Items".
+        Assert.Contains(result.Folders, f => f.TargetFolder == "Sent" && f.Total == 1);
         Assert.Null(_target.Accounts.FindAccount(Alice));
     }
 

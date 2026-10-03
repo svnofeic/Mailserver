@@ -36,6 +36,9 @@ public sealed partial class ImapConnection(Stream stream) : IAsyncDisposable
 
     public bool HasBufferedInput => _start < _end;
 
+    /// <summary>Protocol trace (Imap:Trace), or null.</summary>
+    public ImapSessionTrace? Trace { get; set; }
+
     /// <summary>Reads one command including its literals. Returns null when the client closed the connection.</summary>
     public async Task<ImapCommand?> ReadCommandAsync(CancellationToken cancellationToken)
     {
@@ -77,6 +80,7 @@ public sealed partial class ImapConnection(Stream stream) : IAsyncDisposable
                 await WriteAsync("+ Ready for literal data\r\n", cancellationToken);
             }
 
+            Trace?.ClientLiteral(size);
             literals.Enqueue(await ReadExactAsync((int)size, cancellationToken));
             total += (int)size;
         }
@@ -107,7 +111,9 @@ public sealed partial class ImapConnection(Stream stream) : IAsyncDisposable
                     bytes = bytes[..^1];
                 }
 
-                return Encoding.UTF8.GetString(bytes);
+                var text = Encoding.UTF8.GetString(bytes);
+                Trace?.Client(text);
+                return text;
             }
 
             line.Write(span);
@@ -121,12 +127,15 @@ public sealed partial class ImapConnection(Stream stream) : IAsyncDisposable
 
     public async Task WriteAsync(string text, CancellationToken cancellationToken)
     {
-        await Stream.WriteAsync(Encoding.UTF8.GetBytes(text), cancellationToken);
+        var bytes = Encoding.UTF8.GetBytes(text);
+        Trace?.Server(bytes);
+        await Stream.WriteAsync(bytes, cancellationToken);
         await Stream.FlushAsync(cancellationToken);
     }
 
     public async Task WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
     {
+        Trace?.Server(data.Span);
         await Stream.WriteAsync(data, cancellationToken);
         await Stream.FlushAsync(cancellationToken);
     }

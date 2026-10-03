@@ -9,6 +9,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddImapServer(this IServiceCollection services)
     {
         services.AddSingleton<FolderWatcher>();
+        services.AddSingleton<Protocol.ImapTrace>();
         services.AddHostedService<ImapServer>();
         return services;
     }

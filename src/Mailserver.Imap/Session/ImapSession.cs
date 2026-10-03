@@ -311,7 +311,13 @@ public sealed partial class ImapSession(
 
         throttle.RecordSuccess(remoteAddress);
         _account = account;
+        connection.Trace?.Note($"angemeldet als {account.Address}");
         mailboxes.EnsureDefaultFolders(account.Id);
+        foreach (var (alias, target, moved) in mailboxes.MergeAliasFolders(account.Id))
+        {
+            logger.LogInformation("Merged folder {Alias} of {Account} into {Target} ({Moved} messages)", alias, account.Address, target, moved);
+            connection.Trace?.Note($"Ordner \"{alias}\" mit {moved} Nachricht(en) in \"{target}\" zusammengeführt");
+        }
         connection.MaxLiteralSize = options.MaxMessageSizeBytes;
         logger.LogInformation("IMAP login {User} from {Ip}", account.Address, remoteAddress);
         await Respond(command, null, $"OK [CAPABILITY {Capabilities}] Logged in", cancellationToken);

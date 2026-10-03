@@ -72,15 +72,43 @@ public sealed class ImapProtocolTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Existing_folder_with_an_alias_name_is_used_as_is()
+    public async Task Existing_spam_folder_is_merged_into_junk()
     {
         var alice = _server.User("alice").Id;
-        _server.HostMailboxes.CreateFolder(alice, "Spam");
+        var spam = _server.HostMailboxes.CreateFolder(alice, "Spam")!;
+        await _server.HostMailboxes.AppendAsync(spam, Encoding.ASCII.GetBytes("Subject: x\r\n\r\nx\r\n"));
         await using var imap = await RawImap.LoginAsync(_server.ImapsPort);
 
-        Assert.Contains(await imap.CommandAsync("a1 LIST \"\" \"*\""), l => l.EndsWith("\"Spam\""));
-        Assert.Contains(await imap.CommandAsync("a2 SELECT Spam"), l => l == "* 0 EXISTS");
-        Assert.Single(await imap.CommandAsync("a3 LIST \"\" Spam"), l => l.Contains("\"Spam\""));
+        Assert.Null(_server.HostMailboxes.GetFolder(alice, "Spam"));
+        Assert.Contains(await imap.CommandAsync("a1 SELECT Spam"), l => l == "* 1 EXISTS");
+    }
+
+    [Fact]
+    public async Task Duplicate_special_folders_are_merged_at_login()
+    {
+        var alice = _server.User("alice");
+        var duplicate = _server.HostMailboxes.CreateFolder(alice.Id, "Sent Messages")!;
+        await _server.HostMailboxes.AppendAsync(duplicate, Encoding.ASCII.GetBytes("Subject: alt\r\n\r\nx\r\n"), @"\Seen");
+        await _server.HostMailboxes.AppendAsync(duplicate, Encoding.ASCII.GetBytes("Subject: alt 2\r\n\r\nx\r\n"));
+
+        await using var imap = await RawImap.LoginAsync(_server.ImapsPort);
+
+        Assert.Null(_server.HostMailboxes.GetFolder(alice.Id, "Sent Messages"));
+        var sent = _server.HostMailboxes.ListMessages(_server.HostMailboxes.GetFolder(alice.Id, "Sent")!.Id);
+        Assert.Equal(2, sent.Count);
+        Assert.True(sent[0].HasFlag(@"\Seen"));
+        Assert.DoesNotContain(await imap.CommandAsync("a1 LIST \"\" \"*\""), l => l.Contains("Sent Messages\"") && !l.Contains("\\Sent"));
+    }
+
+    [Fact]
+    public async Task Delivery_into_an_alias_name_uses_the_special_folder()
+    {
+        var alice = _server.User("alice");
+
+        await _server.HostMailboxes.AppendAsync(alice, Encoding.ASCII.GetBytes("Subject: x\r\n\r\nx\r\n"), "Gelöschte Elemente");
+
+        Assert.Null(_server.HostMailboxes.GetFolder(alice.Id, "Gelöschte Elemente"));
+        Assert.Single(_server.HostMailboxes.ListMessages(_server.HostMailboxes.GetFolder(alice.Id, "Trash")!.Id));
     }
 
     [Fact]

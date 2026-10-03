@@ -121,9 +121,10 @@ public sealed class MailboxStore(Database database, DataPaths paths)
 
     // ---- Folders ----
 
+    /// <summary>Returns the folder, creating it if needed. An alias such as "Gesendete Elemente" yields the existing special folder.</summary>
     public Folder GetOrCreateFolder(long accountId, string name)
     {
-        name = NormalizeFolderName(name);
+        name = ResolveFolderName(accountId, NormalizeFolderName(name));
         using var connection = database.Open();
         connection.Execute(
             $"INSERT OR IGNORE INTO folders (account_id, name, uid_validity) VALUES ($account, $name, {NewUidValidity})",
@@ -148,6 +149,37 @@ public sealed class MailboxStore(Database database, DataPaths paths)
         {
             GetOrCreateFolder(accountId, name);
         }
+    }
+
+    /// <summary>
+    /// Moves the content of folders that mail programs created under another name for a special folder ("Sent Messages",
+    /// "Gelöschte Elemente" …) into that folder and removes them, so every device shows the same folders again.
+    /// Folders with subfolders are left alone. Returns (alias, special folder, moved messages) per merged folder.
+    /// </summary>
+    public IReadOnlyList<(string Alias, string Target, int Moved)> MergeAliasFolders(long accountId)
+    {
+        var merged = new List<(string, string, int)>();
+        var folders = ListFolders(accountId);
+        foreach (var folder in folders)
+        {
+            if (!SpecialFolderAliases.TryGetValue(folder.Name, out var targetName) ||
+                folders.FirstOrDefault(f => f.Name == targetName) is not { } target ||
+                folders.Any(f => f.Name.StartsWith(folder.Name + HierarchyDelimiter, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            var uids = ListMessages(folder.Id).Select(m => m.Uid).ToList();
+            if (uids.Count > 0)
+            {
+                Move(folder.Id, uids, target.Id);
+            }
+
+            DeleteFolder(accountId, folder.Name);
+            merged.Add((folder.Name, targetName, uids.Count));
+        }
+
+        return merged;
     }
 
     public Folder? GetFolder(long accountId, string name)

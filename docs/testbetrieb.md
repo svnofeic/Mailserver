@@ -131,6 +131,13 @@ Auf einem **neuen Server** (z. B. dem künftigen Windows Server 2022/2025) mit d
 Mails an `…@test.feicht.me` von überall an, ohne die echten Domains zu berühren. Vorher beim Anbieter prüfen, ob
 ausgehender Port 25 freigeschaltet ist (bei neuen VPS oft gesperrt) und den PTR-Eintrag setzen lassen.
 
+## Mailprogramm verhält sich seltsam? IMAP-Mitschnitt
+
+In `C:\Mailserver\appsettings.json` im Abschnitt `"Imap"` den Wert `"Trace": true` setzen und den Dienst neu starten
+(`Restart-Service Mailserver`). Danach schreibt der Server jeden Befehl des Mailprogramms und jede Antwort nach
+`C:\Mailserver\data\logs\imap-trace-<Datum>.log`. Passwörter werden geschwärzt, Mailinhalte gekürzt – Ordnernamen
+und Betreffzeilen sind aber lesbar. Nach der Fehlersuche wieder auf `false` stellen und die Datei löschen.
+
 ## Rückmeldung
 
 Bei Problemen helfen: die Konsolenausgabe bzw. Einträge aus der Ereignisanzeige, die Ausgabe von `mailadmin`, bei

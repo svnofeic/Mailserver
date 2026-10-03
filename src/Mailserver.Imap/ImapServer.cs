@@ -28,6 +28,7 @@ public sealed class ImapServer(
     CertificateProvider certificates,
     SpamLog spamLog,
     SpamFeedback spamFeedback,
+    ImapTrace trace,
     ILogger<ImapServer> logger) : BackgroundService
 {
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(30);
@@ -120,6 +121,11 @@ public sealed class ImapServer(
                 }
 
                 await using var connection = new ImapConnection(stream);
+                if (options.Value.Imap.Trace)
+                {
+                    connection.Trace = trace.Start(remote);
+                }
+
                 var session = new ImapSession(connection, remote, implicitTls, hasCertificate && !implicitTls ? AuthenticateTlsAsync : null,
                     accounts, mailboxes, sentCopies, throttle, watcher, spamLog, spamFeedback, options.Value, logger);
                 await session.RunAsync(stoppingToken);

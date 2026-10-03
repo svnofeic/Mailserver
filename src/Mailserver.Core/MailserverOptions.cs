@@ -132,6 +132,12 @@ public sealed class ImapOptions
 
     /// <summary>Connections without any command for this long are closed (RFC 3501 requires at least 30 minutes).</summary>
     public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromMinutes(31);
+
+    /// <summary>
+    /// Writes every IMAP command and response to data\logs\imap-trace-&lt;date&gt;.log (passwords masked) to diagnose
+    /// mail programs. Only switch on while investigating: the file contains folder names and message headers.
+    /// </summary>
+    public bool Trace { get; set; }
 }
 
 public sealed class DeliveryOptions

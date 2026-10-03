@@ -8,7 +8,8 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Mailserver.Web.Pages;
 
-public sealed class LoginModel(AccountStore accounts, AuthThrottle throttle, SpamLog log, ILogger<LoginModel> logger) : PageModel
+public sealed class LoginModel(AccountStore accounts, Mailserver.Core.Storage.MailboxStore mailboxes, AuthThrottle throttle, SpamLog log,
+    ILogger<LoginModel> logger) : PageModel
 {
     public string? Error { get; private set; }
     public string? Email { get; private set; }
@@ -53,6 +54,11 @@ public sealed class LoginModel(AccountStore accounts, AuthThrottle throttle, Spa
         }
 
         throttle.RecordSuccess(ip);
+        foreach (var (alias, target, moved) in mailboxes.MergeAliasFolders(account.Id))
+        {
+            logger.LogInformation("Merged folder {Alias} of {Account} into {Target} ({Moved} messages)", alias, account.Address, target, moved);
+        }
+
         var principal = WebHosting.CreatePrincipal(account, accounts.GetSecurityStamp(account.Id)!);
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
         logger.LogInformation("Web login {User} from {Ip}", account.Address, ip);
