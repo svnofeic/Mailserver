@@ -21,6 +21,8 @@ internal sealed class RoutingMessageStore(
     OutgoingMessagePreparer preparer,
     SpamFilter spamFilter,
     Mailserver.Core.SpamLogging.SpamLog spamLog,
+    Mailserver.Core.Accounts.AccountStore accounts,
+    Mailserver.Core.Storage.SentCopies sentCopies,
     IOptions<MailserverOptions> options,
     ILogger<RoutingMessageStore> logger,
     bool isSubmission) : IMessageStore
@@ -45,6 +47,10 @@ internal sealed class RoutingMessageStore(
                 await router.RouteAsync(submitted, sender, recipients, allowRelay: true, cancellationToken);
                 LogSubmission(context, sender, recipients, submitted,
                     relay ? "Relay ohne Anmeldung (Smtp:RelayNetworks)" : $"angemeldet als {context.Authentication.User}");
+                if (!relay && options.Value.Smtp.SaveSentCopies)
+                {
+                    await SaveSentCopyAsync(context, submitted, cancellationToken);
+                }
                 return SmtpResponse.Ok;
             }
 
@@ -65,6 +71,22 @@ internal sealed class RoutingMessageStore(
         {
             logger.LogError(ex, "Failed to store message in session {Session}", context.SessionId);
             return new SmtpResponse(SmtpReplyCode.Aborted, "4.3.0 Temporary server error, please try again later");
+        }
+    }
+
+    /// <summary>Copy in the sender's Sent folder. The message is already on its way, so a failure here must not fail the send.</summary>
+    private async Task SaveSentCopyAsync(ISessionContext context, byte[] message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (EmailAddress.TryParse(context.Authentication.User, out var address) && accounts.FindAccount(address) is { } account)
+            {
+                await sentCopies.SaveAsync(account, message, cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or Microsoft.Data.Sqlite.SqliteException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Could not store the sent copy for {User}", context.Authentication.User);
         }
     }
 

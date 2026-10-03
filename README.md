@@ -126,6 +126,7 @@ Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer 
 | `Mailserver:Tls:PfxPath` / `PfxPassword` | PFX-Datei; ist sie leer, werden die Windows-Zertifikatsspeicher „My“ und „WebHosting“ (Plesk) nach einem Zertifikat für `Hostname` durchsucht (auch alternative Namen und Wildcards) |
 | `Mailserver:Smtp:ListenAddresses`, `Mailserver:Imap:ListenAddresses` | z. B. `["0.0.0.0", "::"]` für IPv4 und IPv6 |
 | `Mailserver:Smtp:RelayNetworks` | Netze, die über Port 25 ohne Anmeldung versenden dürfen, z. B. `["127.0.0.1/32"]` für Websites auf demselben Server (Standard: leer) |
+| `Mailserver:Smtp:SaveSentCopies` | Per SMTP versendete Mails zusätzlich unter „Gesendet“ ablegen (Standard: an). Legt das Mailprogramm selbst eine Kopie ab, entfernt der Server seine wieder – keine Doppelten |
 | `Mailserver:Imap:Port` / `TlsPort` | 143 (STARTTLS) und 993 (TLS); `0` schaltet einen Port ab |
 | `Mailserver:Imap:MaxConnectionsPerIp` | Gleichzeitige IMAP-Verbindungen pro IP (Standard 30) |
 | `Mailserver:Delivery:SmartHost` | Optionaler Relay-Server (`Host`, `Port`, `Username`, `Password`, `Security`) |

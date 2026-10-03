@@ -142,6 +142,16 @@ public sealed class Database
         ALTER TABLE accounts ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
         CREATE INDEX ix_spam_log_recipient ON spam_log (recipient);
         """,
+        """
+        CREATE TABLE sent_copies (
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            message_id  TEXT NOT NULL,
+            folder_id   INTEGER NOT NULL,
+            uid         INTEGER NOT NULL,
+            created_utc TEXT NOT NULL,
+            PRIMARY KEY (account_id, message_id)
+        );
+        """,
     ];
 
     private readonly string _connectionString;

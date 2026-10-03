@@ -43,6 +43,7 @@ public static class ServiceCollectionExtensions
         });
         services.AddSingleton<AccountStore>();
         services.AddSingleton<MailboxStore>();
+        services.AddSingleton<SentCopies>();
         services.AddSingleton<OutboundQueue>();
         services.AddSingleton<DkimKeyStore>();
         services.AddSingleton<OutgoingMessagePreparer>();

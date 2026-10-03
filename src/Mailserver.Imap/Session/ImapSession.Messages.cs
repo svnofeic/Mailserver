@@ -411,6 +411,9 @@ public sealed partial class ImapSession
 
         var stored = await mailboxes.AppendAsync(folder, message.Bytes, MessageFlags.Format(flags), date, cancellationToken);
 
+        // The mail program keeps its own copy of a sent message: drop the one the server stored on submission.
+        sentCopies.RemoveServerCopy(_account.Id, message.Bytes, MessageFlags.Format(flags));
+
         var response = new ImapResponse();
         _selected?.Sync(response, allowExpunge: true);
         response.Raw($"{command.Tag} OK [APPENDUID {folder.UidValidity} {stored.Uid}] APPEND completed\r\n");

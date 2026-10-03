@@ -21,6 +21,7 @@ public sealed partial class ImapSession(
     Func<Stream, CancellationToken, Task<Stream>>? startTls,
     AccountStore accounts,
     MailboxStore mailboxes,
+    SentCopies sentCopies,
     AuthThrottle throttle,
     FolderWatcher watcher,
     SpamLog spamLog,

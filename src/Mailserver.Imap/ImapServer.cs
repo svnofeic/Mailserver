@@ -22,6 +22,7 @@ public sealed class ImapServer(
     IOptions<MailserverOptions> options,
     AccountStore accounts,
     MailboxStore mailboxes,
+    SentCopies sentCopies,
     AuthThrottle throttle,
     FolderWatcher watcher,
     CertificateProvider certificates,
@@ -120,7 +121,7 @@ public sealed class ImapServer(
 
                 await using var connection = new ImapConnection(stream);
                 var session = new ImapSession(connection, remote, implicitTls, hasCertificate && !implicitTls ? AuthenticateTlsAsync : null,
-                    accounts, mailboxes, throttle, watcher, spamLog, spamFeedback, options.Value, logger);
+                    accounts, mailboxes, sentCopies, throttle, watcher, spamLog, spamFeedback, options.Value, logger);
                 await session.RunAsync(stoppingToken);
             }
         }

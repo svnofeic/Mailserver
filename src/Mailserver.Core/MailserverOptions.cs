@@ -80,6 +80,12 @@ public sealed class SmtpOptions
     /// </summary>
     public string[] RelayNetworks { get; set; } = [];
 
+    /// <summary>
+    /// Stores a copy of every message sent through the submission ports in the sender's "Sent" folder. If the mail
+    /// program stores its own copy (IMAP APPEND with the same Message-ID) within a day, the server copy is removed again.
+    /// </summary>
+    public bool SaveSentCopies { get; set; } = true;
+
     public bool IsRelayClient(System.Net.IPAddress? address) =>
         address is not null && RelayNetworks.Select(Security.NetworkRange.Parse).Any(range => range.Contains(address));
 }
