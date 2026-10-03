@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mailserver.Smtp\Mailserver.Smtp.csproj" />
+    <ProjectReference Include="..\Mailserver.Imap\Mailserver.Imap.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Mailserver.Admin/Mailserver.Admin.csproj" />
     <Project Path="src/Mailserver.Core/Mailserver.Core.csproj" />
+    <Project Path="src/Mailserver.Imap/Mailserver.Imap.csproj" />
     <Project Path="src/Mailserver.Service/Mailserver.Service.csproj" />
     <Project Path="src/Mailserver.Smtp/Mailserver.Smtp.csproj" />
   </Folder>

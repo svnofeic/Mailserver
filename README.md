@@ -7,14 +7,14 @@ Ein eigener Mailserver in C#/.NET 10 für Windows Server. Er ersetzt SmarterMail
 | Meilenstein | Inhalt | Status |
 |---|---|---|
 | **M1 – SMTP** | Empfang auf Port 25, Submission auf 587/465 mit Login, Zustellung nach außen mit MX-Lookup und Wiederholungen, DKIM-Signatur, Aliase und Weiterleitungen, Unzustellbarkeitsmeldungen, Quota, Schutz vor Brute-Force, Verwaltungs-Tool `mailadmin` | ✅ fertig |
-| **M2 – IMAP** | IMAP-Server (Port 993) für Outlook, Thunderbird und Smartphones, mit Ordnern, Flags und IDLE | ⏳ als Nächstes |
+| **M2 – IMAP** | IMAP-Server (Port 993 und 143 mit STARTTLS) für Outlook, Thunderbird und Smartphones: Ordner inkl. Unterordnern und Umlauten, Flags, Suche, Kopieren/Verschieben, Push über IDLE | ✅ fertig |
 | **M3 – Spamschutz** | SPF-, DKIM- und DMARC-Prüfung eingehender Mails, DNS-Blacklists, Greylisting, Junk-Ordner, Rate-Limits | offen |
-| **M4 – Migration** | Import aus SmarterMail per IMAP (Postfächer und Ordner) | offen |
+| **M4 – Migration** | Import aus SmarterMail (Build 8853) per IMAP: Postfächer, Ordner, Flags | ⏳ als Nächstes |
 | **M5 – Komfort** | Web-Oberfläche zur Verwaltung, Autodiscover/Autoconfig, MTA-STS, Monitoring | offen |
 
-> **Wichtig:** Ohne IMAP (M2) kann noch niemand seine Mails abrufen. Bis M2 und M4 fertig sind, läuft SmarterMail weiter.
-> Beide Server können nicht gleichzeitig Port 25 belegen. Zum Testen kann man den neuen Server auf einem anderen Server
-> betreiben oder in `appsettings.json` andere Ports setzen.
+> **Wichtig:** Bis die Datenübernahme (M4) fertig ist, läuft SmarterMail weiter. Beide Server können nicht gleichzeitig
+> dieselben Ports (25, 587, 465, 143, 993) belegen. Zum Testen kann man den neuen Server auf einem anderen Server betreiben
+> oder in `appsettings.json` andere Ports setzen.
 
 ## Aufbau
 
@@ -23,6 +23,7 @@ src/
   Mailserver.Core      Domains/Konten/Aliase (SQLite), Postfach-Speicher (.eml-Dateien), Warteschlange,
                        DKIM, Routing, Bounces, Zertifikate, Login-Sperren
   Mailserver.Smtp      SMTP-Server (Port 25 und 587/465) und Zustell-Dienst (MX bzw. Smarthost)
+  Mailserver.Imap      IMAP-Server (Port 993 und 143): Protokoll, MIME-Struktur, Sitzungen, IDLE
   Mailserver.Service   Windows-Dienst (Mailserver.exe)
   Mailserver.Admin     Kommandozeilen-Verwaltung (mailadmin.exe)
 tests/
@@ -41,7 +42,7 @@ Daten (Standard: `C:\Mailserver\data`):
 
 Für ein Backup sichert man den ganzen `data`-Ordner. Die Datenbank sollte man dabei per `sqlite3 .backup` oder bei gestopptem Dienst sichern.
 
-### Sicherheitsregeln im SMTP-Teil
+### Sicherheitsregeln
 
 - **Port 25** nimmt nur Mails für eigene Postfächer und Aliase an. Weiterleiten an fremde Server ("Open Relay") ist ausgeschlossen, und ein Login ist dort nicht möglich.
 - Mails, die auf Port 25 ohne Login eine eigene Domain als Absender angeben, werden abgelehnt (Schutz vor Spoofing).
@@ -51,6 +52,8 @@ Für ein Backup sichert man den ganzen `data`-Ordner. Die Datenbank sollte man d
 - Ausgehende Mails werden mit DKIM signiert und bekommen Message-ID und Date, falls diese fehlen.
 - Weiterleitungen an externe Adressen gehen mit dem Alias als Absender raus, damit SPF beim Empfänger besteht.
 - Unzustellbarkeitsmeldungen werden nie selbst wieder zurückgeschickt, dadurch entstehen keine Mail-Schleifen. Mails mit zu vielen `Received`-Headern werden abgelehnt.
+- **IMAP** nimmt Passwörter nur über TLS an: auf 993 sofort, auf 143 erst nach STARTTLS. Fehl-Logins zählen gemeinsam mit SMTP für die IP-Sperre, nach einem Fehlversuch antwortet der Server erst nach einer Sekunde.
+- Pro IP-Adresse sind höchstens 30 gleichzeitige IMAP-Verbindungen erlaubt. Vor dem Login sind nur kleine Datenblöcke zulässig, damit niemand den Speicher füllen kann.
 
 ## Voraussetzungen
 
@@ -91,13 +94,28 @@ Start-Service Mailserver
 Danach die DNS-Einträge setzen, die `mailadmin dns example.de` ausgibt (MX, SPF, DKIM, DMARC), und mit
 [mail-tester.com](https://www.mail-tester.com/) prüfen.
 
+### Mailprogramme einrichten
+
+| | Server | Port | Verschlüsselung |
+|---|---|---|---|
+| Posteingang (IMAP) | `mail.example.de` | 993 | SSL/TLS |
+| Postausgang (SMTP) | `mail.example.de` | 587 | STARTTLS |
+
+Benutzername ist immer die vollständige E-Mail-Adresse. Ordner für Gesendet, Entwürfe, Papierkorb und Spam erkennen die
+Programme automatisch (SPECIAL-USE).
+
+Unterstützte IMAP-Erweiterungen: LITERAL+, SASL-IR, ID, ENABLE, IDLE, NAMESPACE, UNSELECT, UIDPLUS, MOVE, CHILDREN, SPECIAL-USE.
+Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer Postfächer), QUOTA, geteilte Ordner und Sieve-Filter.
+
 ### Wichtige Einstellungen (`appsettings.json`)
 
 | Schlüssel | Bedeutung |
 |---|---|
 | `Mailserver:Hostname` | Öffentlicher Name; muss zum PTR-Eintrag und zum Zertifikat passen |
 | `Mailserver:Tls:PfxPath` / `PfxPassword` | PFX-Datei; ist sie leer, wird der Windows-Zertifikatsspeicher nach `Hostname` durchsucht |
-| `Mailserver:Smtp:ListenAddresses` | z. B. `["0.0.0.0", "::"]` für IPv4 und IPv6 |
+| `Mailserver:Smtp:ListenAddresses`, `Mailserver:Imap:ListenAddresses` | z. B. `["0.0.0.0", "::"]` für IPv4 und IPv6 |
+| `Mailserver:Imap:Port` / `TlsPort` | 143 (STARTTLS) und 993 (TLS); `0` schaltet einen Port ab |
+| `Mailserver:Imap:MaxConnectionsPerIp` | Gleichzeitige IMAP-Verbindungen pro IP (Standard 30) |
 | `Mailserver:Delivery:SmartHost` | Optionaler Relay-Server (`Host`, `Port`, `Username`, `Password`, `Security`) |
 | `Mailserver:Delivery:MaxQueueLifetime` | Wie lange eine Mail zugestellt werden soll, bevor sie zurückgeht (Standard 5 Tage) |
 | `Mailserver:Security:*` | Login-Sperren, Spoofing-Schutz, Hop-Limit |
@@ -119,4 +137,8 @@ dotnet build Mailserver.slnx
 dotnet test Mailserver.slnx
 ```
 
-Die Integrationstests starten den kompletten Server auf freien lokalen Ports und spielen echte SMTP-Sitzungen durch. Dazu gehören Empfang, Relay-Sperre, Spoofing-Schutz, Login, DKIM-Prüfung, Zustellung, Bounce, Wiederholung und Weiterleitung. Ein simulierter fremder Mailserver dient dabei als Gegenstelle.
+Die Integrationstests starten den kompletten Server auf freien lokalen Ports und spielen echte SMTP- und IMAP-Sitzungen durch.
+SMTP: Empfang, Relay-Sperre, Spoofing-Schutz, Login, DKIM-Prüfung, Zustellung, Bounce, Wiederholung und Weiterleitung, mit einem
+simulierten fremden Mailserver als Gegenstelle. IMAP: MailKit als echter Client (Ordner, ENVELOPE/BODYSTRUCTURE, Anhänge, Flags,
+Suche, APPEND, COPY/MOVE, EXPUNGE, IDLE, mehrere Sitzungen gleichzeitig) sowie Tests auf Protokollebene (Literale, Fehlerantworten,
+Sperre nach Fehl-Logins).

@@ -19,6 +19,8 @@ public sealed class MailserverOptions
 
     public SmtpOptions Smtp { get; set; } = new();
 
+    public ImapOptions Imap { get; set; } = new();
+
     public DeliveryOptions Delivery { get; set; } = new();
 
     public SecurityOptions Security { get; set; } = new();
@@ -59,6 +61,27 @@ public sealed class SmtpOptions
     public bool AllowInsecureAuthentication { get; set; }
 
     public TimeSpan SessionTimeout { get; set; } = TimeSpan.FromMinutes(5);
+}
+
+public sealed class ImapOptions
+{
+    /// <summary>Addresses to bind to, e.g. "0.0.0.0" and "::".</summary>
+    public string[] ListenAddresses { get; set; } = ["0.0.0.0"];
+
+    /// <summary>IMAP with STARTTLS. Logins are only accepted after STARTTLS. 0 disables it.</summary>
+    public int Port { get; set; } = 143;
+
+    /// <summary>IMAP with implicit TLS (IMAPS). 0 disables it.</summary>
+    public int TlsPort { get; set; } = 993;
+
+    /// <summary>Allows LOGIN without TLS. Only for local testing — never enable this in production.</summary>
+    public bool AllowInsecureAuthentication { get; set; }
+
+    /// <summary>Simultaneous connections per client IP (mail clients typically open 2–10).</summary>
+    public int MaxConnectionsPerIp { get; set; } = 30;
+
+    /// <summary>Connections without any command for this long are closed (RFC 3501 requires at least 30 minutes).</summary>
+    public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromMinutes(31);
 }
 
 public sealed class DeliveryOptions

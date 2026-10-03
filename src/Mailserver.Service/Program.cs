@@ -1,3 +1,4 @@
+using Mailserver.Imap;
 using Mailserver.Smtp;
 
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
@@ -9,6 +10,7 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 
 builder.Services.AddWindowsService(options => options.ServiceName = "Mailserver");
 builder.Services.AddMailserver(builder.Configuration);
+builder.Services.AddImapServer();
 
 var host = builder.Build();
 host.Run();

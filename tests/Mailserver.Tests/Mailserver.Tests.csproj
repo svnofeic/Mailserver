@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <!-- Tests dereference results the assertions just checked. -->
+    <Nullable>annotations</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mailserver.Smtp\Mailserver.Smtp.csproj" />
+    <ProjectReference Include="..\..\src\Mailserver.Imap\Mailserver.Imap.csproj" />
   </ItemGroup>
 
 </Project>

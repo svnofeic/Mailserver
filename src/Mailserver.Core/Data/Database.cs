@@ -70,6 +70,10 @@ public sealed class Database
         CREATE INDEX ix_queue_next_attempt ON queue (next_attempt_utc);
         CREATE INDEX ix_queue_message_file ON queue (message_file);
         """,
+        """
+        -- Incremented on every change to a folder or its messages, so IMAP sessions can skip resyncing unchanged folders.
+        ALTER TABLE folders ADD COLUMN change_counter INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     private readonly string _connectionString;

@@ -9,6 +9,7 @@ using Mailserver.Core.Accounts;
 using Mailserver.Core.Data;
 using Mailserver.Core.Dkim;
 using Mailserver.Core.Storage;
+using Mailserver.Imap;
 using Mailserver.Smtp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,17 +65,21 @@ public sealed class TestServer : IAsyncDisposable
 
     private readonly IHost _host;
 
-    private TestServer(IHost host, int inboundPort, int submissionPort, FakeRemoteServer remote, string directory)
+    private TestServer(IHost host, int inboundPort, int submissionPort, int imapPort, int imapsPort, FakeRemoteServer remote, string directory)
     {
         _host = host;
         InboundPort = inboundPort;
         SubmissionPort = submissionPort;
+        ImapPort = imapPort;
+        ImapsPort = imapsPort;
         Remote = remote;
         HostDirectory = directory;
     }
 
     public int InboundPort { get; }
     public int SubmissionPort { get; }
+    public int ImapPort { get; }
+    public int ImapsPort { get; }
     public FakeRemoteServer Remote { get; }
     public string HostDirectory { get; }
     public IServiceProvider Services => _host.Services;
@@ -89,6 +94,8 @@ public sealed class TestServer : IAsyncDisposable
         var remote = await FakeRemoteServer.StartAsync();
         var inboundPort = GetFreePort();
         var submissionPort = GetFreePort();
+        var imapPort = GetFreePort();
+        var imapsPort = GetFreePort();
 
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
@@ -101,19 +108,25 @@ public sealed class TestServer : IAsyncDisposable
             ["Mailserver:Smtp:InboundPort"] = inboundPort.ToString(),
             ["Mailserver:Smtp:SubmissionPort"] = submissionPort.ToString(),
             ["Mailserver:Smtp:SubmissionTlsPort"] = "0",
+            ["Mailserver:Imap:ListenAddresses:0"] = "127.0.0.1",
+            ["Mailserver:Imap:Port"] = imapPort.ToString(),
+            ["Mailserver:Imap:TlsPort"] = imapsPort.ToString(),
             ["Mailserver:Delivery:PollInterval"] = "00:00:01",
             ["Mailserver:Delivery:SmartHost:Host"] = "127.0.0.1",
             ["Mailserver:Delivery:SmartHost:Port"] = remote.Port.ToString(),
             ["Mailserver:Delivery:SmartHost:Security"] = "None",
         });
         builder.Services.AddMailserver(builder.Configuration);
+        builder.Services.AddImapServer();
         var host = builder.Build();
 
-        var server = new TestServer(host, inboundPort, submissionPort, remote, directory);
+        var server = new TestServer(host, inboundPort, submissionPort, imapPort, imapsPort, remote, directory);
         server.Seed();
         await host.StartAsync();
-        await WaitForPortAsync(inboundPort);
-        await WaitForPortAsync(submissionPort);
+        foreach (var port in new[] { inboundPort, submissionPort, imapPort, imapsPort })
+        {
+            await WaitForPortAsync(port);
+        }
         return server;
     }
 
@@ -140,8 +153,9 @@ public sealed class TestServer : IAsyncDisposable
         var accounts = HostAccounts;
         var domain = accounts.AddDomain(Domain, "test");
         Services.GetRequiredService<DkimKeyStore>().GenerateKey(domain.Name, "test");
-        accounts.AddAccount(EmailAddress.Create("alice", Domain), Password);
-        accounts.AddAccount(EmailAddress.Create("bob", Domain), Password);
+        var mailboxes = HostMailboxes;
+        mailboxes.EnsureDefaultFolders(accounts.AddAccount(EmailAddress.Create("alice", Domain), Password).Id);
+        mailboxes.EnsureDefaultFolders(accounts.AddAccount(EmailAddress.Create("bob", Domain), Password).Id);
         accounts.AddAlias(EmailAddress.Create("info", Domain), [EmailAddress.Create("alice", Domain), EmailAddress.Create("bob", Domain)]);
         accounts.AddAlias(EmailAddress.Create("forward", Domain), [EmailAddress.Parse("someone@remote.test")]);
     }
@@ -175,11 +189,34 @@ public sealed class TestServer : IAsyncDisposable
         }
     }
 
+    private static int _nextPort = 20000 + Random.Shared.Next(0, 5000);
+
+    /// <summary>
+    /// Hands out each port once per test run, from a range below the OS ephemeral range (32768+). Asking the OS for port 0
+    /// is racy here: test classes run in parallel, and a client socket or another test server could take the port between
+    /// probing and binding.
+    /// </summary>
     internal static int GetFreePort()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
+        while (true)
+        {
+            var port = Interlocked.Increment(ref _nextPort);
+            if (port > 32000)
+            {
+                throw new InvalidOperationException("No free test ports left");
+            }
+
+            try
+            {
+                using var listener = new TcpListener(IPAddress.Loopback, port);
+                listener.Start();
+                return port;
+            }
+            catch (SocketException)
+            {
+                // In use by something else on this machine; try the next one.
+            }
+        }
     }
 
     private static async Task WaitForPortAsync(int port)
