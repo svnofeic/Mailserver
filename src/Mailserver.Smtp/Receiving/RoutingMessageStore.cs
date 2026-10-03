@@ -46,7 +46,7 @@ internal sealed class RoutingMessageStore(
 
             // DKIM is verified on the message exactly as received, before headers are added or removed.
             var session = SessionInfo.GetInbound(context);
-            var result = await spamFilter.CheckMessageAsync(session, body, cancellationToken);
+            var result = await spamFilter.CheckMessageAsync(session, body, recipients.Select(r => r.ToString()).ToList(), cancellationToken);
             if (result.Rejection is not null)
             {
                 return new SmtpResponse(SmtpReplyCode.MailboxUnavailable, result.Rejection);

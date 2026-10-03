@@ -8,6 +8,7 @@ using Mailserver.Core.Queue;
 using Mailserver.Core.Routing;
 using Mailserver.Core.Rules;
 using Mailserver.Core.Security;
+using Mailserver.Core.SpamLogging;
 using Mailserver.Core.Storage;
 using Mailserver.Smtp.Delivery;
 using Mailserver.Smtp.Receiving;
@@ -42,6 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DkimKeyStore>();
         services.AddSingleton<OutgoingMessagePreparer>();
         services.AddSingleton<RuleStore>();
+        services.AddSingleton<SpamLog>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AuthThrottle>();
         services.AddSingleton<CertificateProvider>();

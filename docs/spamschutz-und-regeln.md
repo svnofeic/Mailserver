@@ -109,3 +109,43 @@ mailadmin rule test max@example.de C:\Temp\beispiel.eml [--score 7]   # zeigt, w
 
 Regeln gelten für alle Mails an das Postfach, also auch für Mails von anderen Postfächern desselben Servers.
 Änderungen wirken sofort, ein Neustart ist nicht nötig.
+
+## Spam-Protokoll und Optimierung
+
+Jede Entscheidung des Spamfilters wird in der Datenbank protokolliert (Tabelle `spam_log`), standardmäßig 90 Tage lang:
+
+| Stufe | Was wird festgehalten |
+|---|---|
+| `connect` | Ablehnung wegen Blacklist (IP, Liste) |
+| `sender` | Ablehnung wegen SPF (nur wenn `RejectSpfFail` aktiv ist) |
+| `recipient` | Greylisting: Absender zurückgestellt |
+| `data` | pro Mail: IP, Reverse DNS, HELO, Absender, Betreff, Message-ID, **Score mit allen Einzeltests**, SPF/DKIM/DMARC-Ergebnis – oder Ablehnung wegen DMARC |
+| `delivery` | pro Empfänger: Zielordner, verworfen, **greifende Regeln**, Spam nicht weitergeleitet |
+| `feedback` | ein Benutzer hat eine Mail **aus Junk herausgeholt** (`marked-ham`) oder **nach Junk verschoben** (`marked-spam`) – egal ob in Outlook, Thunderbird oder am Handy |
+
+Das Feedback ist der wertvollste Teil: Wird eine Mail mit Score ≥ 5 aus Junk geholt, war es ein **Fehlalarm**; wird eine Mail mit
+Score < 5 nach Junk verschoben, hat der Filter sie **übersehen**. Die Auswertung zeigt, welche Tests daran beteiligt waren.
+
+```powershell
+mailadmin spamlog stats --since 30d          # Übersicht, Score-Verteilung, Tests, Fehlalarme, Hinweise
+mailadmin spamlog list --since 24h           # letzte Einträge
+mailadmin spamlog list --action marked-ham   # alle Fehlalarme
+mailadmin spamlog list --search shop.de      # nach Absender, Empfänger, Betreff oder Message-ID suchen
+mailadmin spamlog list --min-score 5 --limit 200
+mailadmin spamlog show <sitzung>             # alle Einträge zu einer Mail (Sitzung steht in der Liste bzw. Message-ID)
+mailadmin spamlog export spam.csv --since 90d   # CSV (Semikolon, UTF-8) für Excel oder eigene Auswertungen
+```
+
+Typisches Vorgehen beim Optimieren:
+
+1. Einige Wochen laufen lassen; Benutzer verschieben Fehlentscheidungen einfach im Mailprogramm.
+2. `mailadmin spamlog stats --since 30d` ansehen:
+   - viele Fehlalarme knapp über 5 Punkten → `Spam:JunkThreshold` etwas anheben,
+   - viel übersehener Spam knapp unter 5 → Schwelle senken,
+   - ein Test taucht in den meisten Fehlalarmen auf → seine Gewichtung prüfen,
+   - übersehener Spam mit Score nahe 0 → Inhalts-Regeln anlegen (Betreff/Text),
+   - Score-Verteilung zeigt sehr viele Mails ≥ 12 → `Spam:DeleteThreshold` oder eine Regel `score über 12 → löschen` erwägen.
+3. Bekannte Absender, die immer wieder fälschlich in Junk landen: Regel `kein-spam` anlegen.
+
+Einstellungen unter `Mailserver:Spam:Log`: `Enabled`, `RetentionDays` (Standard 90) und `IncludeSubject` (Betreffzeilen sind
+personenbezogene Daten – bei Bedarf abschalten). Alte Einträge werden automatisch gelöscht; `mailadmin spamlog cleanup` tut das sofort.

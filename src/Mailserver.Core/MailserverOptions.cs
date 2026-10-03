@@ -175,6 +175,20 @@ public sealed class SpamOptions
         ];
 
     public GreylistingOptions Greylisting { get; set; } = new();
+
+    public SpamLogOptions Log { get; set; } = new();
+}
+
+public sealed class SpamLogOptions
+{
+    /// <summary>Records every spam decision (checks, score, folder, rules, user feedback) for later analysis.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Entries older than this are deleted automatically.</summary>
+    public int RetentionDays { get; set; } = 90;
+
+    /// <summary>Stores subject lines. Helpful for analysis, but personal data – switch off if not wanted.</summary>
+    public bool IncludeSubject { get; set; } = true;
 }
 
 public sealed class DnsBlocklistOptions

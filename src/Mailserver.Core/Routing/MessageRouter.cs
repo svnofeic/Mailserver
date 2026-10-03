@@ -1,6 +1,7 @@
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Queue;
 using Mailserver.Core.Rules;
+using Mailserver.Core.SpamLogging;
 using Mailserver.Core.Storage;
 using Microsoft.Extensions.Logging;
 using MimeKit;
@@ -15,6 +16,7 @@ public sealed class MessageRouter(
     MailboxStore mailboxes,
     OutboundQueue queue,
     RuleStore rules,
+    SpamLog spamLog,
     ILogger<MessageRouter> logger)
 {
     /// <param name="message">The complete message including the Received header added by this server.</param>
@@ -67,11 +69,15 @@ public sealed class MessageRouter(
             {
                 logger.LogInformation("Discarded message for {Account} (score {Score:F1}, rules: {Rules})", account.Address, verdict.Score,
                     string.Join(", ", decision.MatchedRules));
+                LogDelivery(verdict, account, SpamLogAction.Discarded, null, decision,
+                    decision.Discard ? "rule" : "above delete threshold");
                 continue;
             }
 
             var stored = await mailboxes.AppendAsync(account, message, decision.Folder ?? MailboxStore.Inbox,
                 MessageFlags.Format(decision.Flags), cancellationToken: cancellationToken);
+            LogDelivery(verdict, account, SpamLogAction.Delivered, decision.Folder ?? MailboxStore.Inbox, decision,
+                decision.NotSpam && verdict.IsSpam ? "spam verdict overridden by rule" : null);
             logger.LogInformation("Delivered message to {Account} in {Folder} (uid {Uid}, score {Score:F1}{Rules})", account.Address,
                 decision.Folder, stored.Uid, verdict.Score, decision.MatchedRules.Count > 0 ? ", rules: " + string.Join(", ", decision.MatchedRules) : "");
         }
@@ -88,6 +94,15 @@ public sealed class MessageRouter(
         {
             // Forwarding spam would damage this server's reputation at the destination.
             logger.LogInformation("Not forwarding spam (score {Score:F1}) to {Targets}", verdict.Score, string.Join(", ", forwards.Select(f => f.Target)));
+            if (verdict.TraceId is not null)
+            {
+                spamLog.Write(new SpamLogEntry
+                {
+                    Session = verdict.TraceId, Stage = SpamLogStage.Delivery, Action = SpamLogAction.NotForwarded, Score = verdict.Score,
+                    Recipient = string.Join(", ", forwards.Select(f => f.Target)),
+                });
+            }
+
             forwards.Clear();
         }
 
@@ -97,6 +112,27 @@ public sealed class MessageRouter(
             await queue.EnqueueAsync(message, sender, group.Select(f => f.Target), cancellationToken);
             logger.LogInformation("Forwarding message for {Alias} to {Targets}", group.Key, string.Join(", ", group.Select(f => f.Target)));
         }
+    }
+
+    /// <summary>Only mail checked by the spam filter is logged; it carries the session id that links to the check entries.</summary>
+    private void LogDelivery(InboundVerdict verdict, Account account, string action, string? folder, DeliveryDecision decision, string? detail)
+    {
+        if (verdict.TraceId is null)
+        {
+            return;
+        }
+
+        spamLog.Write(new SpamLogEntry
+        {
+            Session = verdict.TraceId,
+            Stage = SpamLogStage.Delivery,
+            Action = action,
+            Recipient = account.Address.ToString(),
+            Score = verdict.Score,
+            Folder = folder,
+            Rules = decision.MatchedRules.Count == 0 ? null : string.Join(" | ", decision.MatchedRules),
+            Detail = detail,
+        });
     }
 
     private DeliveryDecision Decide(Account account, byte[] message, InboundVerdict verdict, ref RuleSubject? subject)

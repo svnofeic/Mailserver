@@ -108,6 +108,36 @@ public sealed class Database
             passed         INTEGER NOT NULL DEFAULT 0
         );
         """,
+        """
+        -- Every spam decision, for tuning the filter (see mailadmin spamlog).
+        CREATE TABLE spam_log (
+            id          INTEGER PRIMARY KEY,
+            time_utc    TEXT NOT NULL,
+            session     TEXT,
+            stage       TEXT NOT NULL,
+            action      TEXT NOT NULL,
+            client_ip   TEXT,
+            reverse_dns TEXT,
+            helo        TEXT,
+            mail_from   TEXT,
+            recipient   TEXT,
+            header_from TEXT,
+            subject     TEXT,
+            message_id  TEXT,
+            score       REAL,
+            tests       TEXT,
+            spf         TEXT,
+            dkim        TEXT,
+            dmarc       TEXT,
+            folder      TEXT,
+            rules       TEXT,
+            detail      TEXT
+        );
+
+        CREATE INDEX ix_spam_log_time ON spam_log (time_utc);
+        CREATE INDEX ix_spam_log_session ON spam_log (session);
+        CREATE INDEX ix_spam_log_message_id ON spam_log (message_id);
+        """,
     ];
 
     private readonly string _connectionString;

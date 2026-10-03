@@ -5,6 +5,7 @@ using Mailserver.Core.Dkim;
 using Mailserver.Core.Migration;
 using Mailserver.Core.Queue;
 using Mailserver.Core.Rules;
+using Mailserver.Core.SpamLogging;
 using Mailserver.Core.Storage;
 using Mailserver.Migration;
 using Microsoft.Extensions.Configuration;
@@ -26,6 +27,7 @@ var mailboxes = new MailboxStore(database, paths);
 var dkim = new DkimKeyStore(paths);
 var queue = new OutboundQueue(database, paths);
 var rules = new RuleStore(database);
+var spamLog = new SpamLog(database, Microsoft.Extensions.Options.Options.Create(options), TimeProvider.System);
 
 try
 {
@@ -176,6 +178,57 @@ int Run(string[] a)
             return 0;
         }
 
+        case ["spamlog", "list", ..]:
+            PrintEntries(spamLog.Query(new SpamLogQuery(
+                Since: ParseSince(Option(a, "--since") ?? "24h"),
+                Stage: Option(a, "--stage"),
+                Action: Option(a, "--action"),
+                ClientIp: Option(a, "--ip"),
+                Search: Option(a, "--search"),
+                MinScore: Option(a, "--min-score") is { } min ? double.Parse(min, System.Globalization.CultureInfo.InvariantCulture) : null,
+                Limit: int.Parse(Option(a, "--limit") ?? "50"))));
+            return 0;
+
+        case ["spamlog", "show", var key]:
+        {
+            var bySession = spamLog.Query(new SpamLogQuery(Session: key));
+            var entries = bySession.Count > 0 ? bySession : spamLog.Query(new SpamLogQuery(Search: key.Trim('<', '>')));
+            foreach (var entry in entries.OrderBy(e => e.Time))
+            {
+                Console.WriteLine($"{entry.Time.ToLocalTime():yyyy-MM-dd HH:mm:ss}  {entry.Stage}/{entry.Action}");
+                foreach (var (label, value) in new[]
+                         {
+                             ("Sitzung", entry.Session), ("IP", entry.ClientIp), ("Reverse DNS", entry.ReverseDns), ("HELO", entry.Helo),
+                             ("MAIL FROM", entry.MailFrom), ("Empfänger", entry.Recipient), ("From", entry.HeaderFrom), ("Betreff", entry.Subject),
+                             ("Message-ID", entry.MessageId), ("Score", entry.Score?.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)),
+                             ("Tests", entry.Tests), ("SPF", entry.Spf), ("DKIM", entry.Dkim), ("DMARC", entry.Dmarc), ("Ordner", entry.Folder),
+                             ("Regeln", entry.Rules), ("Hinweis", entry.Detail),
+                         }.Where(x => x.Item2 is not null))
+                {
+                    Console.WriteLine($"    {label + ":",-13} {value}");
+                }
+            }
+
+            return entries.Count > 0 ? 0 : Fail("Keine Einträge gefunden.");
+        }
+
+        case ["spamlog", "stats", ..]:
+        {
+            var since = ParseSince(Option(a, "--since") ?? "7d");
+            PrintStatistics(SpamLogReport.Build(spamLog.Query(new SpamLogQuery(Since: since)), since, options.Spam.JunkThreshold));
+            return 0;
+        }
+
+        case ["spamlog", "export", var file, ..]:
+        {
+            var entries = spamLog.Query(new SpamLogQuery(Since: ParseSince(Option(a, "--since") ?? "30d")));
+            File.WriteAllText(file, SpamLogReport.ToCsv(entries), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            return Ok($"{entries.Count} Einträge nach {file} exportiert.");
+        }
+
+        case ["spamlog", "cleanup"]:
+            return Ok($"{spamLog.Cleanup()} Einträge gelöscht, die älter als {options.Spam.Log.RetentionDays} Tage waren.");
+
         case ["queue", "list"]:
             foreach (var entry in queue.List())
             {
@@ -218,6 +271,14 @@ int Run(string[] a)
                       rule add max@example.de --if von endet "@kunde.de" --then kein-spam
                   rule list [bereich] | rule remove <id> | rule enable|disable <id>
                   rule test <adresse> <datei.eml> [--score <n>]   zeigt, was mit einer Nachricht passieren würde
+
+                  spamlog list [--since 24h] [--action spam|accepted|rejected|deferred|delivered|discarded|marked-spam|marked-ham]
+                               [--stage connect|sender|recipient|data|delivery|feedback] [--ip <ip>] [--search <text>]
+                               [--min-score <n>] [--limit 50]
+                  spamlog show <sitzung|message-id>      alle Einträge zu einer Mail
+                  spamlog stats [--since 7d]             Auswertung mit Hinweisen zur Optimierung
+                  spamlog export <datei.csv> [--since 30d]
+                  spamlog cleanup
 
                   import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
                       Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). <datei> enthält pro Zeile
@@ -302,6 +363,106 @@ void PrintDns(string name)
 
     Console.WriteLine($"  PTR (beim VPS-Anbieter): <IPv4>  ->  {host}");
     Console.WriteLine("  DMARC nach erfolgreichen Tests auf p=quarantine bzw. p=reject verschärfen.");
+}
+
+void PrintEntries(IReadOnlyList<SpamLogEntry> entries)
+{
+    foreach (var e in entries.OrderBy(e => e.Time))
+    {
+        var who = e.Stage == SpamLogStage.Feedback ? e.Recipient : e.MailFrom is { Length: > 0 } from ? from : e.ClientIp;
+        var score = e.Score is { } value ? value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture).PadLeft(5) : "     ";
+        var what = e.Stage switch
+        {
+            SpamLogStage.Delivery => $"{e.Recipient} → {(e.Folder ?? "-")}{(e.Rules is null ? "" : $" [{e.Rules}]")}",
+            SpamLogStage.Data => $"{e.Subject} [{e.Tests}]",
+            _ => e.Detail ?? e.Subject,
+        };
+        Console.WriteLine($"{e.Time.ToLocalTime():MM-dd HH:mm} {e.Stage,-9} {e.Action,-13} {score}  {who}  {what}");
+    }
+
+    Console.WriteLine($"({entries.Count} Einträge; Details: mailadmin spamlog show <sitzung>)");
+}
+
+void PrintStatistics(SpamLogStatistics s)
+{
+    Console.WriteLine($"Spam-Auswertung seit {s.Since.ToLocalTime():yyyy-MM-dd HH:mm}");
+    Console.WriteLine();
+    Console.WriteLine($"  Abgelehnt (Blacklist):        {s.RejectedConnections,6}");
+    Console.WriteLine($"  Abgelehnt (SPF):              {s.RejectedSenders,6}");
+    Console.WriteLine($"  Abgelehnt (DMARC):            {s.RejectedMessages,6}");
+    Console.WriteLine($"  Greylisting zurückgestellt:   {s.GreylistDeferrals,6}");
+    Console.WriteLine($"  Angenommene Nachrichten:      {s.Messages,6}   davon Spam {s.Spam} ({(s.Messages == 0 ? 0 : 100.0 * s.Spam / s.Messages):0}%)");
+    Console.WriteLine($"  Zugestellt: Posteingang {s.DeliveredInbox}, Junk {s.DeliveredJunk}, andere Ordner {s.DeliveredOther}; verworfen {s.Discarded}; nicht weitergeleitet {s.NotForwarded}");
+    Console.WriteLine();
+    Console.WriteLine("  Score-Verteilung:");
+    var max = Math.Max(1, s.ScoreBuckets.Max(b => b.Count));
+    foreach (var (bucket, count) in s.ScoreBuckets)
+    {
+        Console.WriteLine($"    {bucket,-6} {count,6}  {new string('#', (int)Math.Ceiling(30.0 * count / max) * Math.Sign(count))}");
+    }
+
+    if (s.Tests.Count > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  Test                    Gewicht  in Ham  in Spam  Fehlalarm  übersehen");
+        foreach (var t in s.Tests)
+        {
+            Console.WriteLine($"    {t.Name,-22} {t.Weight,6:0.0}  {t.InHam,6}  {t.InSpam,7}  {t.InFalsePositives,9}  {t.InFalseNegatives,9}");
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine($"  Feedback der Benutzer: {s.FalsePositives.Count} Fehlalarm(e) (aus Junk geholt), {s.FalseNegatives.Count} übersehen (nach Junk verschoben)");
+    foreach (var e in s.FalsePositives.Take(10))
+    {
+        Console.WriteLine($"    Fehlalarm  {e.Score,5:0.0}  {e.HeaderFrom}  {e.Subject}  [{e.Tests}]");
+    }
+
+    foreach (var e in s.FalseNegatives.Take(10))
+    {
+        Console.WriteLine($"    übersehen  {e.Score,5:0.0}  {e.HeaderFrom}  {e.Subject}  [{e.Tests}]");
+    }
+
+    if (s.Rules.Count > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  Regeln (Treffer):");
+        foreach (var (rule, count) in s.Rules)
+        {
+            Console.WriteLine($"    {count,6}  {rule}");
+        }
+    }
+
+    if (s.TopSpamSenders.Count > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  Häufigste Spam-Absender: " + string.Join(", ", s.TopSpamSenders.Select(x => $"{x.Domain} ({x.Count})")));
+    }
+
+    if (s.TopRejectedIps.Count > 0)
+    {
+        Console.WriteLine("  Häufigste abgelehnte IPs: " + string.Join(", ", s.TopRejectedIps.Select(x => $"{x.Ip} ({x.Count})")));
+    }
+
+    Console.WriteLine();
+    Console.WriteLine(s.Hints.Count == 0 ? "  Keine Auffälligkeiten." : "  Hinweise:");
+    foreach (var hint in s.Hints)
+    {
+        Console.WriteLine($"    • {hint}");
+    }
+}
+
+static DateTimeOffset ParseSince(string value)
+{
+    var unit = value[^1];
+    if (unit is 'm' or 'h' or 'd' && int.TryParse(value[..^1], out var amount))
+    {
+        return DateTimeOffset.UtcNow - (unit == 'm' ? TimeSpan.FromMinutes(amount) : unit == 'h' ? TimeSpan.FromHours(amount) : TimeSpan.FromDays(amount));
+    }
+
+    return DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out var date)
+        ? date
+        : throw new ArgumentException($"Ungültige Zeitangabe '{value}' – z. B. 30m, 24h, 7d oder 2026-10-01.");
 }
 
 void CheckScope(string scope)

@@ -7,6 +7,7 @@ using Mailserver.AntiSpam.Dns;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Routing;
+using Mailserver.Core.SpamLogging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
@@ -14,8 +15,11 @@ using MimeKit;
 namespace Mailserver.AntiSpam;
 
 /// <summary>State of one inbound SMTP session, collected across MAIL FROM, RCPT TO and DATA.</summary>
-public sealed class InboundSession(IPAddress? ip, string? helo)
+public sealed class InboundSession(IPAddress? ip, string? helo, string? sessionId = null)
 {
+    /// <summary>Identifies the SMTP session in the spam log.</summary>
+    public string SessionId { get; } = sessionId ?? Guid.NewGuid().ToString("N");
+
     public IPAddress? Ip { get; } = ip is { IsIPv4MappedToIPv6: true } ? ip.MapToIPv4() : ip;
     public string Helo { get; } = helo ?? "";
     public bool ConnectionChecked { get; internal set; }
@@ -40,6 +44,7 @@ public sealed class SpamFilter(
     DnsBlocklistChecker blocklists,
     Greylist greylist,
     AccountStore accounts,
+    SpamLog spamLog,
     ILogger<SpamFilter> logger)
 {
     private SpamOptions Settings => options.Value.Spam;
@@ -76,6 +81,8 @@ public sealed class SpamFilter(
         if (session.Listings.Any(l => double.IsPositiveInfinity(l.Score)))
         {
             logger.LogInformation("Rejecting {Ip}: listed in {Zones}", session.Ip, string.Join(", ", session.Listings.Select(l => l.Zone)));
+            Log(session, SpamLogStage.Connect, SpamLogAction.Rejected,
+                detail: "listed in " + string.Join(", ", session.Listings.Select(l => l.Zone)));
             return Rejection(session);
         }
 
@@ -99,6 +106,7 @@ public sealed class SpamFilter(
         session.Spf = await spf.CheckAsync(session.Ip!, sender, session.Helo, cancellationToken);
         if (Settings.RejectSpfFail && session.Spf.Result == SpfResult.Fail)
         {
+            Log(session, SpamLogStage.Sender, SpamLogAction.Rejected, detail: $"SPF fail ({session.Spf.Mechanism})");
             return $"5.7.23 SPF of {session.Spf.Domain} does not allow [{session.Ip}] to send";
         }
 
@@ -114,11 +122,18 @@ public sealed class SpamFilter(
             return true;
         }
 
-        return greylist.Check(session.Ip!, session.MailFrom, recipient);
+        if (greylist.Check(session.Ip!, session.MailFrom, recipient))
+        {
+            return true;
+        }
+
+        Log(session, SpamLogStage.Recipient, SpamLogAction.Deferred, recipient: recipient, detail: "greylisted");
+        return false;
     }
 
     /// <summary>Content checks on DATA: DKIM, DMARC and scoring. Produces the headers to add.</summary>
-    public async Task<FilterResult> CheckMessageAsync(InboundSession session, byte[] rawMessage, CancellationToken cancellationToken)
+    public async Task<FilterResult> CheckMessageAsync(InboundSession session, byte[] rawMessage, IReadOnlyList<string> recipients,
+        CancellationToken cancellationToken)
     {
         if (session.Trusted)
         {
@@ -135,6 +150,13 @@ public sealed class SpamFilter(
 
         var tests = new List<(string Name, double Score)>();
         void Add(string name, double score) => tests.Add((name, score));
+
+        void LogMessage(string action, double? score, IReadOnlyList<SpamTest> scored, string? detail) =>
+            Log(session, SpamLogStage.Data, action, recipient: string.Join(", ", recipients), message: message, score: score,
+                tests: scored.Count == 0 ? null : string.Join(',', scored),
+                dkim: dkimResults.Count == 0 ? "none" : string.Join(',', dkimResults.Select(d => $"{d.Result.ToString().ToLowerInvariant()}:{d.Domain}")),
+                dmarc: dmarcOutcome.FromDomain.Length == 0 ? null : $"{dmarcOutcome.Result.ToString().ToLowerInvariant()} p={dmarcOutcome.Policy.ToString().ToLowerInvariant()}",
+                detail: detail);
 
         switch (spfOutcome.Result)
         {
@@ -159,6 +181,7 @@ public sealed class SpamFilter(
             if (dmarcOutcome.Policy == DmarcPolicy.Reject && Settings.EnforceDmarcReject)
             {
                 logger.LogInformation("Rejecting message from [{Ip}]: DMARC of {Domain} fails with p=reject", session.Ip, dmarcOutcome.FromDomain);
+                LogMessage(SpamLogAction.Rejected, null, [], "DMARC p=reject");
                 return new FilterResult($"5.7.1 Message rejected by DMARC policy of {dmarcOutcome.FromDomain}", InboundVerdict.Clean, "");
             }
 
@@ -209,7 +232,8 @@ public sealed class SpamFilter(
         var total = Math.Round(tests.Sum(t => t.Score), 1);
         var isSpam = total >= Settings.JunkThreshold;
         var discard = Settings.DeleteThreshold > 0 && total >= Settings.DeleteThreshold;
-        var verdict = new InboundVerdict(total, isSpam, discard, tests.Select(t => t.Name).ToList());
+        var verdict = new InboundVerdict(total, isSpam, discard, tests.Select(t => new SpamTest(t.Name, t.Score)).ToList(), session.SessionId);
+        LogMessage(isSpam ? SpamLogAction.Spam : SpamLogAction.Accepted, total, verdict.Tests, discard ? "above delete threshold" : null);
 
         var headers = new StringBuilder()
             .Append(AuthenticationResults(session, spfOutcome, dkimResults, dmarcOutcome))
@@ -252,6 +276,29 @@ public sealed class SpamFilter(
 
         return $"Authentication-Results: {options.Value.Hostname};\r\n\t{string.Join(";\r\n\t", parts)}\r\n";
     }
+
+    private void Log(InboundSession session, string stage, string action, string? recipient = null, MimeMessage? message = null,
+        double? score = null, string? tests = null, string? dkim = null, string? dmarc = null, string? detail = null) =>
+        spamLog.Write(new SpamLogEntry
+        {
+            Session = session.SessionId,
+            Stage = stage,
+            Action = action,
+            ClientIp = session.Ip?.ToString(),
+            ReverseDns = session.ReverseDns,
+            Helo = session.Helo,
+            MailFrom = session.MailFrom,
+            Recipient = recipient,
+            HeaderFrom = message?.From.Mailboxes.FirstOrDefault()?.Address,
+            Subject = message?.Subject,
+            MessageId = message?.MessageId,
+            Score = score,
+            Tests = tests,
+            Spf = session.Spf is { } spfOutcome ? $"{spfOutcome.Result.ToString().ToLowerInvariant()}:{spfOutcome.Domain}" : null,
+            Dkim = dkim,
+            Dmarc = dmarc,
+            Detail = detail,
+        });
 
     private bool IsTrusted(IPAddress ip) =>
         (Settings.TrustLoopback && IPAddress.IsLoopback(ip)) ||

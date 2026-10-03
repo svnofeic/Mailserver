@@ -16,7 +16,7 @@ internal static class SessionInfo
     {
         if (!context.Properties.TryGetValue(InboundKey, out var value) || value is not Mailserver.AntiSpam.InboundSession session)
         {
-            session = new Mailserver.AntiSpam.InboundSession(GetRemoteAddress(context), GetHelo(context));
+            session = new Mailserver.AntiSpam.InboundSession(GetRemoteAddress(context), GetHelo(context), context.SessionId.ToString("N"));
             context.Properties[InboundKey] = session;
         }
 

@@ -1,8 +1,11 @@
 using System.Net;
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using MailKit;
+using MailKit.Net.Imap;
 using Mailserver.AntiSpam.Dns;
 using Mailserver.Core.Rules;
+using Mailserver.Core.SpamLogging;
 using Microsoft.Extensions.DependencyInjection;
 using MimeKit;
 
@@ -109,6 +112,57 @@ public sealed class SpamIntegrationTests : IAsyncLifetime
         Assert.Empty(Messages("alice", "Junk"));
     }
 
+    [Fact]
+    public async Task Logs_checks_delivery_and_user_feedback()
+    {
+        _dns.Ptr.Clear();
+        await SendAsync("ceo@spoofer.test", "Rechnung offen");
+        var log = _server.Services.GetRequiredService<SpamLog>();
+
+        var data = Assert.Single(log.Query(new SpamLogQuery(Stage: SpamLogStage.Data)));
+        Assert.Equal(SpamLogAction.Spam, data.Action);
+        Assert.Equal("127.0.0.1", data.ClientIp);
+        Assert.Equal("ceo@spoofer.test", data.MailFrom);
+        Assert.Equal("Rechnung offen", data.Subject);
+        Assert.Contains("SPF_FAIL=3.5", data.Tests);
+        Assert.StartsWith("fail:spoofer.test", data.Spf);
+
+        var delivery = Assert.Single(log.Query(new SpamLogQuery(Session: data.Session, Stage: SpamLogStage.Delivery)));
+        Assert.Equal("Junk", delivery.Folder);
+        Assert.Equal("alice@example.test", delivery.Recipient);
+
+        // The user disagrees and moves the message back to the inbox.
+        using var imap = new ImapClient { ServerCertificateValidationCallback = (_, _, _, _) => true };
+        await imap.ConnectAsync("127.0.0.1", _server.ImapsPort, SecureSocketOptions.SslOnConnect);
+        await imap.AuthenticateAsync("alice@example.test", TestServer.Password);
+        var junk = imap.GetFolder(SpecialFolder.Junk);
+        await junk.OpenAsync(FolderAccess.ReadWrite);
+        await junk.MoveToAsync(new UniqueId(1), imap.Inbox);
+
+        var feedback = Assert.Single(log.Query(new SpamLogQuery(Stage: SpamLogStage.Feedback)));
+        Assert.Equal(SpamLogAction.MarkedHam, feedback.Action);
+        Assert.Equal(data.Score, feedback.Score);
+        Assert.Equal(data.MessageId, feedback.MessageId);
+        Assert.Contains("SPF_FAIL", feedback.Tests);
+        Assert.Single(SpamLogReport.Build(log.Query(new SpamLogQuery()), DateTimeOffset.MinValue, 5).FalsePositives);
+    }
+
+    [Fact]
+    public async Task Logs_rejections_and_rule_discards()
+    {
+        await Assert.ThrowsAsync<SmtpCommandException>(() => SendAsync("billing@strict.test", "Rechnung"));
+        var rules = _server.Services.GetRequiredService<RuleStore>();
+        var delete = RuleParser.Parse(["--if", "betreff", "enthält", "gewonnen", "--then", "löschen", "--name", "Gewinnspiel"]);
+        rules.Add("*", delete.Name, delete.Conditions, delete.Action);
+        await SendAsync("news@sender.test", "Sie haben gewonnen");
+
+        var log = _server.Services.GetRequiredService<SpamLog>();
+        var rejected = Assert.Single(log.Query(new SpamLogQuery(Action: SpamLogAction.Rejected)));
+        Assert.Equal("DMARC p=reject", rejected.Detail);
+        var discarded = Assert.Single(log.Query(new SpamLogQuery(Action: SpamLogAction.Discarded)));
+        Assert.Equal("Gewinnspiel", discarded.Rules);
+    }
+
     private List<Core.Storage.StoredMessage> Messages(string user, string folder) =>
         _server.HostMailboxes.ListMessages(_server.HostMailboxes.GetFolder(_server.User(user).Id, folder)!.Id).ToList();
 
@@ -155,6 +209,11 @@ public sealed class GreylistingIntegrationTests : IAsyncLifetime
 
         await SendAsync();
         Assert.Single(_server.Inbox("alice"));
+
+        var log = (SpamLog)_server.Services.GetService(typeof(SpamLog))!;
+        var deferred = Assert.Single(log.Query(new SpamLogQuery(Action: SpamLogAction.Deferred)));
+        Assert.Equal("alice@example.test", deferred.Recipient);
+        Assert.Equal("greylisted", deferred.Detail);
     }
 
     private async Task SendAsync()

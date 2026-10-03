@@ -3,6 +3,7 @@ using System.Text;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Security;
+using Mailserver.Core.SpamLogging;
 using Mailserver.Core.Storage;
 using Mailserver.Imap.Protocol;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,7 @@ public sealed partial class ImapSession(
     MailboxStore mailboxes,
     AuthThrottle throttle,
     FolderWatcher watcher,
+    SpamLog spamLog,
     MailserverOptions options,
     ILogger logger)
 {

@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Security;
+using Mailserver.Core.SpamLogging;
 using Mailserver.Core.Storage;
 using Mailserver.Imap.Protocol;
 using Mailserver.Imap.Session;
@@ -24,6 +25,7 @@ public sealed class ImapServer(
     AuthThrottle throttle,
     FolderWatcher watcher,
     CertificateProvider certificates,
+    SpamLog spamLog,
     ILogger<ImapServer> logger) : BackgroundService
 {
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(30);
@@ -117,7 +119,7 @@ public sealed class ImapServer(
 
                 await using var connection = new ImapConnection(stream);
                 var session = new ImapSession(connection, remote, implicitTls, hasCertificate && !implicitTls ? AuthenticateTlsAsync : null,
-                    accounts, mailboxes, throttle, watcher, options.Value, logger);
+                    accounts, mailboxes, throttle, watcher, spamLog, options.Value, logger);
                 await session.RunAsync(stoppingToken);
             }
         }

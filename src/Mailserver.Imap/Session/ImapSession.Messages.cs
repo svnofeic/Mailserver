@@ -1,4 +1,5 @@
 using System.Globalization;
+using Mailserver.Core.SpamLogging;
 using Mailserver.Core.Storage;
 using Mailserver.Imap.Mime;
 using Mailserver.Imap.Protocol;
@@ -311,6 +312,7 @@ public sealed partial class ImapSession
             return;
         }
 
+        RecordSpamFeedback(selected, uids, target);
         var pairs = move ? mailboxes.Move(selected.Folder.Id, uids, target.Id) : mailboxes.Copy(selected.Folder.Id, uids, target.Id);
         var copyUid = pairs.Count == 0
             ? ""
@@ -429,5 +431,55 @@ public sealed partial class ImapSession
         }
 
         throw new ImapParseException("Invalid date-time");
+    }
+
+    /// <summary>
+    /// Moving a message into or out of Junk is the user's verdict on the spam filter. It is logged with the score the message
+    /// received, so false positives and false negatives can be analysed later ("mailadmin spamlog stats").
+    /// </summary>
+    private void RecordSpamFeedback(SelectedFolder selected, IReadOnlyList<long> uids, Folder target)
+    {
+        const string junk = "Junk";
+        var intoJunk = target.Name == junk && selected.Folder.Name != junk;
+        var outOfJunk = selected.Folder.Name == junk && target.Name is not (junk or "Trash");
+        if (!spamLog.Enabled || !(intoJunk || outOfJunk))
+        {
+            return;
+        }
+
+        foreach (var uid in uids)
+        {
+            if (selected.GetMessage(uid) is not { } message)
+            {
+                continue;
+            }
+
+            MimeKit.HeaderList headers;
+            try
+            {
+                using var stream = File.OpenRead(mailboxes.GetMessagePath(message));
+                headers = MimeKit.HeaderList.Load(stream);
+            }
+            catch (Exception ex) when (ex is IOException or FormatException)
+            {
+                continue;
+            }
+
+            var status = headers["X-Spam-Status"];
+            var testsIndex = status?.IndexOf("tests=", StringComparison.Ordinal) ?? -1;
+            spamLog.Write(new SpamLogEntry
+            {
+                Stage = SpamLogStage.Feedback,
+                Action = intoJunk ? SpamLogAction.MarkedSpam : SpamLogAction.MarkedHam,
+                Recipient = _account!.Address.ToString(),
+                HeaderFrom = headers[MimeKit.HeaderId.From],
+                Subject = headers[MimeKit.HeaderId.Subject],
+                MessageId = MimeKit.Utils.MimeUtils.EnumerateReferences(headers[MimeKit.HeaderId.MessageId] ?? "").FirstOrDefault(),
+                Score = double.TryParse(headers["X-Spam-Score"], NumberStyles.Float, CultureInfo.InvariantCulture, out var score) ? score : null,
+                Tests = testsIndex < 0 ? null : string.Concat(status![(testsIndex + 6)..].Where(c => !char.IsWhiteSpace(c))),
+                Folder = target.Name,
+                Detail = $"{selected.Folder.Name} -> {target.Name}",
+            });
+        }
     }
 }
