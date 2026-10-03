@@ -1,0 +1,89 @@
+@page
+@model Mailserver.Web.Pages.Admin.Log.StatsModel
+@{ ViewData["Title"] = "Spam-Statistik"; var s = Model.Stats; }
+<h1>Spam-Statistik</h1>
+<form method="get" class="row card">
+    <label>Zeitraum
+        <select name="days">@foreach (var d in new[] { 1, 7, 30, 90 }) { <option value="@d" selected="@(Model.Days == d)">@(d == 1 ? "24 Stunden" : $"{d} Tage")</option> }</select>
+    </label>
+    <button type="submit" class="secondary">Anzeigen</button>
+    <a href="/Admin/Log">Zum Verlauf</a>
+</form>
+
+<div class="tiles">
+    <div class="tile"><div class="label">Angenommen</div><div class="value">@s.Messages</div></div>
+    <div class="tile"><div class="label">davon Spam</div><div class="value">@s.Spam</div><div class="small muted">@(s.Messages == 0 ? "–" : $"{100.0 * s.Spam / s.Messages:0} %")</div></div>
+    <div class="tile"><div class="label">Abgelehnt (Blacklist)</div><div class="value">@s.RejectedConnections</div></div>
+    <div class="tile"><div class="label">Abgelehnt (SPF/DMARC)</div><div class="value">@(s.RejectedSenders + s.RejectedMessages)</div></div>
+    <div class="tile"><div class="label">Greylisting</div><div class="value">@s.GreylistDeferrals</div></div>
+    <div class="tile"><div class="label">Fehlalarme</div><div class="value">@s.FalsePositives.Count</div><div class="small muted">aus Spam geholt</div></div>
+    <div class="tile"><div class="label">Übersehen</div><div class="value">@s.FalseNegatives.Count</div><div class="small muted">nach Spam verschoben</div></div>
+</div>
+
+@if (s.Hints.Count > 0)
+{
+    <h2>Hinweise</h2>
+    <div class="card"><ul class="hints">@foreach (var hint in s.Hints) { <li>@hint</li> }</ul></div>
+}
+
+<h2>Verteilung der Spam-Scores</h2>
+<div class="card">
+    @{ var max = Math.Max(1, s.ScoreBuckets.Max(b => b.Count)); }
+    <div class="bars" role="table" aria-label="Anzahl Nachrichten je Score-Bereich">
+        @foreach (var (bucket, count) in s.ScoreBuckets)
+        {
+            <div role="cell" class="small">@bucket Punkte</div>
+            <div class="track" role="cell"><div class="fill @(count == 0 ? "zero" : "")" style="width: @(count == 0 ? 0 : Math.Max(1, 100.0 * count / max).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%" title="@bucket Punkte: @count Nachrichten"></div></div>
+            <div role="cell" class="num small">@count</div>
+        }
+    </div>
+    <p class="small muted" style="margin-bottom: 0">Ab @Format.Number(Model.Threshold) Punkten landet eine Mail im Spam-Ordner.</p>
+</div>
+
+@if (s.Tests.Count > 0)
+{
+    <h2>Tests</h2>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Test</th><th class="num">Punkte</th><th class="num">in normalen Mails</th><th class="num">in Spam</th><th class="num">bei Fehlalarmen</th><th class="num">bei übersehenem Spam</th></tr></thead>
+            <tbody>
+            @foreach (var t in s.Tests)
+            {
+                <tr><td class="mono">@t.Name</td><td class="num">@Format.Number(t.Weight)</td><td class="num">@t.InHam</td><td class="num">@t.InSpam</td><td class="num">@t.InFalsePositives</td><td class="num">@t.InFalseNegatives</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (s.FalsePositives.Count + s.FalseNegatives.Count > 0)
+{
+    <h2>Rückmeldungen der Benutzer</h2>
+    <partial name="_LogTable" model="Model.Feedback" />
+}
+
+<h2>Regeln</h2>
+@if (s.Rules.Count == 0) { <div class="card muted">Keine Regel hat in diesem Zeitraum gegriffen.</div> }
+else
+{
+    <div class="table-wrap"><table><thead><tr><th>Regel</th><th class="num">Treffer</th></tr></thead><tbody>
+        @foreach (var (rule, count) in s.Rules) { <tr><td>@rule</td><td class="num">@count</td></tr> }
+    </tbody></table></div>
+}
+
+<div class="row" style="align-items: flex-start">
+    <div style="flex: 1; min-width: 260px">
+        <h2>Häufigste Spam-Absender</h2>
+        <div class="table-wrap"><table><tbody>
+            @foreach (var (domain, count) in s.TopSpamSenders) { <tr><td>@domain</td><td class="num">@count</td></tr> }
+            @if (s.TopSpamSenders.Count == 0) { <tr><td class="muted">–</td></tr> }
+        </tbody></table></div>
+    </div>
+    <div style="flex: 1; min-width: 260px">
+        <h2>Häufigste abgelehnte IPs</h2>
+        <div class="table-wrap"><table><tbody>
+            @foreach (var (ip, count) in s.TopRejectedIps) { <tr><td><a href="/Admin/Log?ip=@ip&since=30d">@ip</a></td><td class="num">@count</td></tr> }
+            @if (s.TopRejectedIps.Count == 0) { <tr><td class="muted">–</td></tr> }
+        </tbody></table></div>
+    </div>
+</div>

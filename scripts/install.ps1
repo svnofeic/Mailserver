@@ -4,7 +4,7 @@
 .DESCRIPTION
     - copies the package to the install directory (an existing appsettings.json and the data folder are kept)
     - registers the "Mailserver" service with automatic start and restart on failure
-    - opens the firewall for SMTP (25), submission (587), SMTPS (465), IMAP (143) and IMAPS (993)
+    - opens the firewall for SMTP (25), submission (587), SMTPS (465), IMAP (143), IMAPS (993) and the web interface (8443)
     - restricts the data folder to SYSTEM and Administrators
 .EXAMPLE
     .\install.ps1 -Package C:\Temp\publish
@@ -36,9 +36,9 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 icacls $dataDir /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
 
 if (-not $service) {
-    New-Service -Name $ServiceName -DisplayName 'Mailserver (SMTP/IMAP)' -StartupType Automatic `
+    New-Service -Name $ServiceName -DisplayName 'Mailserver (SMTP/IMAP/Web)' -StartupType Automatic `
         -BinaryPathName "`"$(Join-Path $InstallDir 'Mailserver.exe')`"" `
-        -Description 'Eigener Mailserver: SMTP-Empfang, Submission, Zustellung und IMAP.' | Out-Null
+        -Description 'Eigener Mailserver: SMTP, IMAP und Weboberfläche.' | Out-Null
     # Restart after 1 minute on crashes; reset the failure counter after one day.
     sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/300000 | Out-Null
 }
@@ -48,7 +48,8 @@ foreach ($rule in @(
         @{ Name = 'Mailserver Submission 587'; Port = 587 },
         @{ Name = 'Mailserver SMTPS 465'; Port = 465 },
         @{ Name = 'Mailserver IMAP 143'; Port = 143 },
-        @{ Name = 'Mailserver IMAPS 993'; Port = 993 })) {
+        @{ Name = 'Mailserver IMAPS 993'; Port = 993 },
+        @{ Name = 'Mailserver Web 8443'; Port = 8443 })) {
     if (-not (Get-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -DisplayName $rule.Name -Direction Inbound -Protocol TCP -LocalPort $rule.Port -Action Allow | Out-Null
     }
@@ -56,3 +57,4 @@ foreach ($rule in @(
 
 Write-Host "Installed to $InstallDir."
 Write-Host "Next: edit $InstallDir\appsettings.json (Hostname, Tls), then: Start-Service $ServiceName"
+Write-Host "Web interface: https://<hostname>:8443  (grant admin rights first: mailadmin user admin <address> on)"

@@ -65,14 +65,14 @@ public static class SpamLogReport
         if (nearMissesFp > 0)
         {
             hints.Add($"{nearMissesFp} Fehlalarm(e) knapp über der Schwelle ({junkThreshold:0.#}–{junkThreshold + 2:0.#} Punkte): " +
-                      "Spam:JunkThreshold etwas anheben oder für bekannte Absender eine Regel 'kein-spam' anlegen.");
+                      "die Spam-Schwelle (Einstellungen bzw. Spam:JunkThreshold) etwas anheben oder für bekannte Absender eine Regel \"nie als Spam\" anlegen.");
         }
 
         var nearMissesFn = falseNegatives.Count(f => f.Score >= junkThreshold - 2);
         if (nearMissesFn > 0)
         {
             hints.Add($"{nearMissesFn} übersehene Spam-Mail(s) knapp unter der Schwelle ({junkThreshold - 2:0.#}–{junkThreshold:0.#} Punkte): " +
-                      "Spam:JunkThreshold etwas senken.");
+                      "die Spam-Schwelle (Einstellungen bzw. Spam:JunkThreshold) etwas senken.");
         }
 
         foreach (var test in tests.Where(t => t.InFalsePositives >= 2 && t.InFalsePositives * 2 >= falsePositives.Count))

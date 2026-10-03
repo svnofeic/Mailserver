@@ -138,6 +138,10 @@ public sealed class Database
         CREATE INDEX ix_spam_log_session ON spam_log (session);
         CREATE INDEX ix_spam_log_message_id ON spam_log (message_id);
         """,
+        """
+        ALTER TABLE accounts ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX ix_spam_log_recipient ON spam_log (recipient);
+        """,
     ];
 
     private readonly string _connectionString;

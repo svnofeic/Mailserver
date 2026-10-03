@@ -1,0 +1,58 @@
+@page
+@model Mailserver.Web.Pages.Admin.Mailboxes.EditModel
+@{ ViewData["Title"] = Model.Account.Address.ToString(); }
+<h1>Postfach @Model.Account.Address</h1>
+
+<div class="tiles">
+    <div class="tile"><div class="label">Belegt</div><div class="value">@Format.Size(Model.Usage)</div></div>
+    <div class="tile"><div class="label">Nachrichten</div><div class="value">@Model.Folders.Sum(f => f.Status.Messages)</div></div>
+    <div class="tile"><div class="label">Regeln</div><div class="value">@Model.RuleCount</div></div>
+</div>
+
+<h2>Einstellungen</h2>
+<form method="post" asp-page-handler="Save" asp-route-address="@Model.Account.Address" class="card">
+    <div class="row">
+        <label>Speicherlimit in MB (0 = ohne)<input name="quotaMb" type="number" min="0" value="@(Model.Account.QuotaBytes / 1024 / 1024)" style="width: 120px" /></label>
+        <label class="check"><input type="checkbox" name="enabled" value="true" checked="@Model.Account.Enabled" disabled="@Model.IsSelf" /> aktiv</label>
+        <label class="check"><input type="checkbox" name="isAdmin" value="true" checked="@Model.Account.IsAdmin" disabled="@Model.IsSelf" /> Admin</label>
+        @if (Model.IsSelf)
+        {
+            <input type="hidden" name="enabled" value="true" /><input type="hidden" name="isAdmin" value="true" />
+        }
+        <button type="submit">Speichern</button>
+    </div>
+    @if (Model.IsSelf) { <p class="small muted">Das eigene Postfach kann man sich nicht selbst deaktivieren oder die Admin-Rechte entziehen.</p> }
+</form>
+
+<h2>Passwort setzen</h2>
+<form method="post" asp-page-handler="Password" asp-route-address="@Model.Account.Address" class="row card">
+    <label>Neues Passwort (mind. @PasswordRules.MinLength Zeichen)<input name="password" type="password" autocomplete="new-password" required /></label>
+    <button type="submit">Passwort setzen</button>
+    <span class="small muted">Alle angemeldeten Sitzungen des Postfachs werden beendet.</span>
+</form>
+
+<h2>Ordner</h2>
+<div class="table-wrap">
+    <table>
+        <thead><tr><th>Ordner</th><th class="num">Nachrichten</th><th class="num">Ungelesen</th></tr></thead>
+        <tbody>
+        @foreach (var (folder, status) in Model.Folders)
+        {
+            <tr><td>@Format.FolderName(folder.Name)</td><td class="num">@status.Messages</td><td class="num">@status.Unseen</td></tr>
+        }
+        </tbody>
+    </table>
+</div>
+<p><a href="/Admin/Rules?scope=@Model.Account.Address">Regeln des Postfachs</a> · <a href="/Admin/Log?search=@Model.Account.Address">Verlauf des Postfachs</a></p>
+
+@if (!Model.IsSelf)
+{
+    <h2>Postfach löschen</h2>
+    <div class="card">
+        <details class="confirm"><summary>Postfach löschen …</summary>
+            <form method="post" asp-page-handler="Delete" asp-route-address="@Model.Account.Address" class="inline">
+                <button type="submit" class="danger">@Model.Account.Address mit allen Nachrichten löschen</button>
+            </form>
+        </details>
+    </div>
+}

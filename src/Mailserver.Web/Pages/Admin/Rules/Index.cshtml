@@ -1,0 +1,20 @@
+@page
+@model Mailserver.Web.Pages.Admin.Rules.IndexModel
+@{
+    ViewData["Title"] = "Alle Regeln";
+    ViewData["Editable"] = true;
+    ViewData["ShowScope"] = true;
+}
+<h1>Alle Regeln</h1>
+<p class="muted">Reihenfolge bei jeder Zustellung: zuerst Regeln für alle Postfächer, dann für die Domain, dann für das Postfach – jeweils nach Priorität.</p>
+<form method="get" class="row card">
+    <label>Gilt für
+        <select name="scope">
+            <option value="">alle Bereiche</option>
+            @foreach (var (value, label) in Model.Scopes) { <option value="@value" selected="@(Model.Scope == value)">@label</option> }
+        </select>
+    </label>
+    <button type="submit" class="secondary">Filtern</button>
+    <a class="button" href="/Rules/Edit?scope=@(Model.Scope ?? "*")">Neue Regel</a>
+</form>
+<partial name="_RuleList" model="Model.Rules" view-data="ViewData" />

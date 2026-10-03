@@ -21,6 +21,8 @@ public sealed class MailserverOptions
 
     public ImapOptions Imap { get; set; } = new();
 
+    public WebOptions Web { get; set; } = new();
+
     public DeliveryOptions Delivery { get; set; } = new();
 
     public SecurityOptions Security { get; set; } = new();
@@ -54,6 +56,7 @@ public sealed class SmtpOptions
     /// </remarks>
     public string[] ListenAddresses { get; set; } = [];
 
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<string> EffectiveListenAddresses => ListenAddressDefaults.Resolve(ListenAddresses);
 
     /// <summary>MX port for mail from other servers. 0 disables it.</summary>
@@ -71,11 +74,32 @@ public sealed class SmtpOptions
     public TimeSpan SessionTimeout { get; set; } = TimeSpan.FromMinutes(5);
 }
 
+public sealed class WebOptions
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Addresses to bind to. Empty means "0.0.0.0".</summary>
+    public string[] ListenAddresses { get; set; } = [];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<string> EffectiveListenAddresses => ListenAddressDefaults.Resolve(ListenAddresses);
+
+    /// <summary>HTTPS port of the web interface. 443 is usually taken by IIS on Windows servers.</summary>
+    public int HttpsPort { get; set; } = 8443;
+
+    /// <summary>Plain HTTP without TLS. Only for local testing — never enable this in production. 0 disables it.</summary>
+    public int InsecureHttpPort { get; set; }
+
+    /// <summary>Sign-in lifetime; extended with every request.</summary>
+    public TimeSpan SessionTimeout { get; set; } = TimeSpan.FromMinutes(60);
+}
+
 public sealed class ImapOptions
 {
     /// <summary>Addresses to bind to, e.g. "0.0.0.0" and "::". Empty means "0.0.0.0".</summary>
     public string[] ListenAddresses { get; set; } = [];
 
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<string> EffectiveListenAddresses => ListenAddressDefaults.Resolve(ListenAddresses);
 
     /// <summary>IMAP with STARTTLS. Logins are only accepted after STARTTLS. 0 disables it.</summary>
@@ -166,6 +190,7 @@ public sealed class SpamOptions
     /// <summary>Blocklists to query. Empty means the defaults (Spamhaus ZEN: reject, SpamCop: +3).</summary>
     public DnsBlocklistOptions[] DnsBlocklists { get; set; } = [];
 
+    [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyList<DnsBlocklistOptions> EffectiveDnsBlocklists =>
         !DnsBlocklistsEnabled ? [] :
         DnsBlocklists.Length > 0 ? DnsBlocklists :

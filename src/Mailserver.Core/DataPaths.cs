@@ -23,6 +23,9 @@ public sealed class DataPaths
 
     public string DkimRoot => Path.Combine(Root, "dkim");
 
+    /// <summary>Settings changed in the web interface; overrides appsettings.json and is reloaded while running.</summary>
+    public string SettingsFile => Path.Combine(Root, "settings.json");
+
     public void EnsureCreated()
     {
         Directory.CreateDirectory(Root);

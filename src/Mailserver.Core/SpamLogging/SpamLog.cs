@@ -19,6 +19,12 @@ public static class SpamLogStage
     public const string Delivery = "delivery";
     /// <summary>A user moved a message into or out of Junk.</summary>
     public const string Feedback = "feedback";
+    /// <summary>A signed-in user sent a message (SMTP submission).</summary>
+    public const string Submission = "submission";
+    /// <summary>Delivery to a remote server: sent, deferred or failed.</summary>
+    public const string Outbound = "outbound";
+    /// <summary>Failed sign-ins and lockouts (SMTP, IMAP, web).</summary>
+    public const string Auth = "auth";
 }
 
 public static class SpamLogAction
@@ -34,6 +40,10 @@ public static class SpamLogAction
     public const string MarkedSpam = "marked-spam";
     /// <summary>Moved out of Junk by the user: the filter was wrong (false positive) unless a rule put it there.</summary>
     public const string MarkedHam = "marked-ham";
+    public const string Sent = "sent";
+    public const string Failed = "failed";
+    public const string LoginFailed = "login-failed";
+    public const string LockedOut = "locked-out";
 }
 
 public sealed record SpamLogEntry
@@ -70,7 +80,8 @@ public sealed record SpamLogQuery(
     string? Session = null,
     string? Search = null,
     double? MinScore = null,
-    int Limit = int.MaxValue);
+    int Limit = int.MaxValue,
+    string? Recipient = null);
 
 /// <summary>
 /// Persistent log of spam decisions. Writing never throws: a full disk or locked database must not stop mail delivery.
@@ -119,6 +130,17 @@ public sealed class SpamLog(Database database, IOptions<MailserverOptions> optio
         }
     }
 
+    /// <summary>Failed sign-in (or the lockout it caused) for SMTP, IMAP or the web interface.</summary>
+    public void WriteAuthFailure(string protocol, string user, System.Net.IPAddress? ip, bool lockedOut) =>
+        Write(new SpamLogEntry
+        {
+            Stage = SpamLogStage.Auth,
+            Action = lockedOut ? SpamLogAction.LockedOut : SpamLogAction.LoginFailed,
+            ClientIp = ip?.ToString(),
+            Recipient = user,
+            Detail = protocol,
+        });
+
     public IReadOnlyList<SpamLogEntry> Query(SpamLogQuery query)
     {
         var where = new List<string>();
@@ -135,6 +157,8 @@ public sealed class SpamLog(Database database, IOptions<MailserverOptions> optio
         if (query.ClientIp is { } ip) Add("client_ip = $ip", "$ip", ip);
         if (query.Session is { } session) Add("session = $session", "$session", session);
         if (query.MinScore is { } min) Add("score >= $min", "$min", min);
+        if (query.Recipient is { } recipient) Add("(recipient = $rcpt OR recipient LIKE $rcptlike)", "$rcpt", recipient);
+        if (query.Recipient is { } r2) parameters.Add(("$rcptlike", $"%{r2}%"));
         if (query.Search is { Length: > 0 } search)
         {
             Add("(mail_from LIKE $search OR header_from LIKE $search OR recipient LIKE $search OR subject LIKE $search OR message_id LIKE $search)",
@@ -142,8 +166,7 @@ public sealed class SpamLog(Database database, IOptions<MailserverOptions> optio
         }
 
         var sql = $"""
-            SELECT id, time_utc, session, stage, action, client_ip, reverse_dns, helo, mail_from, recipient, header_from, subject, message_id,
-                   score, tests, spf, dkim, dmarc, folder, rules, detail
+            SELECT {Columns}
             FROM spam_log {(where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "")}
             ORDER BY time_utc DESC, id DESC LIMIT $limit
             """;
@@ -151,6 +174,35 @@ public sealed class SpamLog(Database database, IOptions<MailserverOptions> optio
 
         using var connection = database.Open();
         return connection.Query(sql, Read, parameters.ToArray());
+    }
+
+    /// <summary>
+    /// Received messages with their checks: delivery entries (optionally for one mailbox) joined with the "data" entry of the
+    /// same session, which carries sender, subject, score and tests.
+    /// </summary>
+    public IReadOnlyList<(SpamLogEntry Delivery, SpamLogEntry? Message)> Deliveries(string? recipient, DateTimeOffset since, int limit)
+    {
+        var deliveries = Query(new SpamLogQuery(Since: since, Stage: SpamLogStage.Delivery, Limit: limit, Recipient: recipient))
+            .Where(d => recipient is null || string.Equals(d.Recipient, recipient, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var sessions = deliveries.Select(d => d.Session).OfType<string>().Distinct().ToList();
+        var messages = new Dictionary<string, SpamLogEntry>();
+        using (var connection = database.Open())
+        {
+            foreach (var chunk in sessions.Chunk(200))
+            {
+                var names = chunk.Select((_, i) => $"$s{i}").ToList();
+                var rows = connection.Query(
+                    $"SELECT {Columns} FROM spam_log WHERE stage = 'data' AND session IN ({string.Join(',', names)})",
+                    Read, chunk.Select((value, i) => ($"$s{i}", (object?)value)).ToArray());
+                foreach (var row in rows)
+                {
+                    messages[row.Session!] = row;
+                }
+            }
+        }
+
+        return deliveries.Select(d => (d, d.Session is null ? null : messages.GetValueOrDefault(d.Session))).ToList();
     }
 
     /// <summary>Deletes entries older than the retention period; returns the number removed.</summary>
@@ -163,6 +215,10 @@ public sealed class SpamLog(Database database, IOptions<MailserverOptions> optio
     private int Cleanup(SqliteConnection connection, DateTimeOffset now) =>
         connection.Execute("DELETE FROM spam_log WHERE time_utc < $cutoff",
             ("$cutoff", now.AddDays(-Math.Max(1, options.Value.Spam.Log.RetentionDays)).ToDbTime()));
+
+    private const string Columns =
+        "id, time_utc, session, stage, action, client_ip, reverse_dns, helo, mail_from, recipient, header_from, subject, message_id, " +
+        "score, tests, spf, dkim, dmarc, folder, rules, detail";
 
     private static string? Trim(string? value) =>
         value is null ? null : value.Length <= MaxTextLength ? value : value[..MaxTextLength];

@@ -10,7 +10,7 @@ public sealed class AccountStore(Database database)
 {
     private const int MaxAliasDepth = 10;
 
-    private const string AccountColumns = "a.id, a.local_part, d.name, a.quota_bytes, a.enabled";
+    private const string AccountColumns = "a.id, a.local_part, d.name, a.quota_bytes, a.enabled, a.is_admin";
 
     // ---- Domains ----
 
@@ -85,6 +85,22 @@ public sealed class AccountStore(Database database)
 
     public bool SetEnabled(EmailAddress address, bool enabled) => UpdateAccount(address, "enabled = $value", enabled ? 1 : 0);
 
+    public bool SetAdmin(EmailAddress address, bool isAdmin) => UpdateAccount(address, "is_admin = $value", isAdmin ? 1 : 0);
+
+    /// <summary>
+    /// Changes whenever password, enabled state or admin flag change. Web sessions store it and are ended when it differs,
+    /// so a password change or deactivation signs out every browser.
+    /// </summary>
+    public string? GetSecurityStamp(long accountId)
+    {
+        using var connection = database.Open();
+        var row = connection.Query("SELECT password_hash, enabled, is_admin FROM accounts WHERE id = $id",
+            r => $"{r.GetString(0)}|{r.GetInt64(1)}|{r.GetInt64(2)}", ("$id", accountId)).SingleOrDefault();
+        return row is null
+            ? null
+            : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(row)))[..32];
+    }
+
     public bool RemoveAccount(EmailAddress address)
     {
         using var connection = database.Open();
@@ -127,7 +143,7 @@ public sealed class AccountStore(Database database)
             using var connection = database.Open();
             var row = connection.Query(
                 $"SELECT {AccountColumns}, a.password_hash FROM accounts a JOIN domains d ON d.id = a.domain_id WHERE a.local_part = $local AND d.name = $domain",
-                r => (Account: ReadAccount(r), Hash: r.GetString(5)),
+                r => (Account: ReadAccount(r), Hash: r.GetString(6)),
                 ("$local", address.LocalPart), ("$domain", address.Domain)).SingleOrDefault();
             account = row.Account;
             hash = row.Hash;
@@ -284,7 +300,7 @@ public sealed class AccountStore(Database database)
     private static Domain ReadDomain(SqliteDataReader r) => new(r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2));
 
     private static Account ReadAccount(SqliteDataReader r) =>
-        new(r.GetInt64(0), EmailAddress.Create(r.GetString(1), r.GetString(2)), r.GetInt64(3), r.GetInt64(4) != 0);
+        new(r.GetInt64(0), EmailAddress.Create(r.GetString(1), r.GetString(2)), r.GetInt64(3), r.GetInt64(4) != 0, r.GetInt64(5) != 0);
 
     private static Alias ReadAlias(SqliteDataReader r) =>
         new(EmailAddress.Parse(r.GetString(0)), r.GetString(1).Split(',', StringSplitOptions.RemoveEmptyEntries).Select(EmailAddress.Parse).ToList());

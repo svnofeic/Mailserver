@@ -1,0 +1,35 @@
+@using Mailserver.Core.SpamLogging
+@model IReadOnlyList<SpamLogEntry>
+@if (Model.Count == 0)
+{
+    <div class="card muted">Keine Einträge für diese Auswahl.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Zeit</th><th>Schritt</th><th>Ergebnis</th><th class="num">Score</th><th>IP / Absender</th><th>Empfänger</th><th>Betreff / Details</th></tr></thead>
+            <tbody>
+            @foreach (var e in Model)
+            {
+                <tr>
+                    <td class="small" style="white-space: nowrap">
+                        @if (e.Session is not null) { <a href="/Admin/Log/Session?id=@e.Session">@Format.Time(e.Time)</a> } else { @Format.Time(e.Time) }
+                    </td>
+                    <td class="small">@Format.Stage(e.Stage)</td>
+                    <td><span class="pill @Format.Tone(e.Action)">@Format.Action(e.Action)</span></td>
+                    <td class="num">@Format.Score(e.Score)</td>
+                    <td class="small">@e.ClientIp<div>@(e.HeaderFrom ?? e.MailFrom)</div></td>
+                    <td class="small">@e.Recipient@if (e.Folder is not null) { <div class="muted">→ @Format.FolderName(e.Folder)</div> }</td>
+                    <td class="small">
+                        @if (e.Subject is not null) { <div>@e.Subject</div> }
+                        @if (e.Rules is not null) { <div>Regel: @e.Rules</div> }
+                        @if (e.Detail is not null) { <div class="muted">@e.Detail</div> }
+                        @if (e.Tests is not null) { <div class="muted mono">@e.Tests.Replace(",", ", ")</div> }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

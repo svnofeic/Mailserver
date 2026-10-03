@@ -1,0 +1,86 @@
+@page
+@using Mailserver.Core.Rules
+@model Mailserver.Web.Pages.Rules.EditModel
+@{ ViewData["Title"] = Model.Id is null ? "Neue Regel" : "Regel bearbeiten"; }
+<h1>@ViewData["Title"]</h1>
+
+<form method="post">
+    <input type="hidden" name="id" value="@Model.Id" />
+    <div class="card">
+        @if (Model.IsAdmin && Model.Id is null)
+        {
+            <div class="row" style="margin-bottom: 12px">
+                <label>Gilt für
+                    <select name="Form.Scope">
+                        @foreach (var (value, label) in Model.Scopes)
+                        {
+                            <option value="@value" selected="@(Model.Form.Scope == value)">@label</option>
+                        }
+                    </select>
+                </label>
+            </div>
+        }
+        else
+        {
+            <p class="small muted">Gilt für: <strong>@(Model.Form.Scope == "*" ? "alle Postfächer" : Model.Form.Scope)</strong></p>
+            <input type="hidden" name="Form.Scope" value="@Model.Form.Scope" />
+        }
+
+        <h2 style="margin-top: 0">Wenn</h2>
+        <div class="row" style="margin-bottom: 10px">
+            <label class="check"><input type="radio" name="Form.MatchAll" value="true" checked="@Model.Form.MatchAll" /> alle Bedingungen zutreffen</label>
+            <label class="check"><input type="radio" name="Form.MatchAll" value="false" checked="@(!Model.Form.MatchAll)" /> eine Bedingung zutrifft</label>
+        </div>
+        @for (var i = 0; i < Model.Form.Conditions.Count; i++)
+        {
+            var c = Model.Form.Conditions[i];
+            <div class="row" style="margin-bottom: 8px">
+                <select name="Form.Conditions[@i].Field" aria-label="Feld">
+                    @foreach (var (value, label) in RuleForm.FieldOptions)
+                    {
+                        <option value="@value" selected="@(c.Field == value)">@label</option>
+                    }
+                </select>
+                <input name="Form.Conditions[@i].HeaderName" value="@c.HeaderName" placeholder="Kopfzeile, z. B. List-Id" aria-label="Kopfzeile" size="18" />
+                <select name="Form.Conditions[@i].Operator" aria-label="Vergleich">
+                    @foreach (var (value, label) in RuleForm.OperatorOptions)
+                    {
+                        <option value="@value" selected="@(c.Operator == value)">@label</option>
+                    }
+                </select>
+                <input name="Form.Conditions[@i].Value" value="@c.Value" placeholder="@(i == 0 ? "z. B. Sie haben gewonnen" : "(leer = nicht verwendet)")" aria-label="Wert" size="34" />
+            </div>
+        }
+        <p class="small muted">„enthält“ findet Wortgruppen überall im Text, Groß-/Kleinschreibung egal. Für den Spam-Score eine Zahl angeben (z. B. 12).</p>
+
+        <h2>Dann</h2>
+        <div class="row">
+            <label>Aktion
+                <select name="Form.Action">
+                    @foreach (var (value, label) in RuleForm.ActionOptions)
+                    {
+                        <option value="@value" selected="@(Model.Form.Action == value)">@label</option>
+                    }
+                </select>
+            </label>
+            <label>Ordner (nur bei „verschieben“)
+                <input name="Form.Folder" value="@Model.Form.Folder" list="folders" placeholder="z. B. Newsletter" />
+                <datalist id="folders">
+                    @foreach (var folder in Model.Folders) { <option value="@folder"></option> }
+                </datalist>
+            </label>
+        </div>
+
+        <h2>Optionen</h2>
+        <div class="row">
+            <label>Name (optional)<input name="Form.Name" value="@Model.Form.Name" size="40" /></label>
+            <label>Priorität<input name="Form.Priority" type="number" value="@Model.Form.Priority" min="0" max="10000" style="width: 90px" /></label>
+            <label class="check"><input type="checkbox" name="Form.Stop" value="false" checked="@(!Model.Form.Stop)" /> danach weitere Regeln prüfen</label>
+            <label class="check"><input type="checkbox" name="Form.Enabled" value="true" checked="@Model.Form.Enabled" /> aktiv</label>
+            <input type="hidden" name="Form.Stop" value="true" />
+            <input type="hidden" name="Form.Enabled" value="false" />
+        </div>
+    </div>
+    <button type="submit">Speichern</button>
+    <a class="button secondary" href="@Model.BackUrl">Abbrechen</a>
+</form>

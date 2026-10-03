@@ -1,0 +1,71 @@
+@using Mailserver.Core.SpamLogging
+@model IReadOnlyList<(SpamLogEntry Delivery, SpamLogEntry? Message)>
+@{
+    var showRecipient = ViewData["ShowRecipient"] is true;
+    var allowActions = ViewData["AllowActions"] is true;
+}
+@if (Model.Count == 0)
+{
+    <div class="card muted">Keine Einträge im gewählten Zeitraum.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>Zeit</th>
+                @if (showRecipient) { <th>Empfänger</th> }
+                <th>Absender</th><th>Betreff</th><th class="num">Score</th><th>Ergebnis</th><th>Grund</th>
+                @if (allowActions) { <th></th> }
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var (delivery, message) in Model)
+            {
+                var discarded = delivery.Action == SpamLogAction.Discarded;
+                var junk = delivery.Folder == "Junk";
+                <tr>
+                    <td class="small">@Format.Time(delivery.Time)</td>
+                    @if (showRecipient) { <td class="small">@delivery.Recipient</td> }
+                    <td class="small">@message?.HeaderFrom<div class="muted">@(message?.MailFrom != message?.HeaderFrom ? message?.MailFrom : null)</div></td>
+                    <td>@message?.Subject</td>
+                    <td class="num">@Format.Score(delivery.Score)</td>
+                    <td>
+                        @if (discarded) { <span class="pill bad">gelöscht</span> }
+                        else if (junk) { <span class="pill bad">Spam</span> }
+                        else { <span class="pill good">@Format.FolderName(delivery.Folder)</span> }
+                    </td>
+                    <td class="small">
+                        @if (delivery.Rules is not null) { <div>Regel: @delivery.Rules</div> }
+                        @if (delivery.Detail is not null) { <div class="muted">@delivery.Detail</div> }
+                        @if (message?.Tests is { } tests) { <div class="muted mono">@tests.Replace(",", ", ")</div> }
+                    </td>
+                    @if (allowActions)
+                    {
+                        <td class="small">
+                            @if (message?.HeaderFrom is { Length: > 0 } sender)
+                            {
+                                @if (junk || discarded)
+                                {
+                                    <form method="post" asp-page="/Spam/Index" asp-page-handler="Allow" class="inline">
+                                        <input type="hidden" name="sender" value="@sender" />
+                                        <button type="submit" class="secondary" title="Regel anlegen: Mails dieses Absenders nie als Spam behandeln">Absender erlauben</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <form method="post" asp-page="/Spam/Index" asp-page-handler="Block" class="inline">
+                                        <input type="hidden" name="sender" value="@sender" />
+                                        <button type="submit" class="secondary" title="Regel anlegen: Mails dieses Absenders in den Spam-Ordner">Als Spam einstufen</button>
+                                    </form>
+                                }
+                            }
+                        </td>
+                    }
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,33 @@
+@page
+@model Mailserver.Web.Pages.Admin.Queue.IndexModel
+@{ ViewData["Title"] = "Warteschlange"; }
+<h1>Warteschlange</h1>
+<p class="muted">Ausgehende Mails, die noch nicht zugestellt werden konnten. Nach @Model.LifetimeDays Tagen ohne Erfolg bekommt der Absender eine Unzustellbarkeitsmeldung.</p>
+@if (Model.Entries.Count > 0)
+{
+    <form method="post" asp-page-handler="Retry" class="inline"><button type="submit">Alle sofort erneut versuchen</button></form>
+}
+<div class="table-wrap" style="margin-top: 12px">
+    <table>
+        <thead><tr><th>Eingereiht</th><th>Absender</th><th>Empfänger</th><th class="num">Versuche</th><th>Nächster Versuch</th><th>Letzter Fehler</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var e in Model.Entries)
+        {
+            <tr>
+                <td class="small">@Format.Time(e.Created)</td>
+                <td class="small">@(e.Sender.Length == 0 ? "<> (Bounce)" : e.Sender)</td>
+                <td class="small">@e.Recipient</td>
+                <td class="num">@e.Attempts</td>
+                <td class="small">@Format.Time(e.NextAttempt)</td>
+                <td class="small">@e.LastError</td>
+                <td>
+                    <details class="confirm"><summary>Entfernen</summary>
+                        <form method="post" asp-page-handler="Delete" class="inline"><input type="hidden" name="id" value="@e.Id" /><button type="submit" class="danger">Ohne Zustellung entfernen</button></form>
+                    </details>
+                </td>
+            </tr>
+        }
+        @if (Model.Entries.Count == 0) { <tr><td colspan="7" class="muted">Die Warteschlange ist leer.</td></tr> }
+        </tbody>
+    </table>
+</div>

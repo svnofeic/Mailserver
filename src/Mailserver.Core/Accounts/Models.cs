@@ -2,7 +2,8 @@ namespace Mailserver.Core.Accounts;
 
 public sealed record Domain(long Id, string Name, string? DkimSelector);
 
-public sealed record Account(long Id, EmailAddress Address, long QuotaBytes, bool Enabled);
+/// <param name="IsAdmin">May use the administration area of the web interface.</param>
+public sealed record Account(long Id, EmailAddress Address, long QuotaBytes, bool Enabled, bool IsAdmin = false);
 
 public sealed record Alias(EmailAddress Address, IReadOnlyList<EmailAddress> Targets);
 

@@ -1,0 +1,20 @@
+@page
+@model Mailserver.Web.Pages.Admin.Log.SessionModel
+@{ ViewData["Title"] = "Mail-Details"; }
+<h1>Alle Schritte</h1>
+<p><a href="/Admin/Log">← zurück zum Verlauf</a></p>
+@foreach (var e in Model.Entries)
+{
+    <div class="card">
+        <div><strong>@Format.Time(e.Time)</strong> · @Format.Stage(e.Stage) · <span class="pill @Format.Tone(e.Action)">@Format.Action(e.Action)</span></div>
+        <table class="small" style="margin-top: 8px">
+            <tbody>
+            @foreach (var (label, value) in Model.Fields(e))
+            {
+                <tr><th style="width: 140px">@label</th><td class="@(label is "Tests" or "Message-ID" ? "mono" : "")">@value</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+@if (Model.Entries.Count == 0) { <div class="card muted">Keine Einträge gefunden.</div> }

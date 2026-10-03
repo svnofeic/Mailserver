@@ -15,21 +15,7 @@ public sealed class RuleStore(Database database)
         bool matchAll = true, bool stop = true, int priority = 100)
     {
         scope = NormalizeScope(scope);
-        if (conditions.Count == 0)
-        {
-            throw new ArgumentException("Eine Regel braucht mindestens eine Bedingung.", nameof(conditions));
-        }
-
-        if (action == RuleAction.Move && string.IsNullOrWhiteSpace(argument))
-        {
-            throw new ArgumentException("Für 'move' muss ein Ordner angegeben werden.", nameof(argument));
-        }
-
-        foreach (var condition in conditions.Where(c => c.Operator == RuleOperator.Regex))
-        {
-            // Fail early on invalid patterns instead of at delivery time.
-            _ = new System.Text.RegularExpressions.Regex(condition.Value);
-        }
+        Validate(conditions, action, argument);
 
         using var connection = database.Open();
         var id = (long)connection.Scalar(
@@ -41,6 +27,24 @@ public sealed class RuleStore(Database database)
             ("$conditions", JsonSerializer.Serialize(conditions, Json)), ("$action", action.ToString()), ("$argument", argument),
             ("$stop", stop ? 1 : 0), ("$now", DateTimeOffset.UtcNow.ToDbTime()))!;
         return Get(id)!;
+    }
+
+    /// <summary>Replaces a rule's definition; scope and id stay.</summary>
+    public MailRule Update(long id, string name, IReadOnlyList<RuleCondition> conditions, RuleAction action, string? argument,
+        bool matchAll, bool stop, int priority, bool enabled)
+    {
+        Validate(conditions, action, argument);
+        using var connection = database.Open();
+        connection.Execute(
+            """
+            UPDATE rules SET name = $name, priority = $priority, enabled = $enabled, match_all = $all, conditions = $conditions,
+                             action = $action, argument = $argument, stop = $stop
+            WHERE id = $id
+            """,
+            ("$id", id), ("$name", name), ("$priority", priority), ("$enabled", enabled ? 1 : 0), ("$all", matchAll ? 1 : 0),
+            ("$conditions", JsonSerializer.Serialize(conditions, Json)), ("$action", action.ToString()), ("$argument", argument),
+            ("$stop", stop ? 1 : 0));
+        return Get(id) ?? throw new InvalidOperationException("Regel nicht gefunden.");
     }
 
     public MailRule? Get(long id)
@@ -82,6 +86,44 @@ public sealed class RuleStore(Database database)
             .ThenBy(r => r.Priority)
             .ThenBy(r => r.Id)
             .ToList();
+    }
+
+    private static void Validate(IReadOnlyList<RuleCondition> conditions, RuleAction action, string? argument)
+    {
+        if (conditions.Count == 0)
+        {
+            throw new ArgumentException("Eine Regel braucht mindestens eine Bedingung.", nameof(conditions));
+        }
+
+        if (action == RuleAction.Move && string.IsNullOrWhiteSpace(argument))
+        {
+            throw new ArgumentException("Zum Verschieben muss ein Ordner angegeben werden.", nameof(argument));
+        }
+
+        foreach (var condition in conditions)
+        {
+            if (string.IsNullOrEmpty(condition.Value))
+            {
+                throw new ArgumentException("Jede Bedingung braucht einen Wert.", nameof(conditions));
+            }
+
+            if (condition.Field == RuleField.Header && string.IsNullOrWhiteSpace(condition.HeaderName))
+            {
+                throw new ArgumentException("Für eine Kopfzeilen-Bedingung muss der Name der Kopfzeile angegeben werden.", nameof(conditions));
+            }
+
+            if (condition.Field == RuleField.SpamScore && !double.TryParse(condition.Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out _))
+            {
+                throw new ArgumentException("Der Spam-Score muss eine Zahl sein (z. B. 7.5).", nameof(conditions));
+            }
+
+            if (condition.Operator == RuleOperator.Regex)
+            {
+                // Fail early on invalid patterns instead of at delivery time.
+                _ = new System.Text.RegularExpressions.Regex(condition.Value);
+            }
+        }
     }
 
     public static string NormalizeScope(string scope)

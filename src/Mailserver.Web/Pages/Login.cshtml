@@ -1,0 +1,16 @@
+@page
+@model Mailserver.Web.Pages.LoginModel
+@{ ViewData["Title"] = "Anmelden"; }
+<div class="login card">
+    <h1>Anmelden</h1>
+    @if (Model.Error is not null)
+    {
+        <div class="notice bad" role="alert">@Model.Error</div>
+    }
+    <form method="post">
+        <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+        <label>E-Mail-Adresse<input name="email" type="email" autocomplete="username" required value="@Model.Email" autofocus /></label>
+        <label>Passwort<input name="password" type="password" autocomplete="current-password" required /></label>
+        <button type="submit">Anmelden</button>
+    </form>
+</div>

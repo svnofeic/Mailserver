@@ -1,0 +1,49 @@
+@page
+@model Mailserver.Web.Pages.Admin.Domains.DetailsModel
+@{ ViewData["Title"] = Model.Domain.Name; }
+<h1>Domain @Model.Domain.Name</h1>
+
+<h2>DNS-Einträge</h2>
+<div class="table-wrap">
+    <table>
+        <thead><tr><th>Name</th><th>Typ</th><th>Wert</th></tr></thead>
+        <tbody>
+        @foreach (var record in Model.Records)
+        {
+            <tr>
+                <td class="mono">@record.Name</td><td>@record.Type</td>
+                <td><div class="mono">@record.Value</div>@if (record.Hint is not null) { <div class="small muted">@record.Hint</div> }</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<h2>DKIM</h2>
+<div class="card">
+    <p>Aktiver Selector: <strong class="mono">@(Model.Domain.DkimSelector ?? "keiner")</strong></p>
+    <p class="small muted">Schlüsselwechsel: neuen Schlüssel erzeugen, DNS-Eintrag setzen, einige Stunden warten, dann aktivieren.</p>
+    <form method="post" asp-page-handler="Rotate" asp-route-name="@Model.Domain.Name" class="inline"><button type="submit" class="secondary">Neuen DKIM-Schlüssel erzeugen</button></form>
+    @foreach (var selector in Model.InactiveSelectors)
+    {
+        <div style="margin-top: 10px">
+            <div class="mono small">@(selector)._domainkey.@(Model.Domain.Name) TXT „@Model.DkimRecords[selector]“</div>
+            <form method="post" asp-page-handler="Activate" asp-route-name="@Model.Domain.Name" class="inline">
+                <input type="hidden" name="selector" value="@selector" />
+                <button type="submit">Selector @selector aktivieren</button>
+            </form>
+        </div>
+    }
+</div>
+
+<h2>Postfächer</h2>
+<ul>@foreach (var account in Model.Accounts) { <li><a href="/Admin/Mailboxes/Edit?address=@account.Address">@account.Address</a></li> }</ul>
+<p><a class="button secondary" href="/Admin/Mailboxes?domain=@Model.Domain.Name">Postfach anlegen</a> <a class="button secondary" href="/Admin/Rules/?scope=@Model.Domain.Name">Regeln der Domain</a></p>
+
+<h2>Domain löschen</h2>
+<div class="card">
+    <p class="small">Löscht die Domain mit <strong>allen @Model.Accounts.Count Postfächern</strong>, deren Ordnern und Regeln. Die Nachrichtendateien bleiben im Datenverzeichnis liegen.</p>
+    <details class="confirm"><summary>Domain löschen …</summary>
+        <form method="post" asp-page-handler="Delete" asp-route-name="@Model.Domain.Name" class="inline"><button type="submit" class="danger">@Model.Domain.Name endgültig löschen</button></form>
+    </details>
+</div>

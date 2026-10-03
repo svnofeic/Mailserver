@@ -1,0 +1,144 @@
+@{
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var isAdmin = User.HasClaim(WebHosting.AdminClaim, "true");
+    var path = Context.Request.Path.Value ?? "/";
+    string Active(string prefix, bool exact = false) =>
+        (exact ? path.Equals(prefix, StringComparison.OrdinalIgnoreCase) : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "active" : "";
+}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] – Mailserver</title>
+    <style>
+        :root {
+            --bg: #f5f6f8; --surface: #ffffff; --text: #1d2330; --muted: #5d6676; --border: #dde1e7;
+            --accent: #2457c5; --accent-text: #ffffff; --good: #1d7a46; --bad: #b42318; --warn: #a15c07;
+            --good-bg: #e7f5ec; --bad-bg: #fdecea; --warn-bg: #fdf3e2; --nav: #1d2330; --nav-text: #e8ebf0; --chart: #2457c5;
+        }
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #14171d; --surface: #1d2129; --text: #e6e9ee; --muted: #9aa3b2; --border: #2f3542;
+                --accent: #6d9cff; --accent-text: #0d1220; --good: #5fd08f; --bad: #ff8a80; --warn: #f2b45c;
+                --good-bg: #183324; --bad-bg: #3a1d1b; --warn-bg: #3a2c15; --nav: #0e1015; --nav-text: #e6e9ee; --chart: #5b8def;
+            }
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+        a { color: var(--accent); }
+        header { background: var(--nav); color: var(--nav-text); }
+        .bar { max-width: 1200px; margin: 0 auto; padding: 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+        .brand { font-weight: 700; padding: 12px 0; margin-right: 12px; }
+        nav { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; }
+        nav a { color: var(--nav-text); text-decoration: none; padding: 12px 10px; border-bottom: 3px solid transparent; }
+        nav a.active, nav a:hover { border-bottom-color: var(--accent); }
+        nav .sep { width: 1px; background: #4a5263; margin: 8px 6px; }
+        .who { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 8px 0; }
+        .who form { margin: 0; }
+        .who button { background: transparent; color: var(--nav-text); border: 1px solid #4a5263; }
+        main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+        h1 { font-size: 24px; margin: 4px 0 16px; }
+        h2 { font-size: 18px; margin: 28px 0 10px; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+        .tile .label { color: var(--muted); font-size: 13px; }
+        .tile .value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+        .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+        th { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+        tr:last-child td { border-bottom: 0; }
+        td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .muted { color: var(--muted); }
+        .small { font-size: 13px; }
+        .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
+        .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+        .pill.good { background: var(--good-bg); color: var(--good); }
+        .pill.bad { background: var(--bad-bg); color: var(--bad); }
+        .pill.warn { background: var(--warn-bg); color: var(--warn); }
+        .notice { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; border: 1px solid; }
+        .notice.good { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+        .notice.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+        .notice.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+        form.inline { display: inline; margin: 0; }
+        .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+        .row > label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+        label.check { flex-direction: row !important; align-items: center; gap: 6px !important; color: var(--text) !important; font-size: 15px !important; }
+        input, select, textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+        textarea { width: 100%; min-height: 90px; }
+        input[type=checkbox] { width: 16px; height: 16px; }
+        button, .button { font: inherit; cursor: pointer; border-radius: 6px; padding: 6px 12px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); text-decoration: none; display: inline-block; }
+        button.secondary, .button.secondary { background: transparent; color: var(--accent); }
+        button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+        details.confirm { display: inline-block; }
+        details.confirm summary { cursor: pointer; color: var(--bad); list-style: none; display: inline-block; padding: 6px 4px; }
+        details.confirm summary::-webkit-details-marker { display: none; }
+        details.confirm[open] summary { margin-right: 6px; }
+        .bars { display: grid; grid-template-columns: max-content 1fr max-content; gap: 6px 10px; align-items: center; }
+        .bars .track { height: 16px; }
+        .bars .fill { background: var(--chart); border-radius: 0 4px 4px 0; height: 16px; min-width: 2px; }
+        .bars .fill.zero { min-width: 0; }
+        .login { max-width: 380px; margin: 60px auto; }
+        .login label { display: block; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+        .login input { width: 100%; margin-top: 4px; }
+        ul.hints { margin: 0; padding-left: 20px; }
+        @@media (max-width: 760px) {
+            .bar { display: grid; grid-template-columns: 1fr auto; padding: 0 12px; }
+            .brand { padding: 10px 0; }
+            nav { grid-column: 1 / -1; grid-row: 2; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+            nav a { white-space: nowrap; padding: 8px 8px 10px; }
+            .who { grid-column: 2; grid-row: 1; }
+            .who span { display: none; }
+            main { padding: 16px 12px 40px; }
+            h1 { font-size: 21px; }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div class="bar">
+        <div class="brand">✉ Mailserver</div>
+        @if (signedIn)
+        {
+            <nav>
+                <a class="@Active("/", exact: true)" href="/">Übersicht</a>
+                <a class="@Active("/Rules")" href="/Rules">Regeln</a>
+                <a class="@Active("/Spam")" href="/Spam">Spam-Verlauf</a>
+                <a class="@Active("/Account")" href="/Account/Password">Passwort</a>
+                @if (isAdmin)
+                {
+                    <span class="sep"></span>
+                    <a class="@Active("/Admin", exact: true)" href="/Admin">Admin</a>
+                    <a class="@Active("/Admin/Domains")" href="/Admin/Domains">Domains</a>
+                    <a class="@Active("/Admin/Mailboxes")" href="/Admin/Mailboxes">Postfächer</a>
+                    <a class="@Active("/Admin/Aliases")" href="/Admin/Aliases">Aliase</a>
+                    <a class="@Active("/Admin/Rules")" href="/Admin/Rules">Alle Regeln</a>
+                    <a class="@Active("/Admin/Queue")" href="/Admin/Queue">Warteschlange</a>
+                    <a class="@Active("/Admin/Log")" href="/Admin/Log">Verlauf</a>
+                    <a class="@Active("/Admin/Settings")" href="/Admin/Settings">Einstellungen</a>
+                }
+            </nav>
+            <div class="who">
+                <span>@User.Identity!.Name</span>
+                <form method="post" asp-page="/Logout"><button type="submit">Abmelden</button></form>
+            </div>
+        }
+    </div>
+</header>
+<main>
+    @if (TempData.Peek("Message") is string message)
+    {
+        <div class="notice good" role="status">@message</div>
+        TempData.Remove("Message");
+    }
+    @if (TempData.Peek("ErrorMessage") is string error)
+    {
+        <div class="notice bad" role="alert">@error</div>
+        TempData.Remove("ErrorMessage");
+    }
+    @RenderBody()
+</main>
+</body>
+</html>

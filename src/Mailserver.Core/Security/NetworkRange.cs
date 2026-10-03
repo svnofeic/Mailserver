@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace Mailserver.AntiSpam.Dns;
+namespace Mailserver.Core.Security;
 
 /// <summary>An address range in CIDR notation ("192.0.2.0/24", "2001:db8::/32").</summary>
 public readonly record struct NetworkRange(IPAddress Network, int PrefixLength)

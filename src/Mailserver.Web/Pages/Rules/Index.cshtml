@@ -1,0 +1,20 @@
+@page
+@model Mailserver.Web.Pages.Rules.IndexModel
+@{
+    ViewData["Title"] = "Regeln";
+    ViewData["Editable"] = true;
+}
+<h1>Regeln</h1>
+<p class="muted">Regeln werden beim Eingang jeder Mail an <strong>@Model.CurrentAddress</strong> geprüft, in der Reihenfolge der Priorität
+    (kleinere Zahl zuerst). Nach der ersten passenden Regel ist Schluss, außer die Regel sagt „weitere Regeln prüfen“.</p>
+<p><a class="button" href="/Rules/Edit">Neue Regel</a></p>
+<partial name="_RuleList" model="Model.Own" view-data="ViewData" />
+
+@if (Model.Inherited.Count > 0)
+{
+    <h2>Regeln des Administrators</h2>
+    <p class="small muted">Diese Regeln gelten für alle Postfächer bzw. die ganze Domain und werden vor Ihren eigenen geprüft.</p>
+    ViewData["Editable"] = Model.IsAdmin;
+    ViewData["ShowScope"] = true;
+    <partial name="_RuleList" model="Model.Inherited" view-data="ViewData" />
+}

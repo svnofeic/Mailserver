@@ -1,0 +1,47 @@
+@page
+@model Mailserver.Web.Pages.Admin.Mailboxes.IndexModel
+@{ ViewData["Title"] = "Postfächer"; }
+<h1>Postfächer</h1>
+<form method="get" class="row card">
+    <label>Domain
+        <select name="domain">
+            <option value="">alle</option>
+            @foreach (var d in Model.Domains) { <option value="@d" selected="@(Model.Domain == d)">@d</option> }
+        </select>
+    </label>
+    <button type="submit" class="secondary">Filtern</button>
+</form>
+<div class="table-wrap">
+    <table>
+        <thead><tr><th>Adresse</th><th class="num">Belegt</th><th class="num">Limit</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var (account, usage) in Model.Accounts)
+        {
+            <tr>
+                <td><a href="/Admin/Mailboxes/Edit?address=@account.Address">@account.Address</a></td>
+                <td class="num">@Format.Size(usage)</td>
+                <td class="num">@(account.QuotaBytes > 0 ? Format.Size(account.QuotaBytes) : "–")</td>
+                <td>
+                    @if (!account.Enabled) { <span class="pill warn">deaktiviert</span> } else { <span class="pill good">aktiv</span> }
+                    @if (account.IsAdmin) { <span class="pill warn">Admin</span> }
+                </td>
+                <td><a href="/Admin/Mailboxes/Edit?address=@account.Address">Bearbeiten</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<h2>Postfach anlegen</h2>
+<form method="post" class="card">
+    <div class="row">
+        <label>Name<input name="localPart" required placeholder="vorname" size="16" /></label>
+        <label>Domain
+            <select name="domain">@foreach (var d in Model.Domains) { <option value="@d" selected="@(Model.Domain == d)">@d</option> }</select>
+        </label>
+        <label>Passwort (mind. @PasswordRules.MinLength Zeichen)<input name="password" type="password" autocomplete="new-password" required /></label>
+        <label>Speicherlimit in MB (0 = ohne)<input name="quotaMb" type="number" min="0" value="0" style="width: 120px" /></label>
+        <label class="check"><input type="checkbox" name="isAdmin" value="true" /> Admin</label>
+        <button type="submit">Anlegen</button>
+    </div>
+</form>

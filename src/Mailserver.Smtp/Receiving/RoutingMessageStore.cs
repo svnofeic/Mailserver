@@ -20,6 +20,7 @@ internal sealed class RoutingMessageStore(
     MessageRouter router,
     OutgoingMessagePreparer preparer,
     SpamFilter spamFilter,
+    Mailserver.Core.SpamLogging.SpamLog spamLog,
     IOptions<MailserverOptions> options,
     ILogger<RoutingMessageStore> logger,
     bool isSubmission) : IMessageStore
@@ -41,6 +42,7 @@ internal sealed class RoutingMessageStore(
             {
                 var submitted = await preparer.PrepareAsync(Concat(BuildReceivedHeader(context, recipients), body), cancellationToken);
                 await router.RouteAsync(submitted, sender, recipients, allowRelay: true, cancellationToken);
+                LogSubmission(context, sender, recipients, submitted);
                 return SmtpResponse.Ok;
             }
 
@@ -62,6 +64,29 @@ internal sealed class RoutingMessageStore(
             logger.LogError(ex, "Failed to store message in session {Session}", context.SessionId);
             return new SmtpResponse(SmtpReplyCode.Aborted, "4.3.0 Temporary server error, please try again later");
         }
+    }
+
+    private void LogSubmission(ISessionContext context, string sender, IReadOnlyList<EmailAddress> recipients, byte[] message)
+    {
+        MimeKit.HeaderList headers;
+        using (var stream = new MemoryStream(message, writable: false))
+        {
+            headers = MimeKit.HeaderList.Load(stream);
+        }
+
+        spamLog.Write(new Mailserver.Core.SpamLogging.SpamLogEntry
+        {
+            Session = context.SessionId.ToString("N"),
+            Stage = Mailserver.Core.SpamLogging.SpamLogStage.Submission,
+            Action = Mailserver.Core.SpamLogging.SpamLogAction.Accepted,
+            ClientIp = SessionInfo.GetRemoteAddress(context)?.ToString(),
+            MailFrom = sender,
+            Recipient = string.Join(", ", recipients),
+            HeaderFrom = headers[MimeKit.HeaderId.From],
+            Subject = headers[MimeKit.HeaderId.Subject],
+            MessageId = MimeKit.Utils.MimeUtils.EnumerateReferences(headers[MimeKit.HeaderId.MessageId] ?? "").FirstOrDefault(),
+            Detail = $"angemeldet als {context.Authentication.User}",
+        });
     }
 
     private byte[] BuildReceivedHeader(ISessionContext context, IReadOnlyList<EmailAddress> recipients)

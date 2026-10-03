@@ -7,6 +7,7 @@
     <Project Path="src/Mailserver.Migration/Mailserver.Migration.csproj" />
     <Project Path="src/Mailserver.Service/Mailserver.Service.csproj" />
     <Project Path="src/Mailserver.Smtp/Mailserver.Smtp.csproj" />
+    <Project Path="src/Mailserver.Web/Mailserver.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Mailserver.Tests/Mailserver.Tests.csproj" />

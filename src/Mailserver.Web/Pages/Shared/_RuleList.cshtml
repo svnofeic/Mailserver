@@ -1,0 +1,47 @@
+@using Mailserver.Core.Rules
+@model IReadOnlyList<MailRule>
+@{
+    var editable = ViewData["Editable"] is true;
+    var showScope = ViewData["ShowScope"] is true;
+}
+@if (Model.Count == 0)
+{
+    <div class="card muted">Keine Regeln.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead><tr>@if (showScope) { <th>Gilt für</th> }<th class="num">Prio</th><th>Wenn</th><th>Dann</th><th>Status</th>@if (editable) { <th></th> }</tr></thead>
+            <tbody>
+            @foreach (var rule in Model)
+            {
+                <tr>
+                    @if (showScope) { <td class="small">@(rule.Scope == "*" ? "alle Postfächer" : rule.Scope)</td> }
+                    <td class="num">@rule.Priority</td>
+                    <td class="small">
+                        @for (var i = 0; i < rule.Conditions.Count; i++)
+                        {
+                            <div>@(i > 0 ? (rule.MatchAll ? "und " : "oder ") : "")@rule.Conditions[i]</div>
+                        }
+                    </td>
+                    <td class="small">@RuleActionText.Describe(rule.Action, rule.Argument)@(rule.Stop ? "" : ", weitere Regeln prüfen")</td>
+                    <td>@if (rule.Enabled) { <span class="pill good">aktiv</span> } else { <span class="pill warn">inaktiv</span> }</td>
+                    @if (editable)
+                    {
+                        <td class="small" style="white-space: nowrap">
+                            <a class="button secondary" href="/Rules/Edit?id=@rule.Id">Bearbeiten</a>
+                            <form method="post" asp-page="/Rules/Edit" asp-page-handler="Toggle" asp-route-id="@rule.Id" class="inline">
+                                <button type="submit" class="secondary">@(rule.Enabled ? "Deaktivieren" : "Aktivieren")</button>
+                            </form>
+                            <details class="confirm"><summary>Löschen</summary>
+                                <form method="post" asp-page="/Rules/Edit" asp-page-handler="Delete" asp-route-id="@rule.Id" class="inline"><button type="submit" class="danger">Wirklich löschen</button></form>
+                            </details>
+                        </td>
+                    }
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

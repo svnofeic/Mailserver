@@ -1,0 +1,32 @@
+@page
+@model Mailserver.Web.Pages.Spam.IndexModel
+@{
+    ViewData["Title"] = "Spam-Verlauf";
+    ViewData["AllowActions"] = true;
+}
+<h1>Spam-Verlauf</h1>
+<p class="muted">Alle Mails von außen an <strong>@Model.CurrentAddress</strong>, mit dem Ergebnis der Spam-Prüfung. Je höher der Score, desto
+    wahrscheinlicher Spam; ab @Format.Number(Model.Threshold) Punkten landet eine Mail im Spam-Ordner.</p>
+
+<form method="get" class="row card">
+    <label>Zeitraum
+        <select name="days">
+            @foreach (var days in new[] { 1, 7, 30, 90 })
+            {
+                <option value="@days" selected="@(Model.Days == days)">@(days == 1 ? "24 Stunden" : $"{days} Tage")</option>
+            }
+        </select>
+    </label>
+    <label>Anzeigen
+        <select name="filter">
+            <option value="" selected="@(Model.Filter is null)">alle</option>
+            <option value="spam" selected="@(Model.Filter == "spam")">nur Spam/gelöscht</option>
+            <option value="inbox" selected="@(Model.Filter == "inbox")">nur zugestellt</option>
+        </select>
+    </label>
+    <button type="submit" class="secondary">Anzeigen</button>
+</form>
+
+<partial name="_DeliveryTable" model="Model.Entries" view-data="ViewData" />
+<p class="small muted">Tipp: Wird eine Mail fälschlich als Spam erkannt, im Mailprogramm einfach aus dem Spam-Ordner zurückschieben – das
+    wird als Rückmeldung gespeichert. „Absender erlauben“ legt eine Regel an, damit seine Mails immer im Posteingang landen.</p>

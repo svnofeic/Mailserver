@@ -28,6 +28,7 @@ public sealed class SmtpHostedService(
     AuthThrottle throttle,
     CertificateProvider certificates,
     SpamFilter spamFilter,
+    Mailserver.Core.SpamLogging.SpamLog spamLog,
     ILoggerFactory loggerFactory) : BackgroundService
 {
     private readonly ILogger _logger = loggerFactory.CreateLogger<SmtpHostedService>();
@@ -99,12 +100,12 @@ public sealed class SmtpHostedService(
 
         var provider = new SmtpServerProvider();
         provider.Add(isSubmission
-            ? new SubmissionAuthenticator(accounts, throttle, loggerFactory.CreateLogger<SubmissionAuthenticator>())
+            ? new SubmissionAuthenticator(accounts, throttle, spamLog, loggerFactory.CreateLogger<SubmissionAuthenticator>())
             : new RejectingAuthenticator());
         provider.Add(isSubmission
             ? new SubmissionMailboxFilter(accounts)
             : new InboundMailboxFilter(accounts, mailboxes, spamFilter, options));
-        provider.Add((IMessageStore)new RoutingMessageStore(router, preparer, spamFilter, options, loggerFactory.CreateLogger<RoutingMessageStore>(), isSubmission));
+        provider.Add((IMessageStore)new RoutingMessageStore(router, preparer, spamFilter, spamLog, options, loggerFactory.CreateLogger<RoutingMessageStore>(), isSubmission));
 
         var server = new SmtpServer.SmtpServer(builder.Build(), provider);
         server.SessionCreated += (_, e) => SessionInfo.Track(e.Context);

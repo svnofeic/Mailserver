@@ -1,0 +1,32 @@
+@page
+@model Mailserver.Web.Pages.Admin.Aliases.IndexModel
+@{ ViewData["Title"] = "Aliase"; }
+<h1>Aliase und Weiterleitungen</h1>
+<p class="muted">Ein Alias leitet Mails an ein oder mehrere Postfächer weiter. Ziele dürfen auch externe Adressen sein (Weiterleitung).</p>
+<div class="table-wrap">
+    <table>
+        <thead><tr><th>Alias</th><th>Ziele</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var alias in Model.Aliases)
+        {
+            <tr>
+                <td>@alias.Address</td>
+                <td>@string.Join(", ", alias.Targets)</td>
+                <td>
+                    <details class="confirm"><summary>Löschen</summary>
+                        <form method="post" asp-page-handler="Delete" class="inline"><input type="hidden" name="address" value="@alias.Address" /><button type="submit" class="danger">Wirklich löschen</button></form>
+                    </details>
+                </td>
+            </tr>
+        }
+        @if (Model.Aliases.Count == 0) { <tr><td colspan="3" class="muted">Keine Aliase.</td></tr> }
+        </tbody>
+    </table>
+</div>
+
+<h2>Alias anlegen oder ändern</h2>
+<form method="post" class="row card">
+    <label>Alias-Adresse<input name="address" type="email" required placeholder="info@example.de" /></label>
+    <label>Ziele (durch Komma getrennt)<input name="targets" required placeholder="max@example.de, anna@example.de" size="50" /></label>
+    <button type="submit">Speichern</button>
+</form>

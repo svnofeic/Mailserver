@@ -31,12 +31,15 @@ public sealed class AuthThrottle(IOptions<MailserverOptions> options, TimeProvid
         }
     }
 
-    public void RecordFailure(IPAddress? address)
+    /// <summary>Counts a failed login; returns true when this failure locks the address out.</summary>
+    public bool RecordFailure(IPAddress? address)
     {
         if (address is null)
         {
-            return;
+            return false;
         }
+
+        var lockedNow = false;
 
         var settings = options.Value.Security;
         var now = timeProvider.GetUtcNow();
@@ -51,6 +54,7 @@ public sealed class AuthThrottle(IOptions<MailserverOptions> options, TimeProvid
 
             if (++state.Failures >= settings.MaxAuthFailuresPerIp)
             {
+                lockedNow = true;
                 state.LockedUntil = now + settings.AuthLockoutDuration;
                 state.Failures = 0;
                 state.WindowStart = now;
@@ -58,6 +62,7 @@ public sealed class AuthThrottle(IOptions<MailserverOptions> options, TimeProvid
         }
 
         Prune(now);
+        return lockedNow;
     }
 
     public void RecordSuccess(IPAddress? address)

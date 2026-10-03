@@ -7,7 +7,8 @@ using SmtpServer.Protocol;
 
 namespace Mailserver.Smtp.Receiving;
 
-internal sealed class SubmissionAuthenticator(AccountStore accounts, AuthThrottle throttle, ILogger<SubmissionAuthenticator> logger)
+internal sealed class SubmissionAuthenticator(AccountStore accounts, AuthThrottle throttle, Mailserver.Core.SpamLogging.SpamLog spamLog,
+    ILogger<SubmissionAuthenticator> logger)
     : IUserAuthenticator
 {
     public Task<bool> AuthenticateAsync(ISessionContext context, string user, string password, CancellationToken cancellationToken)
@@ -26,8 +27,9 @@ internal sealed class SubmissionAuthenticator(AccountStore accounts, AuthThrottl
             return Task.FromResult(true);
         }
 
-        throttle.RecordFailure(ip);
+        var lockedOut = throttle.RecordFailure(ip);
         logger.LogWarning("Failed login for {User} from {Ip}", user, ip);
+        spamLog.WriteAuthFailure("SMTP", user, ip, lockedOut);
         return Task.FromResult(false);
     }
 }

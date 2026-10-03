@@ -2,6 +2,7 @@ using DnsClient;
 using Mailserver.AntiSpam;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
+using Mailserver.Core.Configuration;
 using Mailserver.Core.Data;
 using Mailserver.Core.Dkim;
 using Mailserver.Core.Queue;
@@ -24,6 +25,9 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddMailserver(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<MailserverOptions>(configuration.GetSection(MailserverOptions.SectionName));
+        // Settings changed in the web interface apply without restart (see LiveOptions).
+        services.AddSingleton<IOptions<MailserverOptions>, LiveOptions>();
+        services.AddSingleton<SettingsStore>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp =>
         {

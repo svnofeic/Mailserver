@@ -299,8 +299,9 @@ public sealed partial class ImapSession(
         var account = accounts.Authenticate(user, password);
         if (account is null)
         {
-            throttle.RecordFailure(remoteAddress);
+            var lockedOut = throttle.RecordFailure(remoteAddress);
             logger.LogWarning("Failed IMAP login for {User} from {Ip}", user, remoteAddress);
+            spamLog.WriteAuthFailure("IMAP", user, remoteAddress, lockedOut);
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             await Respond(command, null, "NO [AUTHENTICATIONFAILED] Invalid credentials", cancellationToken);
             return;

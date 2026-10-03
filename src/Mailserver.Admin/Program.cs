@@ -16,9 +16,17 @@ var configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: true)
     .Build();
-var options = configuration.GetSection(MailserverOptions.SectionName).Get<MailserverOptions>() ?? new MailserverOptions();
+var bootstrap = configuration.GetSection(MailserverOptions.SectionName).Get<MailserverOptions>() ?? new MailserverOptions();
+var paths = new DataPaths(bootstrap.DataDirectory);
 
-var paths = new DataPaths(options.DataDirectory);
+// Settings saved in the web interface override appsettings.json, as in the service.
+var options = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: true)
+    .AddJsonFile(paths.SettingsFile, optional: true)
+    .Build()
+    .GetSection(MailserverOptions.SectionName).Get<MailserverOptions>() ?? bootstrap;
+
 paths.EnsureCreated();
 var database = new Database(paths);
 database.Migrate();
@@ -102,6 +110,11 @@ int Run(string[] a)
         case ["user", "quota", var address, var megabytes]:
             return accounts.SetQuota(EmailAddress.Parse(address), ParseQuota(megabytes)) ? Ok("Quota gesetzt.") : Fail("Postfach nicht gefunden.");
 
+        case ["user", "admin", var address, "on" or "off"]:
+            return accounts.SetAdmin(EmailAddress.Parse(address), a[3] == "on")
+                ? Ok(a[3] == "on" ? $"{address} darf jetzt den Admin-Bereich der Weboberfläche nutzen." : "Admin-Recht entzogen.")
+                : Fail("Postfach nicht gefunden.");
+
         case ["user", "disable" or "enable", var address]:
             return accounts.SetEnabled(EmailAddress.Parse(address), a[1] == "enable") ? Ok("Gespeichert.") : Fail("Postfach nicht gefunden.");
 
@@ -115,7 +128,7 @@ int Run(string[] a)
             {
                 var usage = mailboxes.GetUsage(account.Id) / 1024.0 / 1024.0;
                 var quota = account.QuotaBytes > 0 ? $"{account.QuotaBytes / 1024 / 1024} MB" : "unbegrenzt";
-                Console.WriteLine($"{account.Address,-45} {usage,8:F1} MB / {quota,-10} {(account.Enabled ? "" : "(deaktiviert)")}");
+                Console.WriteLine($"{account.Address,-45} {usage,8:F1} MB / {quota,-10} {(account.Enabled ? "" : "(deaktiviert)")}{(account.IsAdmin ? " [Admin]" : "")}");
             }
 
             return 0;
@@ -256,6 +269,7 @@ int Run(string[] a)
                   user passwd <adresse> [--password <pw>]
                   user quota <adresse> <MB>               0 = unbegrenzt
                   user enable|disable|remove <adresse>
+                  user admin <adresse> on|off             Zugang zum Admin-Bereich der Weboberfläche
                   user list [domain]
 
                   alias add <adresse> <ziel>[,<ziel>...]  Ziele dürfen auch externe Adressen sein (Weiterleitung)
@@ -348,21 +362,17 @@ async Task<int> ImportAsync(string[] a)
 void PrintDns(string name)
 {
     var domain = accounts.GetDomain(name) ?? throw new InvalidOperationException($"Domain {name} ist nicht angelegt.");
-    var host = options.Hostname;
+    var selector = domain.DkimSelector is { } sel && dkim.HasKey(domain.Name, sel) ? sel : null;
     Console.WriteLine();
     Console.WriteLine("Benötigte DNS-Einträge:");
-    Console.WriteLine($"  {host,-40} A      <öffentliche IPv4 des Servers>");
-    Console.WriteLine($"  {domain.Name,-40} MX 10  {host}.");
-    Console.WriteLine($"  {domain.Name,-40} TXT    \"v=spf1 mx -all\"");
-    Console.WriteLine($"  {"_dmarc." + domain.Name,-40} TXT    \"v=DMARC1; p=none; rua=mailto:postmaster@{domain.Name}\"");
-    if (domain.DkimSelector is { } selector && dkim.HasKey(domain.Name, selector))
+    foreach (var record in DnsRecommendations.For(domain.Name, options.Hostname, selector, selector is null ? null : dkim.GetDnsRecord(domain.Name, selector)))
     {
-        Console.WriteLine($"  {selector + "._domainkey." + domain.Name,-40} TXT    \"{dkim.GetDnsRecord(domain.Name, selector)}\"");
-        Console.WriteLine("    (Manche DNS-Anbieter verlangen, den DKIM-Wert in Stücke zu höchstens 255 Zeichen zu teilen.)");
+        Console.WriteLine($"  {record.Name,-40} {record.Type,-5} {(record.Type == "TXT" ? $"\"{record.Value}\"" : record.Value)}");
+        if (record.Hint is not null)
+        {
+            Console.WriteLine($"      ({record.Hint})");
+        }
     }
-
-    Console.WriteLine($"  PTR (beim VPS-Anbieter): <IPv4>  ->  {host}");
-    Console.WriteLine("  DMARC nach erfolgreichen Tests auf p=quarantine bzw. p=reject verschärfen.");
 }
 
 void PrintEntries(IReadOnlyList<SpamLogEntry> entries)

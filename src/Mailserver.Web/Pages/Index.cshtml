@@ -1,0 +1,36 @@
+@page
+@model Mailserver.Web.Pages.IndexModel
+@{ ViewData["Title"] = "Übersicht"; }
+<h1>Übersicht</h1>
+
+<div class="tiles">
+    <div class="tile"><div class="label">Belegter Speicher</div><div class="value">@Format.Size(Model.Usage)</div>
+        <div class="small muted">@(Model.CurrentAccount.QuotaBytes > 0 ? $"von {Format.Size(Model.CurrentAccount.QuotaBytes)}" : "kein Limit")</div></div>
+    <div class="tile"><div class="label">Nachrichten gesamt</div><div class="value">@Model.Folders.Sum(f => f.Status.Messages)</div></div>
+    <div class="tile"><div class="label">Ungelesen im Posteingang</div><div class="value">@(Model.Folders.FirstOrDefault(f => f.Folder.Name == "INBOX").Status?.Unseen ?? 0)</div></div>
+    <div class="tile"><div class="label">Spam (7 Tage)</div><div class="value">@Model.SpamThisWeek</div></div>
+</div>
+
+<h2>Ordner</h2>
+<div class="table-wrap">
+    <table>
+        <thead><tr><th>Ordner</th><th class="num">Nachrichten</th><th class="num">Ungelesen</th></tr></thead>
+        <tbody>
+        @foreach (var (folder, status) in Model.Folders)
+        {
+            <tr><td>@Format.FolderName(folder.Name)</td><td class="num">@status.Messages</td><td class="num">@status.Unseen</td></tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<h2>Zuletzt eingegangen</h2>
+<partial name="_DeliveryTable" model="Model.Recent" />
+<p><a href="/Spam">Gesamten Verlauf anzeigen</a> · <a href="/Rules">Regeln verwalten</a></p>
+
+<h2>Mailprogramm einrichten</h2>
+<div class="card small">
+    Posteingang (IMAP): <strong>@Model.Hostname</strong>, Port 993, SSL/TLS ·
+    Postausgang (SMTP): <strong>@Model.Hostname</strong>, Port 587, STARTTLS ·
+    Benutzername: <strong>@Model.CurrentAddress</strong>
+</div>

@@ -1,0 +1,27 @@
+@page
+@model Mailserver.Web.Pages.Admin.Domains.IndexModel
+@{ ViewData["Title"] = "Domains"; }
+<h1>Domains</h1>
+<div class="table-wrap">
+    <table>
+        <thead><tr><th>Domain</th><th class="num">Postfächer</th><th class="num">Aliase</th><th>DKIM-Selector</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var d in Model.Domains)
+        {
+            <tr>
+                <td><a href="/Admin/Domains/Details?name=@d.Domain.Name">@d.Domain.Name</a></td>
+                <td class="num">@d.Mailboxes</td><td class="num">@d.Aliases</td>
+                <td class="mono">@(d.Domain.DkimSelector ?? "–")</td>
+                <td><a href="/Admin/Domains/Details?name=@d.Domain.Name">DNS &amp; Details</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<h2>Domain hinzufügen</h2>
+<form method="post" class="row card">
+    <label>Domain<input name="name" placeholder="example.de" required /></label>
+    <button type="submit">Anlegen</button>
+    <span class="small muted">Es wird automatisch ein DKIM-Schlüssel erzeugt. Danach die DNS-Einträge setzen.</span>
+</form>

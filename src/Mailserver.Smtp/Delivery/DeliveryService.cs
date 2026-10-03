@@ -1,6 +1,7 @@
 using Mailserver.Core;
 using Mailserver.Core.Queue;
 using Mailserver.Core.Routing;
+using Mailserver.Core.SpamLogging;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,7 @@ public sealed class DeliveryService(
     MessageRouter router,
     IOptions<MailserverOptions> options,
     TimeProvider timeProvider,
+    SpamLog spamLog,
     ILogger<DeliveryService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -81,6 +83,10 @@ public sealed class DeliveryService(
             .ToList();
         var deferred = results.Where(r => r.Outcome == DeliveryOutcome.TemporaryFailure && !failed.Contains(r)).ToList();
 
+        LogOutbound(batch, message, results.Where(r => r.Outcome == DeliveryOutcome.Delivered).ToList(), SpamLogAction.Sent);
+        LogOutbound(batch, message, deferred, SpamLogAction.Deferred);
+        LogOutbound(batch, message, failed, SpamLogAction.Failed);
+
         if (failed.Count > 0)
         {
             await BounceAsync(batch, failed, cancellationToken);
@@ -92,6 +98,24 @@ public sealed class DeliveryService(
         {
             logger.LogInformation("Deferred {Count} recipient(s) at {Domain}: {Error}", group.Count(), batch.Domain, group.Key);
             queue.Defer(group.Select(r => r.Entry), group.Key ?? "unknown error");
+        }
+    }
+
+    private void LogOutbound(DeliveryBatch batch, MimeMessage message, IReadOnlyList<RecipientResult> results, string action)
+    {
+        foreach (var group in results.GroupBy(r => r.Error))
+        {
+            spamLog.Write(new SpamLogEntry
+            {
+                Stage = SpamLogStage.Outbound,
+                Action = action,
+                MailFrom = batch.Sender,
+                Recipient = string.Join(", ", group.Select(r => r.Entry.Recipient)),
+                HeaderFrom = message.From.Mailboxes.FirstOrDefault()?.Address,
+                Subject = message.Subject,
+                MessageId = message.MessageId,
+                Detail = group.Key ?? $"zugestellt an {batch.Domain}",
+            });
         }
     }
 

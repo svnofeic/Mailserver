@@ -1,0 +1,50 @@
+@page
+@model Mailserver.Web.Pages.Admin.IndexModel
+@{ ViewData["Title"] = "Admin"; }
+<h1>Admin-Übersicht</h1>
+
+@if (Model.CertificateWarning is not null)
+{
+    <div class="notice bad">@Model.CertificateWarning</div>
+}
+
+<div class="tiles">
+    <div class="tile"><div class="label">Domains</div><div class="value">@Model.Domains</div></div>
+    <div class="tile"><div class="label">Postfächer</div><div class="value">@Model.Mailboxes</div></div>
+    <div class="tile"><div class="label">Aliase</div><div class="value">@Model.Aliases</div></div>
+    <div class="tile"><div class="label">Warteschlange</div><div class="value">@Model.QueueCount</div>
+        @if (Model.OldestQueued is { } oldest) { <div class="small muted">älteste: @Format.Time(oldest)</div> }</div>
+</div>
+
+<h2>Letzte 24 Stunden</h2>
+<div class="tiles">
+    <div class="tile"><div class="label">Eingegangen</div><div class="value">@Model.Stats.Messages</div></div>
+    <div class="tile"><div class="label">davon Spam</div><div class="value">@Model.Stats.Spam</div></div>
+    <div class="tile"><div class="label">Abgelehnt</div><div class="value">@(Model.Stats.RejectedConnections + Model.Stats.RejectedSenders + Model.Stats.RejectedMessages)</div></div>
+    <div class="tile"><div class="label">Greylisting</div><div class="value">@Model.Stats.GreylistDeferrals</div></div>
+    <div class="tile"><div class="label">Versendet</div><div class="value">@Model.Sent</div></div>
+    <div class="tile"><div class="label">Zustellfehler</div><div class="value">@Model.OutboundFailed</div></div>
+    <div class="tile"><div class="label">Fehl-Logins</div><div class="value">@Model.LoginFailures</div></div>
+</div>
+<p><a href="/Admin/Log">Verlauf</a> · <a href="/Admin/Log/Stats">Spam-Statistik</a></p>
+
+@if (Model.Hints.Count > 0)
+{
+    <h2>Hinweise zum Spamfilter (7 Tage)</h2>
+    <div class="card"><ul class="hints">@foreach (var hint in Model.Hints) { <li>@hint</li> }</ul></div>
+}
+
+<h2>Server</h2>
+<div class="table-wrap">
+    <table>
+        <tbody>
+        <tr><th>Hostname</th><td>@Model.Options.Hostname</td></tr>
+        <tr><th>TLS-Zertifikat</th><td>@Model.CertificateInfo</td></tr>
+        <tr><th>SMTP</th><td>Empfang Port @Model.Options.Smtp.InboundPort · Versand Port @Model.Options.Smtp.SubmissionPort / @Model.Options.Smtp.SubmissionTlsPort</td></tr>
+        <tr><th>IMAP</th><td>Port @Model.Options.Imap.Port (STARTTLS) / @Model.Options.Imap.TlsPort (TLS)</td></tr>
+        <tr><th>Weboberfläche</th><td>Port @Model.Options.Web.HttpsPort (HTTPS)</td></tr>
+        <tr><th>Datenverzeichnis</th><td class="mono">@Model.DataDirectory</td></tr>
+        <tr><th>Speicher belegt</th><td>@Format.Size(Model.TotalUsage)</td></tr>
+        </tbody>
+    </table>
+</div>

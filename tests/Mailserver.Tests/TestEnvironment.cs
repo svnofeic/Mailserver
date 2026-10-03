@@ -11,6 +11,8 @@ using Mailserver.Core.Dkim;
 using Mailserver.Core.Storage;
 using Mailserver.Imap;
 using Mailserver.Smtp;
+using Mailserver.Web;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -63,11 +65,13 @@ public sealed class TestServer : IAsyncDisposable
     public const string Domain = "example.test";
     public const string Password = "correct horse battery";
 
-    private readonly IHost _host;
+    private readonly WebApplication _host;
 
-    private TestServer(IHost host, int inboundPort, int submissionPort, int imapPort, int imapsPort, FakeRemoteServer remote, string directory)
+    private TestServer(WebApplication host, int inboundPort, int submissionPort, int imapPort, int imapsPort, int webPort,
+        FakeRemoteServer remote, string directory)
     {
         _host = host;
+        WebPort = webPort;
         InboundPort = inboundPort;
         SubmissionPort = submissionPort;
         ImapPort = imapPort;
@@ -80,6 +84,8 @@ public sealed class TestServer : IAsyncDisposable
     public int SubmissionPort { get; }
     public int ImapPort { get; }
     public int ImapsPort { get; }
+    public int WebPort { get; }
+    public string DataDirectory => Path.Combine(HostDirectory, "data");
     public FakeRemoteServer Remote { get; }
     public string HostDirectory { get; }
     public IServiceProvider Services => _host.Services;
@@ -98,8 +104,9 @@ public sealed class TestServer : IAsyncDisposable
         var submissionPort = GetFreePort();
         var imapPort = GetFreePort();
         var imapsPort = GetFreePort();
+        var webPort = GetFreePort();
 
-        var builder = Host.CreateApplicationBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -113,6 +120,8 @@ public sealed class TestServer : IAsyncDisposable
             ["Mailserver:Imap:ListenAddresses:0"] = "127.0.0.1",
             ["Mailserver:Imap:Port"] = imapPort.ToString(),
             ["Mailserver:Imap:TlsPort"] = imapsPort.ToString(),
+            ["Mailserver:Web:ListenAddresses:0"] = "127.0.0.1",
+            ["Mailserver:Web:HttpsPort"] = webPort.ToString(),
             ["Mailserver:Delivery:PollInterval"] = "00:00:01",
             ["Mailserver:Delivery:SmartHost:Host"] = "127.0.0.1",
             ["Mailserver:Delivery:SmartHost:Port"] = remote.Port.ToString(),
@@ -123,15 +132,18 @@ public sealed class TestServer : IAsyncDisposable
             builder.Configuration.AddInMemoryCollection(settings);
         }
 
+        builder.Configuration.AddJsonFile(Path.Combine(directory, "data", "settings.json"), optional: true, reloadOnChange: true);
         services?.Invoke(builder.Services);
         builder.Services.AddMailserver(builder.Configuration);
         builder.Services.AddImapServer();
+        builder.AddMailserverWeb();
         var host = builder.Build();
+        host.UseMailserverWeb();
 
-        var server = new TestServer(host, inboundPort, submissionPort, imapPort, imapsPort, remote, directory);
+        var server = new TestServer(host, inboundPort, submissionPort, imapPort, imapsPort, webPort, remote, directory);
         server.Seed();
         await host.StartAsync();
-        foreach (var port in new[] { inboundPort, submissionPort, imapPort, imapsPort })
+        foreach (var port in new[] { inboundPort, submissionPort, imapPort, imapsPort, webPort })
         {
             await WaitForPortAsync(port);
         }
@@ -171,7 +183,7 @@ public sealed class TestServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _host.StopAsync();
-        _host.Dispose();
+        await _host.DisposeAsync();
         await Remote.DisposeAsync();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try

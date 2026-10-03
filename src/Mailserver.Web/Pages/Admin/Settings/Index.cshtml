@@ -1,0 +1,94 @@
+@page
+@model Mailserver.Web.Pages.Admin.Settings.IndexModel
+@{
+    ViewData["Title"] = "Einstellungen";
+    var f = Model.Form;
+}
+<h1>Einstellungen</h1>
+<p class="muted">Änderungen gelten nach wenigen Sekunden ohne Neustart. Sie werden in <span class="mono">@Model.SettingsFile</span> gespeichert
+    und haben Vorrang vor appsettings.json.</p>
+
+<form method="post">
+    <h2>Spamfilter</h2>
+    <div class="card">
+        <div class="row">
+            <label class="check"><input type="checkbox" name="Form.SpamEnabled" value="true" checked="@f.SpamEnabled" /> Spamfilter aktiv</label>
+            <label>Spam ab Punkten<input name="Form.JunkThreshold" type="number" step="0.5" min="0.5" value="@Format.Number(f.JunkThreshold).Replace(',', '.')" style="width: 90px" /></label>
+            <label>Löschen ab Punkten (0 = nie)<input name="Form.DeleteThreshold" type="number" step="0.5" min="0" value="@Format.Number(f.DeleteThreshold).Replace(',', '.')" style="width: 90px" /></label>
+        </div>
+        <div class="row" style="margin-top: 10px">
+            <label class="check"><input type="checkbox" name="Form.EnforceDmarcReject" value="true" checked="@f.EnforceDmarcReject" /> DMARC „reject“ der Absender durchsetzen</label>
+            <label class="check"><input type="checkbox" name="Form.RejectSpfFail" value="true" checked="@f.RejectSpfFail" /> Mails bei SPF „fail“ sofort ablehnen</label>
+            <label class="check"><input type="checkbox" name="Form.TrustLoopback" value="true" checked="@f.TrustLoopback" /> Verbindungen vom Server selbst nicht prüfen</label>
+        </div>
+        <div class="row" style="margin-top: 10px; align-items: stretch">
+            <label style="flex: 1; min-width: 260px">Vertrauenswürdige Netze (eins pro Zeile, z. B. 192.0.2.0/24)
+                <textarea name="Form.TrustedNetworks">@f.TrustedNetworks</textarea></label>
+            <label style="flex: 1; min-width: 260px">Blacklists (Zone;Reject oder Zone;Score;Punkte)
+                <textarea name="Form.DnsBlocklists">@f.DnsBlocklists</textarea></label>
+        </div>
+        <label class="check" style="margin-top: 8px; display: flex"><input type="checkbox" name="Form.DnsBlocklistsEnabled" value="true" checked="@f.DnsBlocklistsEnabled" /> Blacklists abfragen</label>
+    </div>
+
+    <h2>Greylisting</h2>
+    <div class="card row">
+        <label class="check"><input type="checkbox" name="Form.GreylistingEnabled" value="true" checked="@f.GreylistingEnabled" /> aktiv</label>
+        <label>Wartezeit (Minuten)<input name="Form.GreylistingDelayMinutes" type="number" min="0" max="60" value="@f.GreylistingDelayMinutes" style="width: 90px" /></label>
+        <label>Bekannte Absender merken (Tage)<input name="Form.GreylistingExpiryDays" type="number" min="1" value="@f.GreylistingExpiryDays" style="width: 90px" /></label>
+        <label class="check"><input type="checkbox" name="Form.GreylistingSkipOnSpfPass" value="true" checked="@f.GreylistingSkipOnSpfPass" /> nicht bei bestandenem SPF</label>
+    </div>
+
+    <h2>Verlauf</h2>
+    <div class="card row">
+        <label class="check"><input type="checkbox" name="Form.LogEnabled" value="true" checked="@f.LogEnabled" /> Verlauf aufzeichnen</label>
+        <label>Aufbewahren (Tage)<input name="Form.LogRetentionDays" type="number" min="1" max="3650" value="@f.LogRetentionDays" style="width: 90px" /></label>
+        <label class="check"><input type="checkbox" name="Form.LogIncludeSubject" value="true" checked="@f.LogIncludeSubject" /> Betreffzeilen speichern (personenbezogene Daten)</label>
+    </div>
+
+    <h2>Sicherheit</h2>
+    <div class="card row">
+        <label>Fehl-Logins bis zur IP-Sperre<input name="Form.MaxAuthFailuresPerIp" type="number" min="1" value="@f.MaxAuthFailuresPerIp" style="width: 90px" /></label>
+        <label>innerhalb von (Minuten)<input name="Form.AuthFailureWindowMinutes" type="number" min="1" value="@f.AuthFailureWindowMinutes" style="width: 90px" /></label>
+        <label>Sperrdauer (Minuten)<input name="Form.AuthLockoutMinutes" type="number" min="1" value="@f.AuthLockoutMinutes" style="width: 90px" /></label>
+        <label>Maximale Hops (Schleifenschutz)<input name="Form.MaxHopCount" type="number" min="5" max="100" value="@f.MaxHopCount" style="width: 90px" /></label>
+        <label class="check"><input type="checkbox" name="Form.RejectUnauthenticatedLocalSender" value="true" checked="@f.RejectUnauthenticatedLocalSender" /> eigene Domains als Absender nur mit Anmeldung</label>
+    </div>
+
+    <h2>Zustellung</h2>
+    <div class="card">
+        <div class="row">
+            <label>Zustellversuche bis zur Rückmeldung (Tage)<input name="Form.MaxQueueLifetimeDays" type="number" step="0.5" min="0.5" max="30" value="@Format.Number(f.MaxQueueLifetimeDays).Replace(',', '.')" style="width: 90px" /></label>
+            <label>Parallele Zustellungen<input name="Form.MaxParallelDeliveries" type="number" min="1" max="64" value="@f.MaxParallelDeliveries" style="width: 90px" /></label>
+        </div>
+        <p class="small muted">Relay-Server (Smarthost) – nur nötig, wenn der VPS-Anbieter Port 25 nach außen sperrt. Leer lassen für direkte Zustellung.</p>
+        <div class="row">
+            <label>Server<input name="Form.SmartHost" value="@f.SmartHost" placeholder="smtp.anbieter.de" /></label>
+            <label>Port<input name="Form.SmartHostPort" type="number" value="@f.SmartHostPort" style="width: 90px" /></label>
+            <label>Benutzer<input name="Form.SmartHostUsername" value="@f.SmartHostUsername" autocomplete="off" /></label>
+            <label>Passwort (leer = unverändert)<input name="Form.SmartHostPassword" type="password" autocomplete="new-password" /></label>
+            <label>Verschlüsselung
+                <select name="Form.SmartHostSecurity">
+                    @foreach (var option in new[] { "Auto", "StartTls", "SslOnConnect", "None" }) { <option value="@option" selected="@(f.SmartHostSecurity == option)">@option</option> }
+                </select>
+            </label>
+        </div>
+    </div>
+
+    @foreach (var name in new[] { "SpamEnabled", "EnforceDmarcReject", "RejectSpfFail", "TrustLoopback", "DnsBlocklistsEnabled", "GreylistingEnabled",
+                 "GreylistingSkipOnSpfPass", "LogEnabled", "LogIncludeSubject", "RejectUnauthenticatedLocalSender" })
+    {
+        <input type="hidden" name="Form.@name" value="false" />
+    }
+    <button type="submit">Speichern</button>
+</form>
+
+<h2>Nur in appsettings.json (Neustart nötig)</h2>
+<div class="table-wrap">
+    <table><tbody>
+        <tr><th>Hostname</th><td>@Model.Current.Hostname</td></tr>
+        <tr><th>TLS-Zertifikat</th><td>@Model.Certificate</td></tr>
+        <tr><th>Ports</th><td>SMTP @Model.Current.Smtp.InboundPort, Versand @Model.Current.Smtp.SubmissionPort/@Model.Current.Smtp.SubmissionTlsPort,
+            IMAP @Model.Current.Imap.Port/@Model.Current.Imap.TlsPort, Web @Model.Current.Web.HttpsPort</td></tr>
+        <tr><th>Maximale Mailgröße</th><td>@Format.Size(Model.Current.MaxMessageSizeBytes)</td></tr>
+    </tbody></table>
+</div>

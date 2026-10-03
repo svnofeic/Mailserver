@@ -118,6 +118,19 @@ public sealed class OutboundQueue(Database database, DataPaths paths)
         transaction.Commit();
     }
 
+    /// <summary>Removes one entry without delivering it (admin action).</summary>
+    public bool Remove(long id)
+    {
+        var entry = List().FirstOrDefault(e => e.Id == id);
+        if (entry is null)
+        {
+            return false;
+        }
+
+        Complete([entry]);
+        return true;
+    }
+
     /// <summary>Makes all entries due immediately (admin "queue retry").</summary>
     public int RetryAll()
     {

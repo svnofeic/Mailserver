@@ -1,0 +1,43 @@
+@page
+@model Mailserver.Web.Pages.Admin.Log.IndexModel
+@{ ViewData["Title"] = "Verlauf"; }
+<h1>Verlauf</h1>
+<p class="muted">Alles, was der Server mit Mails getan hat: Prüfung und Zustellung eingehender Mails, Versand durch Benutzer,
+    Zustellung nach außen, Rückmeldungen der Benutzer und fehlgeschlagene Anmeldungen. Auf die Zeit klicken für alle Schritte einer Mail.</p>
+
+<form method="get" class="card">
+    <div class="row">
+        <label>Zeitraum
+            <select name="since">
+                @foreach (var (value, label) in new[] { ("1h", "1 Stunde"), ("24h", "24 Stunden"), ("7d", "7 Tage"), ("30d", "30 Tage"), ("90d", "90 Tage") })
+                {
+                    <option value="@value" selected="@(Model.Since == value)">@label</option>
+                }
+            </select>
+        </label>
+        <label>Bereich
+            <select name="view">
+                @foreach (var (value, label) in IndexModel.Views)
+                {
+                    <option value="@value" selected="@(Model.View == value)">@label</option>
+                }
+            </select>
+        </label>
+        <label>Ergebnis
+            <select name="action">
+                <option value="">alle</option>
+                @foreach (var action in IndexModel.Actions) { <option value="@action" selected="@(Model.ActionFilter == action)">@Format.Action(action)</option> }
+            </select>
+        </label>
+        <label>Suche (Adresse, Betreff, Message-ID)<input name="search" value="@Model.Search" size="26" /></label>
+        <label>IP<input name="ip" value="@Model.Ip" size="14" /></label>
+        <label>Score ab<input name="minScore" value="@Model.MinScore" size="4" /></label>
+        <label>Anzahl
+            <select name="limit">@foreach (var n in new[] { 100, 250, 1000 }) { <option value="@n" selected="@(Model.Limit == n)">@n</option> }</select>
+        </label>
+        <button type="submit" class="secondary">Anzeigen</button>
+        <a class="button secondary" href="@Model.ExportUrl">CSV exportieren</a>
+    </div>
+</form>
+
+<partial name="_LogTable" model="Model.Entries" />
