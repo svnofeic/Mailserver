@@ -87,7 +87,7 @@ Die Meldungen erscheinen direkt im Fenster. Wichtig:
 
 * `Using TLS certificate CN=… valid until …` – Zertifikat gefunden.
 * `No TLS certificate available` – kein passendes Zertifikat: Hostname prüfen oder `Tls:PfxPath` setzen.
-* Fehler wie `address already in use` – ein Port ist belegt (meist noch ein Standardport in der appsettings.json).
+* Fehler wie „Only one usage of each socket address“ bzw. „address already in use“ – ein Port ist belegt (meist noch ein Standardport in der appsettings.json).
 
 Läuft alles, mit `Strg+C` beenden und als Dienst starten: `Start-Service Mailserver`. Spätere Meldungen stehen in der
 Ereignisanzeige unter *Windows-Protokolle → Anwendung*, Quelle „Mailserver“.
