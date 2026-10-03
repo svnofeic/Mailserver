@@ -74,7 +74,10 @@ Für ein Backup sichert man den ganzen `data`-Ordner. Die Datenbank sollte man d
 
 ## Installation
 
-Auf einem Entwicklungsrechner mit .NET 10 SDK:
+**Fertiges Paket:** GitHub → Actions → neuester Lauf von „CI“ → Artifacts → `mailserver-win-x64` (enthält
+`install.ps1` und die Anleitungen). Zum Ausprobieren neben SmarterMail: [docs/testbetrieb.md](docs/testbetrieb.md).
+
+Oder selbst bauen, auf einem Entwicklungsrechner mit .NET 10 SDK:
 
 ```powershell
 .\scripts\publish.ps1          # führt die Tests aus und erzeugt .\publish\

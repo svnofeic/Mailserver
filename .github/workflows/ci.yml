@@ -16,3 +16,25 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet test Mailserver.slnx -c Release
+
+  # Ready-to-install Windows package (self-contained, no .NET needed on the server):
+  # Actions -> run -> Artifacts -> mailserver-win-x64
+  package:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet publish src/Mailserver.Service -c Release -r win-x64 --self-contained -o publish
+      - run: dotnet publish src/Mailserver.Admin -c Release -r win-x64 --self-contained -o publish
+      - run: |
+          Copy-Item scripts/install.ps1 publish/
+          New-Item -ItemType Directory publish/docs | Out-Null
+          Copy-Item docs/*.md, README.md publish/docs/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mailserver-win-x64
+          path: publish
+          retention-days: 30
