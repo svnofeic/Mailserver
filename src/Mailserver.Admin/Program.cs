@@ -363,7 +363,7 @@ int Run(string[] a)
                   spamlog export <datei.csv> [--since 30d]
                   spamlog cleanup
 
-                  export <host> <datei> <zielordner> [--port 993] [--starttls] [--insecure-cert] [--dav <url>] [--no-dav]
+                  export <host> <datei> <zielordner> [--port 993] [--starttls | --no-tls] [--insecure-cert] [--dav <url>] [--no-dav]
                       Sichert Postfächer von einem IMAP-Server (z. B. SmarterMail) als .eml-Dateien mit Ordnern, Flags und
                       Datum, dazu Kontakte (.vcf) und Kalender/Aufgaben (.ics) per CardDAV/CalDAV. <datei> wie bei
                       "import imap". Mehrfach ausführbar: es kommen nur neue Nachrichten dazu. Ohne --dav wird
@@ -375,8 +375,9 @@ int Run(string[] a)
 
                   tls                                   zeigt, welches TLS-Zertifikat verwendet wird bzw. warum keines passt
 
-                  import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
-                      Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). <datei> enthält pro Zeile
+                  import imap <host> <datei> [--port 993] [--starttls | --no-tls] [--insecure-cert] [--dry-run]
+                      Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). Port 143: --port 143 --starttls
+                      (oder --no-tls, nur für localhost). <datei> enthält pro Zeile
                       "adresse;passwort" (ohne Passwort wird es abgefragt). Fehlende Domains und Postfächer werden
                       angelegt, das Passwort wird übernommen. Mehrfach ausführbar: es kommen nur neue Nachrichten dazu.
                 """);
@@ -393,14 +394,14 @@ async Task<int> ImportAsync(string[] a)
 
     if (a is not ["import", "imap", var host, var file, ..])
     {
-        return Fail("Aufruf: mailadmin import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]");
+        return Fail("Aufruf: mailadmin import imap <host> <datei> [--port 993] [--starttls | --no-tls] [--insecure-cert] [--dry-run]");
     }
 
     var dryRun = a.Contains("--dry-run");
     var source = new ImapSource(
         host,
         int.Parse(Option(a, "--port") ?? "993"),
-        a.Contains("--starttls") ? MailKit.Security.SecureSocketOptions.StartTls : MailKit.Security.SecureSocketOptions.SslOnConnect,
+        SourceSecurity(a, host),
         a.Contains("--insecure-cert"));
 
     var users = ReadAccountFile(file);
@@ -678,14 +679,14 @@ static async Task<int> ExportAsync(string[] a)
 {
     if (a is not ["export", var host, var file, var target, ..] || target.StartsWith("--"))
     {
-        return Fail("Aufruf: mailadmin export <host> <datei> <zielordner> [--port 993] [--starttls] [--insecure-cert] [--dav <url>] [--no-dav]");
+        return Fail("Aufruf: mailadmin export <host> <datei> <zielordner> [--port 993] [--starttls | --no-tls] [--insecure-cert] [--dav <url>] [--no-dav]");
     }
 
     var insecure = a.Contains("--insecure-cert");
     var source = new ImapSource(
         host,
         int.Parse(Option(a, "--port") ?? "993"),
-        a.Contains("--starttls") ? MailKit.Security.SecureSocketOptions.StartTls : MailKit.Security.SecureSocketOptions.SslOnConnect,
+        SourceSecurity(a, host),
         insecure);
     var davServers = a.Contains("--no-dav") ? []
         : Option(a, "--dav") is { } davUrl ? [new Uri(davUrl)]
@@ -742,6 +743,22 @@ static async Task<int> ExportAsync(string[] a)
     Console.WriteLine(errors == 0 ? $"Fertig. Sicherung in {Path.GetFullPath(target)}" : $"Fertig, {errors} Postfach/Postfächer mit Fehlern – Ausgabe oben prüfen.");
     Console.WriteLine($"Hinweis: {file} enthält Passwörter im Klartext – danach löschen.");
     return errors == 0 ? 0 : 1;
+}
+
+/// <summary>
+/// --starttls (port 143) or implicit TLS (default, 993). --no-tls is only allowed for this machine, where the password
+/// never leaves the server — for a local SmarterMail that offers neither.
+/// </summary>
+static MailKit.Security.SecureSocketOptions SourceSecurity(string[] a, string host)
+{
+    if (a.Contains("--no-tls"))
+    {
+        return host is "localhost" or "127.0.0.1" or "::1"
+            ? MailKit.Security.SecureSocketOptions.None
+            : throw new ArgumentException("--no-tls ist nur für localhost erlaubt – sonst gingen Passwörter unverschlüsselt über das Netz.");
+    }
+
+    return a.Contains("--starttls") ? MailKit.Security.SecureSocketOptions.StartTls : MailKit.Security.SecureSocketOptions.SslOnConnect;
 }
 
 static List<(EmailAddress Address, string Password)> ReadAccountFile(string file)
