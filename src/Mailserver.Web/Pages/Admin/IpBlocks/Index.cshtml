@@ -1,0 +1,136 @@
+@page
+@model Mailserver.Web.Pages.Admin.IpBlocks.IndexModel
+@using Mailserver.Core.Security
+@{ ViewData["Title"] = "IP-Sperren"; }
+<h1>IP-Sperren</h1>
+<p class="muted">Nach zu vielen Fehl-Logins wird eine Adresse vorübergehend gesperrt (Einstellungen → Sicherheit); wer immer wieder
+    auffällt, wird automatisch für mehrere Tage gesperrt. Gesperrte Adressen erreichen weder SMTP noch IMAP noch diese Weboberfläche.
+    Ihre Adresse: <span class="mono">@Model.OwnAddress</span></p>
+
+<h2>Gerade gesperrt</h2>
+@if (Model.Lockouts.Count == 0)
+{
+    <p class="muted">Keine Adresse ist wegen Fehl-Logins gesperrt.</p>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Adresse</th><th>gesperrt bis</th><th>Sperren in 24 h</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var lockout in Model.Lockouts)
+                {
+                    <tr>
+                        <td class="mono">@lockout.Address</td>
+                        <td>@Format.Time(lockout.LockedUntil)</td>
+                        <td>@lockout.LockoutsToday</td>
+                        <td class="row">
+                            <form method="post" asp-page-handler="Release" class="inline">
+                                <input type="hidden" name="ip" value="@lockout.Address" />
+                                <button type="submit" class="secondary">Freigeben</button>
+                            </form>
+                            <form method="post" asp-page-handler="Add" class="inline">
+                                <input type="hidden" name="network" value="@lockout.Address" />
+                                <input type="hidden" name="kind" value="Block" />
+                                <input type="hidden" name="comment" value="manuell nach Fehl-Logins" />
+                                <input type="hidden" name="days" value="0" />
+                                <button type="submit" class="danger">Dauerhaft sperren</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<h2>Fehl-Logins der letzten 24 Stunden</h2>
+@if (Model.Failing.Count == 0)
+{
+    <p class="muted">Keine.</p>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Adresse</th><th>Fehl-Logins</th><th>versuchte Benutzer</th><th>zuletzt</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var failing in Model.Failing)
+                {
+                    <tr>
+                        <td><a class="mono" href="/Admin/Log?view=auth&amp;ip=@Uri.EscapeDataString(failing.Ip)">@failing.Ip</a></td>
+                        <td>@failing.Failures</td>
+                        <td class="small">@string.Join(", ", failing.Users)</td>
+                        <td>@Format.Time(failing.Last)</td>
+                        <td>
+                            @if (failing.Rule is { Kind: IpRuleKind.Block }) { <span class="pill bad">gesperrt</span> }
+                            else if (failing.Rule is { Kind: IpRuleKind.Allow }) { <span class="pill good">nie sperren</span> }
+                            else
+                            {
+                                @if (failing.LockedOut) { <span class="pill warn">vorübergehend gesperrt</span> }
+                                <form method="post" asp-page-handler="Add" class="inline">
+                                    <input type="hidden" name="network" value="@failing.Ip" />
+                                    <input type="hidden" name="kind" value="Block" />
+                                    <input type="hidden" name="comment" value="@($"{failing.Failures} Fehl-Logins")" />
+                                    <input type="hidden" name="days" value="0" />
+                                    <button type="submit" class="danger">Sperren</button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<h2>Regeln</h2>
+@if (Model.Rules.Count > 0)
+{
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Adresse/Netz</th><th>Art</th><th>Kommentar</th><th>seit</th><th>bis</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var rule in Model.Rules)
+                {
+                    <tr>
+                        <td class="mono">@rule.NetworkText</td>
+                        <td>
+                            @if (rule.Kind == IpRuleKind.Block) { <span class="pill bad">gesperrt</span> }
+                            else { <span class="pill good">nie sperren</span> }
+                        </td>
+                        <td class="small">@rule.Comment</td>
+                        <td>@Format.Time(rule.Created)</td>
+                        <td>@(rule.Expires is { } until ? Format.Time(until) : "dauerhaft")</td>
+                        <td>
+                            <form method="post" asp-page-handler="Remove" class="inline">
+                                <input type="hidden" name="id" value="@rule.Id" />
+                                <button type="submit" class="secondary">Entfernen</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+<form method="post" asp-page-handler="Add" class="card row">
+    <label>Adresse oder Netz<input name="network" required placeholder="203.0.113.7 oder 203.0.113.0/24" /></label>
+    <label>Art
+        <select name="kind">
+            <option value="Block">sperren</option>
+            <option value="Allow">nie sperren (z. B. Büro)</option>
+        </select>
+    </label>
+    <label>Dauer
+        <select name="days">
+            <option value="0">dauerhaft</option>
+            <option value="1">1 Tag</option>
+            <option value="7">7 Tage</option>
+            <option value="30">30 Tage</option>
+        </select>
+    </label>
+    <label>Kommentar<input name="comment" /></label>
+    <button type="submit">Hinzufügen</button>
+</form>
+<p class="small muted">„Nie sperren“ gilt nur für die Sperre nach Fehl-Logins – Spamfilter und Anmeldung bleiben wie gewohnt.</p>

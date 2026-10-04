@@ -137,6 +137,40 @@ int Run(string[] a)
         case ["backup", "list"]:
             return ListBackups();
 
+        case ["ip", "list"]:
+        {
+            var ipRules = new Mailserver.Core.Security.IpRules(database, TimeProvider.System).List();
+            if (ipRules.Count == 0)
+            {
+                Console.WriteLine("Keine Regeln. (Vorübergehende Sperren nach Fehl-Logins zeigt die Weboberfläche unter Admin → IP-Sperren.)");
+            }
+
+            foreach (var rule in ipRules)
+            {
+                var kind = rule.Kind == Mailserver.Core.Security.IpRuleKind.Block ? "gesperrt   " : "nie sperren";
+                var until = rule.Expires is { } expires ? $"bis {expires.ToLocalTime():dd.MM.yyyy HH:mm}" : "dauerhaft";
+                Console.WriteLine($"{rule.NetworkText,-24} {kind}  {until,-20} {rule.Comment}");
+            }
+
+            return 0;
+        }
+
+        case ["ip", "block" or "allow", var network, ..]:
+        {
+            var kind = a[1] == "block" ? Mailserver.Core.Security.IpRuleKind.Block : Mailserver.Core.Security.IpRuleKind.Allow;
+            var days = Option(a, "--days") is { } value ? int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+            var rule = new Mailserver.Core.Security.IpRules(database, TimeProvider.System)
+                .Add(network, kind, Option(a, "--comment"), days > 0 ? TimeSpan.FromDays(days) : null);
+            return Ok(kind == Mailserver.Core.Security.IpRuleKind.Block
+                ? $"{rule.NetworkText} gesperrt{(days > 0 ? $" für {days} Tage" : "")} (gilt nach spätestens 15 Sekunden)."
+                : $"{rule.NetworkText} wird nie wegen Fehl-Logins gesperrt.");
+        }
+
+        case ["ip", "remove", var network]:
+            return new Mailserver.Core.Security.IpRules(database, TimeProvider.System).Remove(network) > 0
+                ? Ok($"Regel für {network} entfernt.")
+                : Fail($"Keine Regel für {network}.");
+
         case ["user", "add", var address, ..]:
         {
             var account = accounts.AddAccount(EmailAddress.Parse(address), Option(a, "--password") ?? ReadNewPassword(),
@@ -369,6 +403,10 @@ int Run(string[] a)
                   user admin <adresse> on|off             Zugang zum Admin-Bereich der Weboberfläche
                   user list [domain]
 
+                  ip list                                 dauerhafte IP-Sperren und Ausnahmen
+                  ip block <ip/netz> [--days <n>] [--comment "…"]   SMTP, IMAP und Web für diese Adresse sperren
+                  ip allow <ip/netz> [--comment "…"]      nie wegen Fehl-Logins sperren (z. B. Büro)
+                  ip remove <ip/netz>
                   diagnose                                prüft DNS, Reverse DNS, Blacklists, Ports, Zertifikat, Sicherung …
                   antivirus test                          prüft den Virenscanner mit der harmlosen EICAR-Testdatei
                   backup [run] [--to <ordner>]            Datensicherung jetzt (Ziel aus Admin → Datensicherung)

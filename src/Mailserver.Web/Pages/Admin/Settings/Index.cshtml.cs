@@ -111,6 +111,8 @@ public sealed class SettingsForm
     public int MaxAuthFailuresPerIp { get; set; }
     public double AuthFailureWindowMinutes { get; set; }
     public double AuthLockoutMinutes { get; set; }
+    public int AutoBlockAfterLockouts { get; set; }
+    public double AutoBlockDays { get; set; }
     public bool RejectUnauthenticatedLocalSender { get; set; }
     public int MaxHopCount { get; set; }
 
@@ -148,7 +150,9 @@ public sealed class SettingsForm
         GreylistingExpiryDays = o.Spam.Greylisting.Expiry.TotalDays, GreylistingSkipOnSpfPass = o.Spam.Greylisting.SkipOnSpfPass,
         LogEnabled = o.Spam.Log.Enabled, LogRetentionDays = o.Spam.Log.RetentionDays, LogIncludeSubject = o.Spam.Log.IncludeSubject,
         MaxAuthFailuresPerIp = o.Security.MaxAuthFailuresPerIp, AuthFailureWindowMinutes = o.Security.AuthFailureWindow.TotalMinutes,
-        AuthLockoutMinutes = o.Security.AuthLockoutDuration.TotalMinutes, RejectUnauthenticatedLocalSender = o.Security.RejectUnauthenticatedLocalSender,
+        AuthLockoutMinutes = o.Security.AuthLockoutDuration.TotalMinutes,
+        AutoBlockAfterLockouts = o.Security.AutoBlockAfterLockouts, AutoBlockDays = o.Security.AutoBlockDuration.TotalDays,
+        RejectUnauthenticatedLocalSender = o.Security.RejectUnauthenticatedLocalSender,
         MaxHopCount = o.Security.MaxHopCount,
         MaxQueueLifetimeDays = o.Delivery.MaxQueueLifetime.TotalDays, MaxParallelDeliveries = o.Delivery.MaxParallelDeliveries,
         SmartHost = o.Delivery.SmartHost?.Host, SmartHostPort = o.Delivery.SmartHost?.Port ?? 587, SmartHostUsername = o.Delivery.SmartHost?.Username,
@@ -224,6 +228,8 @@ public sealed class SettingsForm
         security.MaxAuthFailuresPerIp = MaxAuthFailuresPerIp;
         security.AuthFailureWindow = TimeSpan.FromMinutes(Math.Max(1, AuthFailureWindowMinutes));
         security.AuthLockoutDuration = TimeSpan.FromMinutes(Math.Max(1, AuthLockoutMinutes));
+        security.AutoBlockAfterLockouts = Math.Max(0, AutoBlockAfterLockouts);
+        security.AutoBlockDuration = TimeSpan.FromDays(Math.Clamp(AutoBlockDays, 1, 365));
         security.RejectUnauthenticatedLocalSender = RejectUnauthenticatedLocalSender;
         security.MaxHopCount = MaxHopCount;
 

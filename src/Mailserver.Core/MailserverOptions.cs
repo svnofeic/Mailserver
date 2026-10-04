@@ -292,6 +292,11 @@ public sealed class SecurityOptions
 
     public TimeSpan AuthLockoutDuration { get; set; } = TimeSpan.FromMinutes(30);
 
+    /// <summary>An address locked out this often within 24 hours is blocked for <see cref="AutoBlockDuration"/> (0 = never).</summary>
+    public int AutoBlockAfterLockouts { get; set; } = 3;
+
+    public TimeSpan AutoBlockDuration { get; set; } = TimeSpan.FromDays(7);
+
     /// <summary>Rejects mail on port 25 that claims a local domain as envelope sender without authentication.</summary>
     public bool RejectUnauthenticatedLocalSender { get; set; } = true;
 

@@ -108,7 +108,7 @@ public sealed class SmtpHostedService(
             : new RejectingAuthenticator());
         provider.Add(isSubmission
             ? new SubmissionMailboxFilter(accounts)
-            : new InboundMailboxFilter(accounts, mailboxes, spamFilter, options));
+            : new InboundMailboxFilter(accounts, mailboxes, spamFilter, throttle, options));
         provider.Add((IMessageStore)new RoutingMessageStore(router, preparer, spamFilter, spamLog, accounts, sentCopies, malwareFilter, sendingLimiter, options, loggerFactory.CreateLogger<RoutingMessageStore>(), isSubmission));
 
         var server = new SmtpServer.SmtpServer(builder.Build(), provider);

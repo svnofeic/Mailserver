@@ -104,6 +104,8 @@
         <label>Fehl-Logins bis zur IP-Sperre<input name="Form.MaxAuthFailuresPerIp" type="number" min="1" value="@f.MaxAuthFailuresPerIp" style="width: 90px" /></label>
         <label>innerhalb von (Minuten)<input name="Form.AuthFailureWindowMinutes" type="number" min="1" value="@f.AuthFailureWindowMinutes" style="width: 90px" /></label>
         <label>Sperrdauer (Minuten)<input name="Form.AuthLockoutMinutes" type="number" min="1" value="@f.AuthLockoutMinutes" style="width: 90px" /></label>
+        <label>Nach so vielen Sperren in 24 h für Tage sperren (0 = nie)<input name="Form.AutoBlockAfterLockouts" type="number" min="0" value="@f.AutoBlockAfterLockouts" style="width: 90px" /></label>
+        <label>Tage<input name="Form.AutoBlockDays" type="number" min="1" max="365" value="@Format.Number(f.AutoBlockDays).Replace(',', '.')" style="width: 90px" /></label>
         <label>Maximale Hops (Schleifenschutz)<input name="Form.MaxHopCount" type="number" min="5" max="100" value="@f.MaxHopCount" style="width: 90px" /></label>
         <label class="check"><input type="checkbox" name="Form.RejectUnauthenticatedLocalSender" value="true" checked="@f.RejectUnauthenticatedLocalSender" /> eigene Domains als Absender nur mit Anmeldung</label>
     </div>

@@ -56,6 +56,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AdminNotifier>();
         services.AddSingleton<SendingLimiter>();
+        services.AddSingleton<IpRules>();
         services.AddSingleton<AuthThrottle>();
         services.AddSingleton<Mailserver.Core.Backup.BackupManager>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeChallengeStore>();

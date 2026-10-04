@@ -110,6 +110,12 @@ public sealed class ImapServer(
                 client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
                 Stream stream = client.GetStream();
 
+                if (throttle.IsBlocked(remote))
+                {
+                    await stream.WriteAsync("* BYE Access denied\r\n"u8.ToArray(), stoppingToken);
+                    return;
+                }
+
                 if (!counted)
                 {
                     await stream.WriteAsync("* BYE Too many connections from your address\r\n"u8.ToArray(), stoppingToken);

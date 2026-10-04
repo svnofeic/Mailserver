@@ -197,6 +197,17 @@ public sealed class Database
             message      TEXT
         );
         """,
+        """
+        -- Addresses or networks that are always blocked or never locked out.
+        CREATE TABLE ip_rules (
+            id          INTEGER PRIMARY KEY,
+            network     TEXT NOT NULL,
+            kind        TEXT NOT NULL,
+            comment     TEXT,
+            created_utc TEXT NOT NULL,
+            expires_utc TEXT
+        );
+        """,
     ];
 
     private readonly string _connectionString;

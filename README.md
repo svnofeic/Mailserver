@@ -10,7 +10,7 @@ Ein eigener Mailserver in C#/.NET 10 für Windows Server. Er ersetzt SmarterMail
 | **M2 – IMAP** | IMAP-Server (Port 993 und 143 mit STARTTLS) für Outlook, Thunderbird und Smartphones: Ordner inkl. Unterordnern und Umlauten, Flags, Suche, Kopieren/Verschieben, Push über IDLE | ✅ fertig |
 | **M3 – Spamschutz & Regeln** | SPF, DKIM und DMARC für eingehende Mails, DNS-Blacklists, Greylisting, Spam-Score mit Junk-Ordner. Eigene Regeln pro Postfach, Domain oder global, z. B. "Betreff enthält … → Spam / endgültig löschen / Ordner". Spam-Protokoll mit Benutzer-Feedback und Auswertung (`mailadmin spamlog`). Anleitung: [docs/spamschutz-und-regeln.md](docs/spamschutz-und-regeln.md) | ✅ fertig |
 | **M4 – Migration** | `mailadmin import imap`: Postfächer aus SmarterMail (oder jedem IMAP-Server) mit Ordnern, Flags und Datum, wiederholbar für den letzten Abgleich. `mailadmin export`: Sicherung als .eml/.vcf/.ics (inkl. Kontakte und Kalender per CalDAV/CardDAV) und `import export` zum Einspielen auf einem neuen Server. Anleitungen: [docs/umzug-smartermail.md](docs/umzug-smartermail.md), [docs/sicherung-export.md](docs/sicherung-export.md) | ✅ fertig |
-| **M5 – Weboberfläche** | Für Benutzer: **Webmail** (lesen, schreiben mit Formatierungs-Editor, antworten, weiterleiten, Anhänge, Entwürfe, Ordner verwalten; sichere HTML-Anzeige, externe Bilder blockiert), Übersicht, eigene Regeln, Spam-Verlauf mit „Absender erlauben/sperren“, **Weiterleitung und Abwesenheitsnotiz**, Passwort. Für Admins: Domains (DNS/DKIM), Postfächer, Aliase, alle Regeln, Warteschlange, kompletter Verlauf mit CSV-Export, Spam-Statistik, Einstellungen ohne Neustart, **Virenschutz und Versandlimits**, **Datensicherung**, **Diagnose**. Anleitung: [docs/weboberflaeche.md](docs/weboberflaeche.md) | ✅ fertig |
+| **M5 – Weboberfläche** | Für Benutzer: **Webmail** (lesen, schreiben mit Formatierungs-Editor, antworten, weiterleiten, Anhänge, Entwürfe, Ordner verwalten; sichere HTML-Anzeige, externe Bilder blockiert), Übersicht, eigene Regeln, Spam-Verlauf mit „Absender erlauben/sperren“, **Weiterleitung und Abwesenheitsnotiz**, Passwort. Für Admins: Domains (DNS/DKIM), Postfächer, Aliase, alle Regeln, Warteschlange, kompletter Verlauf mit CSV-Export, Spam-Statistik, Einstellungen ohne Neustart, **Virenschutz und Versandlimits**, **Datensicherung**, **Diagnose**, **IP-Sperren**. Anleitung: [docs/weboberflaeche.md](docs/weboberflaeche.md) | ✅ fertig |
 | **M6 – Komfort** | Autodiscover/Autoconfig für Mailprogramme, MTA-STS, Monitoring, Zwei-Faktor-Anmeldung | offen |
 
 > **Umzug von SmarterMail:** siehe [docs/umzug-smartermail.md](docs/umzug-smartermail.md). Beide Server können nicht
@@ -64,6 +64,9 @@ Benachrichtigung bei Fehlern.
   „Rechnung.pdf“ getarnte Programme) werden beim Empfang schon im SMTP-Dialog abgelehnt. Office-Dateien mit Makros und
   verschlüsselte Archive landen mit Warnhinweis im Spam-Ordner. Jede Mail wird zusätzlich mit Microsoft Defender
   (bzw. ClamAV) gescannt; Viren werden abgelehnt, ein- wie ausgehend.
+- **IP-Sperren:** Nach 10 Fehl-Logins in 15 Minuten ist eine Adresse 30 Minuten gesperrt; wer dreimal in 24 Stunden
+  gesperrt wird, ist automatisch 7 Tage gesperrt. Dauerhafte Sperren und Ausnahmen („nie sperren“, z. B. fürs Büro)
+  unter Admin → IP-Sperren oder mit `mailadmin ip`. Gesperrte Adressen erreichen weder SMTP noch IMAP noch die Weboberfläche.
 - **Versandlimits:** Ein Postfach darf standardmäßig höchstens 300 externe Empfänger pro Stunde und 1000 pro Tag erreichen.
   Wird ein Limit überschritten (typisch bei gestohlenem Passwort), sperrt der Server den Versand des Postfachs und
   schreibt allen Admins eine Mail. Freigeben: Admin → Postfächer → Postfach → „Versand freigeben“ oder `mailadmin user unblock`.
@@ -148,7 +151,7 @@ Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer 
 | `Mailserver:Imap:MaxConnectionsPerIp` | Gleichzeitige IMAP-Verbindungen pro IP (Standard 30) |
 | `Mailserver:Delivery:SmartHost` | Optionaler Relay-Server (`Host`, `Port`, `Username`, `Password`, `Security`) |
 | `Mailserver:Delivery:MaxQueueLifetime` | Wie lange eine Mail zugestellt werden soll, bevor sie zurückgeht (Standard 5 Tage) |
-| `Mailserver:Security:*` | Login-Sperren, Spoofing-Schutz, Hop-Limit |
+| `Mailserver:Security:*` | Login-Sperren (`MaxAuthFailuresPerIp`, `AuthLockoutDuration`, `AutoBlockAfterLockouts` = 3, `AutoBlockDuration` = 7 Tage), Spoofing-Schutz, Hop-Limit |
 | `Mailserver:Security:Sending:*` | Versandlimits: externe Empfänger pro Nachricht/Stunde/Tag (100/300/1000, `0` = ohne Limit); `BlockOnLimit` sperrt das Postfach bei Überschreitung und benachrichtigt die Admins |
 | `Mailserver:Backup:*` | Datensicherung: `Enabled`, `Directory`, `Time` (03:00), `KeepDays` (14), `Username`/`Password` für Netzwerkfreigaben |
 | `Mailserver:Antivirus:*` | Virenschutz: `Scanner` (`Auto` = Microsoft Defender, `ClamAV`, `None`), `BlockedExtensions`, `SuspiciousAttachments` (`Junk`/`Reject`/`Allow`), `OnScanError` (`Accept`/`Defer`), `ScanOutgoing` |
@@ -163,6 +166,7 @@ mailadmin dns <domain>                  mailadmin alias add|remove|list
 mailadmin dkim rotate|activate          mailadmin queue list|retry
 mailadmin user admin <adresse> on|off   Zugang zum Admin-Bereich der Weboberfläche
 mailadmin user unblock <adresse>        Versandsperre nach überschrittenem Versandlimit aufheben
+mailadmin ip list | ip block <ip/netz> [--days n] | ip allow <ip/netz> | ip remove <ip/netz>   IP-Sperren
 mailadmin diagnose                      prüft DNS (MX/SPF/DKIM/DMARC), Reverse DNS, Blacklists, Ports, Zertifikat, Sicherung …
 mailadmin antivirus test                prüft den Virenscanner mit der EICAR-Testdatei
 mailadmin backup [--to <ordner>] | backup list | backup restore <ordner>   Datensicherung (siehe docs/datensicherung.md)

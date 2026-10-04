@@ -14,6 +14,11 @@ internal sealed class SubmissionAuthenticator(AccountStore accounts, AuthThrottl
     public Task<bool> AuthenticateAsync(ISessionContext context, string user, string password, CancellationToken cancellationToken)
     {
         var ip = SessionInfo.GetRemoteAddress(context);
+        if (throttle.IsBlocked(ip))
+        {
+            throw new SmtpResponseException(new SmtpResponse((SmtpReplyCode)554, "5.7.1 Access denied"), true);
+        }
+
         if (throttle.IsLockedOut(ip))
         {
             logger.LogWarning("Rejected login for {User} from locked-out address {Ip}", user, ip);

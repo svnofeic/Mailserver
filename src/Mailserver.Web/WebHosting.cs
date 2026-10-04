@@ -108,6 +108,19 @@ public static class WebHosting
         app.UseExceptionHandler("/Fehler");
         app.Use(async (context, next) =>
         {
+            // Blocked addresses (Admin → IP-Sperren) get nothing; Let's Encrypt validation must still get through.
+            if (context.RequestServices.GetRequiredService<Mailserver.Core.Security.AuthThrottle>().IsBlocked(context.Connection.RemoteIpAddress) &&
+                !context.Request.Path.StartsWithSegments("/.well-known/acme-challenge"))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsync("Zugriff von dieser Adresse gesperrt.");
+                return;
+            }
+
+            await next();
+        });
+        app.Use(async (context, next) =>
+        {
             var headers = context.Response.Headers;
             headers["X-Content-Type-Options"] = "nosniff";
             headers["X-Frame-Options"] = "DENY";

@@ -14,11 +14,17 @@ namespace Mailserver.Smtp.Receiving;
 /// Port 25: accepts mail for local recipients only. Clients in <see cref="SmtpOptions.RelayNetworks"/> (local applications)
 /// may relay without authentication and skip the spam checks.
 /// </summary>
-internal sealed class InboundMailboxFilter(AccountStore accounts, MailboxStore mailboxes, SpamFilter spamFilter, IOptions<MailserverOptions> options)
+internal sealed class InboundMailboxFilter(AccountStore accounts, MailboxStore mailboxes, SpamFilter spamFilter,
+    Mailserver.Core.Security.AuthThrottle throttle, IOptions<MailserverOptions> options)
     : IMailboxFilter
 {
     public async Task<bool> CanAcceptFromAsync(ISessionContext context, IMailbox from, int size, CancellationToken cancellationToken)
     {
+        if (throttle.IsBlocked(SessionInfo.GetRemoteAddress(context)))
+        {
+            throw Reject((SmtpReplyCode)554, "5.7.1 Access denied");
+        }
+
         if (IsRelayClient(context))
         {
             return true;
