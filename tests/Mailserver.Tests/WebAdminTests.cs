@@ -163,10 +163,13 @@ public sealed class WebAdminTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Scanner_test_reports_a_missing_scanner()
+    public async Task Scanner_test_reports_the_result()
     {
         await _web.PostAsync("/Admin/Settings", "/Admin/Settings?handler=TestScanner");
-        Assert.Contains("nur Anhangfilter", _web.LastPage);
+
+        // Windows has Microsoft Defender, Linux build agents have no scanner at all.
+        var filter = _server.Services.GetRequiredService<Core.Antivirus.MalwareFilter>();
+        Assert.Contains(filter.Scanner is null ? System.Net.WebUtility.HtmlEncode(filter.ScannerProblem!) : "EICAR-Testdatei", _web.LastPage);
     }
 
     [Fact]
