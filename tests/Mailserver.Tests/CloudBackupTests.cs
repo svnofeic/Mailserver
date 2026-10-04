@@ -76,7 +76,7 @@ public sealed class CloudBackupTests : IAsyncLifetime
         Assert.True(first.Success, first.Message);
         Assert.Contains("OneDrive (sven@outlook.test): /Mailserver-Sicherung", first.Message);
         Assert.Equal(2, _oneDrive.FilesBelow("Mailserver-Sicherung/mail").Count());
-        Assert.Equal(new FileInfo(_data.Mailboxes.GetMessagePath(big)).Length, _oneDrive.Files[$"Mailserver-Sicherung/mail/{big.FileName}"].Length);
+        Assert.Equal(new FileInfo(_data.Mailboxes.GetMessagePath(big)).Length, _oneDrive.Files[$"Mailserver-Sicherung/mail/{big.FileName.Replace('\\', '/')}"].Length);
         Assert.Contains($"Mailserver-Sicherung/snapshots/{first.Snapshot}/manifest.json", _oneDrive.Files.Keys);
 
         _time.Now = _time.Now.AddDays(1);
@@ -133,7 +133,7 @@ public sealed class CloudBackupTests : IAsyncLifetime
         }
 
         // The deleted mail and the snapshots older than 7 days are gone from the cloud.
-        Assert.DoesNotContain($"Mailserver-Sicherung/mail/{gone.FileName}", _pCloud.Files.Keys);
+        Assert.DoesNotContain($"Mailserver-Sicherung/mail/{gone.FileName.Replace('\\', '/')}", _pCloud.Files.Keys);
         using var store = _backups.Stores.Open(_options.Backup);
         var snapshots = await BackupManager.ListSnapshotsAsync(store);
         Assert.Equal(8, snapshots.Count);
