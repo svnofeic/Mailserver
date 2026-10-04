@@ -154,7 +154,7 @@ public sealed class ServerDiagnostics(
         {
             var age = now - lastBackup.Started;
             checks.Add(new(ServerGroup, "Datensicherung", age > TimeSpan.FromHours(50) ? CheckStatus.Error : CheckStatus.Ok,
-                $"letzte erfolgreiche Sicherung vor {FormatAge(age)} nach {settings.Backup.Directory}",
+                $"letzte erfolgreiche Sicherung vor {FormatAge(age)} nach {backups.Stores.Describe(settings.Backup)}",
                 age > TimeSpan.FromHours(50) ? backups.RecentRuns(1).FirstOrDefault()?.Message : null));
         }
 

@@ -50,7 +50,8 @@ Daten (Standard: `C:\Mailserver\data`):
 - `queue\*.eml`: ausgehende Nachrichten, die noch nicht zugestellt sind
 - `dkim\<domain>.<selector>.pem`: die DKIM-Schlüssel
 
-Gesichert wird automatisch jede Nacht (Admin → Datensicherung, Anleitung: [docs/datensicherung.md](docs/datensicherung.md)):
+Gesichert wird automatisch jede Nacht in einen Ordner, eine Netzwerkfreigabe, **OneDrive** oder **pCloud**
+(Admin → Datensicherung, Anleitung: [docs/datensicherung.md](docs/datensicherung.md)):
 Datenbank als konsistente Kopie, Einstellungen, Schlüssel, Zertifikat und alle Mails (inkrementell), mit Aufbewahrung und
 Benachrichtigung bei Fehlern.
 
@@ -153,7 +154,7 @@ Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer 
 | `Mailserver:Delivery:MaxQueueLifetime` | Wie lange eine Mail zugestellt werden soll, bevor sie zurückgeht (Standard 5 Tage) |
 | `Mailserver:Security:*` | Login-Sperren (`MaxAuthFailuresPerIp`, `AuthLockoutDuration`, `AutoBlockAfterLockouts` = 3, `AutoBlockDuration` = 7 Tage), Spoofing-Schutz, Hop-Limit |
 | `Mailserver:Security:Sending:*` | Versandlimits: externe Empfänger pro Nachricht/Stunde/Tag (100/300/1000, `0` = ohne Limit); `BlockOnLimit` sperrt das Postfach bei Überschreitung und benachrichtigt die Admins |
-| `Mailserver:Backup:*` | Datensicherung: `Enabled`, `Directory`, `Time` (03:00), `KeepDays` (14), `Username`/`Password` für Netzwerkfreigaben |
+| `Mailserver:Backup:*` | Datensicherung: `Enabled`, `Target` (`Folder`, `OneDrive`, `pCloud`), `Directory`, `RemoteFolder`, `Time` (03:00), `KeepDays` (14), `Username`/`Password` für Netzwerkfreigaben, `OneDriveClientId`, `PCloudRegion` |
 | `Mailserver:Antivirus:*` | Virenschutz: `Scanner` (`Auto` = Microsoft Defender, `ClamAV`, `None`), `BlockedExtensions`, `SuspiciousAttachments` (`Junk`/`Reject`/`Allow`), `OnScanError` (`Accept`/`Defer`), `ScanOutgoing` |
 | `Mailserver:Web:*` | Weboberfläche: `HttpsPort` (9443), `ListenAddresses`, `Enabled`, `SessionTimeout` |
 | `Mailserver:Spam:*` | Spamfilter: Schwellen für Junk/Löschen, Blacklists, Greylisting, vertrauenswürdige Netze |
@@ -169,7 +170,8 @@ mailadmin user unblock <adresse>        Versandsperre nach überschrittenem Vers
 mailadmin ip list | ip block <ip/netz> [--days n] | ip allow <ip/netz> | ip remove <ip/netz>   IP-Sperren
 mailadmin diagnose                      prüft DNS (MX/SPF/DKIM/DMARC), Reverse DNS, Blacklists, Ports, Zertifikat, Sicherung …
 mailadmin antivirus test                prüft den Virenscanner mit der EICAR-Testdatei
-mailadmin backup [--to <ordner>] | backup list | backup restore <ordner>   Datensicherung (siehe docs/datensicherung.md)
+mailadmin backup [--to <ordner>] | backup list | backup connect onedrive|pcloud | backup restore <ordner>|onedrive|pcloud
+                                        Datensicherung (siehe docs/datensicherung.md)
 mailadmin forward <adresse> [<ziele>|off] [--no-copy]          Weiterleitung eines Postfachs
 mailadmin autoreply <adresse> [on --text "…" [--until JJJJ-MM-TT]|off]  Abwesenheitsnotiz
 mailadmin tls                           zeigt das verwendete TLS-Zertifikat bzw. warum keines passt

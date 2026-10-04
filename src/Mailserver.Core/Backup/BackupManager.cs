@@ -10,61 +10,44 @@ namespace Mailserver.Core.Backup;
 public sealed record BackupRun(long Id, DateTimeOffset Started, DateTimeOffset? Finished, bool? Success, string? Snapshot,
     long FilesCopied, long BytesCopied, string? Message);
 
-public sealed record BackupSnapshot(string Name, string Path, DateTimeOffset Created, long Bytes);
+public sealed record BackupSnapshot(string Name, DateTimeOffset Created, BackupManifest Manifest);
 
-/// <summary>What a snapshot contains; written last, so a snapshot without it is incomplete.</summary>
+/// <summary>What a snapshot contains; uploaded last, so a snapshot without it is incomplete.</summary>
 public sealed record BackupManifest(string Version, string Hostname, DateTimeOffset Created, int Accounts, long Messages);
 
 /// <summary>
-/// Backs up the data directory into a target folder:
+/// Backs up the data directory into a backup store (folder, OneDrive, pCloud):
 /// <code>
-/// ziel\snapshots\2026-10-05_030000\   database (consistent copy), settings.json, dkim, acme, queue, manifest.json
-/// ziel\mail\                          mirror of data\mail, copied incrementally
+/// snapshots/2026-10-05_030000/   database (consistent copy), settings.json, dkim, acme, queue, manifest.json
+/// mail/                          mirror of data\mail, uploaded incrementally
 /// </code>
-/// The mail files never change once written, so only new ones are copied each night. Files deleted on the server stay in
-/// the mirror for <see cref="BackupOptions.KeepDays"/>, so every kept snapshot can be restored completely.
-/// data\keys is not backed up: those keys only work on this Windows installation.
+/// The mail files never change once written, so only new ones are uploaded each night; which ones are already there is
+/// kept in the table backup_files. Files deleted on the server stay in the store for <see cref="BackupOptions.KeepDays"/>,
+/// so every kept snapshot can be restored completely. data\keys and data\cloud are not backed up: they only work on this
+/// Windows installation.
 /// </summary>
 public sealed class BackupManager(
     Database database,
     DataPaths paths,
     IOptions<MailserverOptions> options,
     TimeProvider timeProvider,
-    ILogger<BackupManager> logger)
+    ILogger<BackupManager> logger,
+    BackupStores? stores = null)
 {
     public const string SnapshotsFolder = "snapshots";
     public const string MailFolder = "mail";
     public const string ManifestFile = "manifest.json";
-    private const string DeletedFile = "mail-geloescht.json";
     private static readonly string[] ConfigFolders = ["dkim", "acme", "queue"];
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly BackupStores _stores = stores ?? new BackupStores(paths, new CloudTokens(paths));
 
     public bool Running => _gate.CurrentCount == 0;
 
+    public BackupStores Stores => _stores;
+
     /// <summary>Why no backup can be made with the current settings, or null.</summary>
-    public string? Problem(BackupOptions? settings = null)
-    {
-        settings ??= options.Value.Backup;
-        if (string.IsNullOrWhiteSpace(settings.Directory))
-        {
-            return "Kein Zielordner angegeben.";
-        }
-
-        if (!Path.IsPathRooted(settings.Directory))
-        {
-            return "Der Zielordner muss ein vollständiger Pfad sein, z. B. D:\\Sicherung oder \\\\server\\freigabe.";
-        }
-
-        var target = Path.GetFullPath(settings.Directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var root = Path.GetFullPath(paths.Root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (target.StartsWith(root, StringComparison.OrdinalIgnoreCase) || root.StartsWith(target, StringComparison.OrdinalIgnoreCase))
-        {
-            return "Der Zielordner darf nicht im Datenordner liegen (und umgekehrt).";
-        }
-
-        return settings.KeepDays < 1 ? "Die Aufbewahrung muss mindestens einen Tag betragen." : null;
-    }
+    public string? Problem(BackupOptions? settings = null) => _stores.Problem(settings ?? options.Value.Backup);
 
     /// <summary>Makes a backup now. Only one runs at a time; a second call returns the failed run right away.</summary>
     /// <param name="settings">Settings just saved (the options pick them up a moment later); null = current options.</param>
@@ -87,26 +70,38 @@ public sealed class BackupManager(
         string? snapshot = null;
         string message;
         var success = false;
+        var temp = Path.Combine(paths.Root, "backup-temp");
         try
         {
-            if (Problem(settings) is { } problem)
+            using var store = _stores.Open(settings);
+            snapshot = started.ToLocalTime().ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture);
+            var local = Path.Combine(temp, snapshot);
+            await Task.Run(() => CreateSnapshot(local, started, cancellationToken), cancellationToken);
+
+            // Order matters: snapshot files, then the mails it refers to, and the manifest last – only then is it complete.
+            foreach (var file in Directory.EnumerateFiles(local, "*", SearchOption.AllDirectories).Where(f => Path.GetFileName(f) != ManifestFile))
             {
-                throw new BackupException(problem);
+                await store.UploadAsync(file, $"{SnapshotsFolder}/{snapshot}/{Relative(local, file)}", cancellationToken);
+                counters.Add(new FileInfo(file).Length);
             }
 
-            using var share = NetworkShare.Connect(settings);
-            var target = settings.Directory!;
-            Directory.CreateDirectory(target);
-            snapshot = await Task.Run(() => CreateSnapshot(target, started, counters, cancellationToken), cancellationToken);
-            await Task.Run(() => MirrorMail(target, settings.KeepDays, started, counters, cancellationToken), cancellationToken);
-            var removed = RemoveOldSnapshots(target, settings.KeepDays, started);
+            await MirrorMailAsync(store, settings.KeepDays, started, counters, cancellationToken);
+            await store.UploadAsync(Path.Combine(local, ManifestFile), $"{SnapshotsFolder}/{snapshot}/{ManifestFile}", cancellationToken);
+            var removed = await RemoveOldSnapshotsAsync(store, settings.KeepDays, started, snapshot, cancellationToken);
             success = true;
-            message = $"{counters.Files} Dateien ({Format(counters.Bytes)}) kopiert" + (removed > 0 ? $", {removed} alte Sicherung(en) entfernt" : "") + ".";
+            message = $"{counters.Files} Dateien ({Format(counters.Bytes)}) nach {store.Description} übertragen" +
+                      (removed > 0 ? $", {removed} alte Sicherung(en) entfernt" : "") + ".";
             logger.LogInformation("Backup {Snapshot} finished: {Message}", snapshot, message);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BackupException or SqliteException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BackupException or SqliteException
+                                       or System.ComponentModel.Win32Exception or HttpRequestException or JsonException)
         {
-            message = ex.Message;
+            message = ex is HttpRequestException ? $"Verbindungsfehler: {ex.Message}" : ex.Message;
+            if (counters.Files > 0)
+            {
+                message += $" ({counters.Files} Dateien wurden schon übertragen und werden beim nächsten Mal nicht erneut übertragen.)";
+            }
+
             logger.LogError(ex, "Backup failed");
         }
         catch (OperationCanceledException)
@@ -115,6 +110,7 @@ public sealed class BackupManager(
         }
         finally
         {
+            TryDelete(temp);
             _gate.Release();
         }
 
@@ -123,12 +119,12 @@ public sealed class BackupManager(
         {
             connection.Execute(
                 "UPDATE backup_runs SET finished_utc = $finished, success = $success, snapshot = $snapshot, files_copied = $files, bytes_copied = $bytes, message = $message WHERE id = $id",
-                ("$finished", finished.ToDbTime()), ("$success", success ? 1 : 0), ("$snapshot", snapshot), ("$files", counters.Files),
+                ("$finished", finished.ToDbTime()), ("$success", success ? 1 : 0), ("$snapshot", success ? snapshot : null), ("$files", counters.Files),
                 ("$bytes", counters.Bytes), ("$message", message), ("$id", id));
             connection.Execute("DELETE FROM backup_runs WHERE id NOT IN (SELECT id FROM backup_runs ORDER BY id DESC LIMIT 100)");
         }
 
-        return new BackupRun(id, started, finished, success, snapshot, counters.Files, counters.Bytes, message);
+        return new BackupRun(id, started, finished, success, success ? snapshot : null, counters.Files, counters.Bytes, message);
     }
 
     public IReadOnlyList<BackupRun> RecentRuns(int count = 20)
@@ -151,30 +147,26 @@ public sealed class BackupManager(
                 r.IsDBNull(6) ? null : r.GetString(6))).FirstOrDefault();
     }
 
-    /// <summary>Complete snapshots in the target folder, newest first.</summary>
-    public static IReadOnlyList<BackupSnapshot> ListSnapshots(string target)
+    /// <summary>Complete snapshots in the store, newest first.</summary>
+    public static async Task<IReadOnlyList<BackupSnapshot>> ListSnapshotsAsync(IBackupStore store, CancellationToken cancellationToken = default)
     {
-        var folder = Path.Combine(target, SnapshotsFolder);
-        if (!Directory.Exists(folder))
+        var result = new List<BackupSnapshot>();
+        foreach (var name in await store.ListFoldersAsync(SnapshotsFolder, cancellationToken))
         {
-            return [];
+            if (ParseManifest(await store.ReadTextAsync($"{SnapshotsFolder}/{name}/{ManifestFile}", cancellationToken)) is { } manifest)
+            {
+                result.Add(new BackupSnapshot(name, manifest.Created, manifest));
+            }
         }
 
-        return Directory.EnumerateDirectories(folder)
-            .Select(path => (Path: path, Manifest: ReadManifest(path)))
-            .Where(s => s.Manifest is not null)
-            .Select(s => new BackupSnapshot(System.IO.Path.GetFileName(s.Path), s.Path, s.Manifest!.Created,
-                new DirectoryInfo(s.Path).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length)))
-            .OrderByDescending(s => s.Created)
-            .ToList();
+        return result.OrderByDescending(s => s.Created).ToList();
     }
 
-    public static BackupManifest? ReadManifest(string snapshot)
+    public static BackupManifest? ParseManifest(string? json)
     {
-        var file = Path.Combine(snapshot, ManifestFile);
         try
         {
-            return File.Exists(file) ? JsonSerializer.Deserialize<BackupManifest>(File.ReadAllText(file)) : null;
+            return json is null ? null : JsonSerializer.Deserialize<BackupManifest>(json);
         }
         catch (JsonException)
         {
@@ -183,64 +175,95 @@ public sealed class BackupManager(
     }
 
     /// <summary>
-    /// Puts a snapshot back into the data directory. The service must be stopped. The mails come from the mirror next to
-    /// the snapshot folder; mails already in the data directory are kept.
+    /// Puts a snapshot back into the data directory. The service must be stopped. The mails come from the mirror in the
+    /// store; mails already in the data directory are kept.
     /// </summary>
-    public static RestoreResult Restore(string snapshot, DataPaths target, Action<string>? progress = null)
+    /// <param name="snapshot">Name of the snapshot; null = the newest.</param>
+    public static async Task<RestoreResult> RestoreAsync(IBackupStore store, string? snapshot, DataPaths target, Action<string>? progress = null,
+        CancellationToken cancellationToken = default)
     {
-        if (ReadManifest(snapshot) is null)
+        var snapshots = await ListSnapshotsAsync(store, cancellationToken);
+        var chosen = snapshot is null ? snapshots.FirstOrDefault() : snapshots.FirstOrDefault(s => s.Name == snapshot);
+        if (chosen is null)
         {
-            throw new BackupException($"{snapshot} ist keine vollständige Sicherung ({ManifestFile} fehlt).");
+            throw new BackupException(snapshot is null
+                ? $"In {store.Description} gibt es keine vollständige Sicherung."
+                : $"Die Sicherung {snapshot} gibt es in {store.Description} nicht (oder sie ist unvollständig).");
         }
 
-        var mirror = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(snapshot).TrimEnd(Path.DirectorySeparatorChar)))!, MailFolder);
-        Directory.CreateDirectory(target.Root);
-        foreach (var suffix in new[] { "", "-wal", "-shm" })
+        progress?.Invoke($"Spiele die Sicherung {chosen.Name} zurück ({chosen.Manifest.Accounts} Postfächer, {chosen.Manifest.Messages} Mails) …");
+        var temp = Path.Combine(target.Root, "restore-temp");
+        TryDelete(temp);
+        try
         {
-            File.Delete(target.DatabaseFile + suffix);
-        }
-
-        File.Copy(Path.Combine(snapshot, "mailserver.db"), target.DatabaseFile);
-        if (File.Exists(Path.Combine(snapshot, "settings.json")))
-        {
-            File.Copy(Path.Combine(snapshot, "settings.json"), target.SettingsFile, overwrite: true);
-        }
-
-        foreach (var folder in ConfigFolders)
-        {
-            var source = Path.Combine(snapshot, folder);
-            if (Directory.Exists(source))
+            foreach (var file in await store.ListFilesAsync($"{SnapshotsFolder}/{chosen.Name}", cancellationToken))
             {
-                CopyTree(source, Path.Combine(target.Root, folder), _ => true, null);
+                await store.DownloadAsync($"{SnapshotsFolder}/{chosen.Name}/{file.Path}", Path.Combine(temp, Local(file.Path)), cancellationToken);
+            }
+
+            Directory.CreateDirectory(target.Root);
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                File.Delete(target.DatabaseFile + suffix);
+            }
+
+            File.Copy(Path.Combine(temp, "mailserver.db"), target.DatabaseFile);
+            if (File.Exists(Path.Combine(temp, "settings.json")))
+            {
+                File.Copy(Path.Combine(temp, "settings.json"), target.SettingsFile, overwrite: true);
+            }
+
+            foreach (var folder in ConfigFolders)
+            {
+                var source = Path.Combine(temp, folder);
+                if (Directory.Exists(source))
+                {
+                    foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+                    {
+                        var destination = Path.Combine(target.Root, folder, Path.GetRelativePath(source, file));
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                        File.Copy(file, destination, overwrite: true);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+
+        progress?.Invoke("Datenbank und Einstellungen zurückgespielt, übertrage die Mails …");
+        long files = 0, bytes = 0;
+        var mails = await store.ListFilesAsync(MailFolder, cancellationToken);
+        foreach (var mail in mails)
+        {
+            var destination = Path.Combine(target.MailRoot, Local(mail.Path));
+            if (File.Exists(destination) && new FileInfo(destination).Length == mail.Size)
+            {
+                continue;
+            }
+
+            await store.DownloadAsync($"{MailFolder}/{mail.Path}", destination, cancellationToken);
+            files++;
+            bytes += mail.Size;
+            if (files % 1000 == 0)
+            {
+                progress?.Invoke($"  {files} von {mails.Count} Mails …");
             }
         }
 
-        progress?.Invoke("Datenbank und Einstellungen zurückgespielt, kopiere Mails …");
-        var counters = new Counters();
-        if (Directory.Exists(mirror))
-        {
-            CopyTree(mirror, target.MailRoot, _ => true, counters);
-        }
-
-        return new RestoreResult(counters.Files, counters.Bytes, Directory.Exists(mirror));
+        return new RestoreResult(chosen.Name, files, bytes, mails.Count > 0);
     }
 
-    public sealed record RestoreResult(long MailFiles, long MailBytes, bool MirrorFound);
+    public sealed record RestoreResult(string Snapshot, long MailFiles, long MailBytes, bool MirrorFound);
 
-    private string CreateSnapshot(string target, DateTimeOffset started, Counters counters, CancellationToken cancellationToken)
+    private void CreateSnapshot(string folder, DateTimeOffset started, CancellationToken cancellationToken)
     {
-        var name = started.ToLocalTime().ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture);
-        var folder = Path.Combine(target, SnapshotsFolder, name);
-        var temp = folder + ".unvollstaendig";
-        if (Directory.Exists(temp))
-        {
-            Directory.Delete(temp, recursive: true);
-        }
-
-        Directory.CreateDirectory(temp);
+        TryDelete(folder);
+        Directory.CreateDirectory(folder);
 
         // SQLite's online backup gives a consistent copy while the server keeps running.
-        var databaseCopy = Path.Combine(temp, "mailserver.db");
+        var databaseCopy = Path.Combine(folder, "mailserver.db");
         using (var source = database.Open())
         using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databaseCopy, Pooling = false }.ToString()))
         {
@@ -248,145 +271,173 @@ public sealed class BackupManager(
             source.BackupDatabase(destination);
         }
 
-        counters.Add(new FileInfo(databaseCopy).Length);
         if (File.Exists(paths.SettingsFile))
         {
-            File.Copy(paths.SettingsFile, Path.Combine(temp, "settings.json"));
-            counters.Add(new FileInfo(paths.SettingsFile).Length);
+            File.Copy(paths.SettingsFile, Path.Combine(folder, "settings.json"));
         }
 
         var appSettings = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         if (File.Exists(appSettings))
         {
-            File.Copy(appSettings, Path.Combine(temp, "appsettings.json"));
+            File.Copy(appSettings, Path.Combine(folder, "appsettings.json"));
         }
 
         foreach (var sub in ConfigFolders)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var source = Path.Combine(paths.Root, sub);
-            if (Directory.Exists(source))
-            {
-                CopyTree(source, Path.Combine(temp, sub), _ => true, counters);
-            }
-        }
-
-        using (var connection = database.Open())
-        {
-            var manifest = new BackupManifest(BuildInfo.Version, options.Value.Hostname, started,
-                Convert.ToInt32(connection.Scalar("SELECT COUNT(*) FROM accounts")), Convert.ToInt64(connection.Scalar("SELECT COUNT(*) FROM messages")));
-            File.WriteAllText(Path.Combine(temp, ManifestFile), JsonSerializer.Serialize(manifest, Json));
-        }
-
-        Directory.Move(temp, folder);
-        return name;
-    }
-
-    private void MirrorMail(string target, int keepDays, DateTimeOffset now, Counters counters, CancellationToken cancellationToken)
-    {
-        var mirror = Path.Combine(target, MailFolder);
-        Directory.CreateDirectory(mirror);
-        var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (Directory.Exists(paths.MailRoot))
-        {
-            CopyTree(paths.MailRoot, mirror, relative =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                present.Add(relative);
-                return true;
-            }, counters);
-        }
-
-        // Files gone from the server are kept as long as a snapshot may still refer to them.
-        var deletedFile = Path.Combine(target, DeletedFile);
-        var deleted = File.Exists(deletedFile)
-            ? JsonSerializer.Deserialize<Dictionary<string, DateTimeOffset>>(File.ReadAllText(deletedFile)) ?? []
-            : [];
-        var kept = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in Directory.EnumerateFiles(mirror, "*", SearchOption.AllDirectories))
-        {
-            var relative = Path.GetRelativePath(mirror, file);
-            if (present.Contains(relative))
+            if (!Directory.Exists(source))
             {
                 continue;
             }
 
-            // Only snapshots made before the file was first missed can refer to it, and those are removed after keepDays.
-            var since = deleted.TryGetValue(relative, out var value) ? value : now;
-            if (now - since > TimeSpan.FromDays(keepDays))
+            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
             {
-                File.Delete(file);
-            }
-            else
-            {
-                kept[relative] = since;
+                var destination = Path.Combine(folder, sub, Path.GetRelativePath(source, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                try
+                {
+                    File.Copy(file, destination);
+                }
+                catch (FileNotFoundException)
+                {
+                    // deleted meanwhile, e.g. a delivered queue entry
+                }
             }
         }
 
-        File.WriteAllText(deletedFile, JsonSerializer.Serialize(kept, Json));
-        foreach (var directory in Directory.EnumerateDirectories(mirror, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length))
+        using var connection = database.Open();
+        var manifest = new BackupManifest(BuildInfo.Version, options.Value.Hostname, started,
+            Convert.ToInt32(connection.Scalar("SELECT COUNT(*) FROM accounts")), Convert.ToInt64(connection.Scalar("SELECT COUNT(*) FROM messages")));
+        File.WriteAllText(Path.Combine(folder, ManifestFile), JsonSerializer.Serialize(manifest, Json));
+    }
+
+    private async Task MirrorMailAsync(IBackupStore store, int keepDays, DateTimeOffset now, Counters counters, CancellationToken cancellationToken)
+    {
+        var key = store.Key;
+        Dictionary<string, (long Size, DateTimeOffset? MissingSince)> index;
+        using (var connection = database.Open())
         {
-            if (!Directory.EnumerateFileSystemEntries(directory).Any())
+            // Only one target is tracked; switching back later starts from the listing below.
+            connection.Execute("DELETE FROM backup_files WHERE store_key <> $key", ("$key", key));
+            index = connection.Query("SELECT path, size, missing_since_utc FROM backup_files WHERE store_key = $key",
+                    r => (Path: r.GetString(0), Size: r.GetInt64(1), Missing: r.IsDBNull(2) ? (DateTimeOffset?)null : r.GetDbTime(2)), ("$key", key))
+                .ToDictionary(r => r.Path, r => (r.Size, r.Missing), StringComparer.Ordinal);
+        }
+
+        // The target was emptied (or is new): what is really there decides.
+        if (index.Count > 0 && !(await store.ListFoldersAsync("", cancellationToken)).Contains(MailFolder))
+        {
+            index.Clear();
+            Execute("DELETE FROM backup_files WHERE store_key = $key", ("$key", key));
+        }
+
+        if (index.Count == 0)
+        {
+            var existing = await store.ListFilesAsync(MailFolder, cancellationToken);
+            foreach (var file in existing)
             {
-                Directory.Delete(directory);
+                index[file.Path] = (file.Size, null);
+                Execute("INSERT OR REPLACE INTO backup_files (store_key, path, size) VALUES ($key, $path, $size)",
+                    ("$key", key), ("$path", file.Path), ("$size", file.Size));
+            }
+        }
+
+        var source = Directory.Exists(paths.MailRoot)
+            ? new DirectoryInfo(paths.MailRoot).EnumerateFiles("*", SearchOption.AllDirectories)
+                .ToDictionary(f => Relative(paths.MailRoot, f.FullName), f => f.Length, StringComparer.Ordinal)
+            : [];
+
+        var upload = source.Where(f => !index.TryGetValue(f.Key, out var known) || known.Size != f.Value).ToList();
+        await Parallel.ForEachAsync(upload,
+            new ParallelOptions { MaxDegreeOfParallelism = store is FolderBackupStore ? 1 : 4, CancellationToken = cancellationToken },
+            async (file, token) =>
+            {
+                try
+                {
+                    await store.UploadAsync(Path.Combine(paths.MailRoot, Local(file.Key)), $"{MailFolder}/{file.Key}", token);
+                }
+                catch (FileNotFoundException)
+                {
+                    return; // deleted in the meantime
+                }
+
+                Execute("INSERT OR REPLACE INTO backup_files (store_key, path, size) VALUES ($key, $path, $size)",
+                    ("$key", key), ("$path", file.Key), ("$size", file.Value));
+                counters.Add(file.Value);
+            });
+
+        // Files gone from the server are kept as long as a snapshot may still refer to them: only snapshots made before
+        // the file was first missed can, and those are removed after keepDays.
+        foreach (var (path, known) in index)
+        {
+            if (source.ContainsKey(path))
+            {
+                if (known.MissingSince is not null)
+                {
+                    Execute("UPDATE backup_files SET missing_since_utc = NULL WHERE store_key = $key AND path = $path", ("$key", key), ("$path", path));
+                }
+
+                continue;
+            }
+
+            if (known.MissingSince is null)
+            {
+                Execute("UPDATE backup_files SET missing_since_utc = $now WHERE store_key = $key AND path = $path",
+                    ("$now", now.ToDbTime()), ("$key", key), ("$path", path));
+            }
+            else if (now - known.MissingSince > TimeSpan.FromDays(keepDays))
+            {
+                await store.DeleteAsync($"{MailFolder}/{path}", cancellationToken);
+                Execute("DELETE FROM backup_files WHERE store_key = $key AND path = $path", ("$key", key), ("$path", path));
             }
         }
     }
 
-    private static int RemoveOldSnapshots(string target, int keepDays, DateTimeOffset now)
+    private static async Task<int> RemoveOldSnapshotsAsync(IBackupStore store, int keepDays, DateTimeOffset now, string current,
+        CancellationToken cancellationToken)
     {
+        var complete = await ListSnapshotsAsync(store, cancellationToken);
         var removed = 0;
-        var snapshots = ListSnapshots(target);
-        foreach (var snapshot in snapshots.Skip(1).Where(s => now - s.Created > TimeSpan.FromDays(keepDays)))
+        foreach (var snapshot in complete.Skip(1).Where(s => now - s.Created > TimeSpan.FromDays(keepDays)))
         {
-            Directory.Delete(snapshot.Path, recursive: true);
+            await store.DeleteAsync($"{SnapshotsFolder}/{snapshot.Name}", cancellationToken);
             removed++;
         }
 
-        // Leftovers of runs that were interrupted.
-        foreach (var incomplete in Directory.EnumerateDirectories(Path.Combine(target, SnapshotsFolder), "*.unvollstaendig"))
+        // Leftovers of runs that were interrupted (no manifest).
+        foreach (var folder in await store.ListFoldersAsync(SnapshotsFolder, cancellationToken))
         {
-            Directory.Delete(incomplete, recursive: true);
+            if (folder != current && complete.All(s => s.Name != folder))
+            {
+                await store.DeleteAsync($"{SnapshotsFolder}/{folder}", cancellationToken);
+            }
         }
 
         return removed;
     }
 
-    /// <summary>Copies files that are missing or differ in size/time; returns nothing, counts what was copied.</summary>
-    private static void CopyTree(string source, string destination, Func<string, bool> include, Counters? counters)
+    private void Execute(string sql, params (string Name, object? Value)[] parameters)
     {
-        Directory.CreateDirectory(destination);
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        using var connection = database.Open();
+        connection.Execute(sql, parameters);
+    }
+
+    private static string Relative(string root, string file) => Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/');
+
+    private static string Local(string path) => path.Replace('/', Path.DirectorySeparatorChar);
+
+    private static void TryDelete(string folder)
+    {
+        try
         {
-            var relative = Path.GetRelativePath(source, file);
-            if (!include(relative))
+            if (Directory.Exists(folder))
             {
-                continue;
+                Directory.Delete(folder, recursive: true);
             }
-
-            var info = new FileInfo(file);
-            var copy = new FileInfo(Path.Combine(destination, relative));
-            if (copy.Exists && copy.Length == info.Length && copy.LastWriteTimeUtc == info.LastWriteTimeUtc)
-            {
-                continue;
-            }
-
-            Directory.CreateDirectory(copy.DirectoryName!);
-            try
-            {
-                File.Copy(file, copy.FullName, overwrite: true);
-            }
-            catch (FileNotFoundException)
-            {
-                continue; // deleted while copying, e.g. a delivered queue entry
-            }
-            catch (DirectoryNotFoundException)
-            {
-                continue;
-            }
-
-            File.SetLastWriteTimeUtc(copy.FullName, info.LastWriteTimeUtc);
-            counters?.Add(info.Length);
+        }
+        catch (IOException)
+        {
         }
     }
 
@@ -399,13 +450,16 @@ public sealed class BackupManager(
 
     private sealed class Counters
     {
-        public long Files;
-        public long Bytes;
+        private long _files;
+        private long _bytes;
+
+        public long Files => Interlocked.Read(ref _files);
+        public long Bytes => Interlocked.Read(ref _bytes);
 
         public void Add(long bytes)
         {
-            Files++;
-            Bytes += bytes;
+            Interlocked.Increment(ref _files);
+            Interlocked.Add(ref _bytes, bytes);
         }
     }
 }

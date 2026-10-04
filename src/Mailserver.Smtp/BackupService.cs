@@ -47,14 +47,14 @@ public sealed class BackupService(
 
     private async Task RunAsync(BackupRun? previous, CancellationToken stoppingToken)
     {
-        logger.LogInformation("Starting the scheduled backup to {Directory}", options.Value.Backup.Directory);
+        logger.LogInformation("Starting the scheduled backup to {Directory}", backups.Stores.Describe(options.Value.Backup));
         var run = await backups.RunAsync(cancellationToken: stoppingToken);
         if (run.Success == false && previous?.Success != false && !stoppingToken.IsCancellationRequested)
         {
             // Only the first failure in a row is reported; the retries are in the backup list.
             await notifier.NotifyAsync("Datensicherung fehlgeschlagen",
                 $"""
-                Die Datensicherung nach {options.Value.Backup.Directory} ist fehlgeschlagen:
+                Die Datensicherung nach {backups.Stores.Describe(options.Value.Backup)} ist fehlgeschlagen:
 
                 {run.Message}
 

@@ -46,9 +46,9 @@ if (args is ["backup", "restore", ..])
 {
     try
     {
-        return RestoreBackup(args);
+        return await RestoreBackupAsync(args);
     }
-    catch (Exception ex) when (ex is Mailserver.Core.Backup.BackupException or IOException or UnauthorizedAccessException)
+    catch (Exception ex) when (ex is Mailserver.Core.Backup.BackupException or IOException or UnauthorizedAccessException or HttpRequestException)
     {
         Console.Error.WriteLine($"Fehler: {ex.Message}");
         return 1;
@@ -74,11 +74,15 @@ try
         ["tls", "acme", ..] => await AcmeAsync(args),
         ["antivirus", "test"] => await AntivirusTestAsync(),
         ["backup"] or ["backup", "run" or "--to", ..] => await BackupAsync(args),
+        ["backup", "list"] => await ListBackupsAsync(),
+        ["backup", "connect", "onedrive" or "pcloud", ..] => await ConnectCloudAsync(args),
+        ["backup", "disconnect", "onedrive" or "pcloud"] => Disconnect(args[2]),
         ["diagnose"] => await DiagnoseAsync(),
         _ => Run(args),
     };
 }
-catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or IOException or Microsoft.Data.Sqlite.SqliteException)
+catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or IOException or Microsoft.Data.Sqlite.SqliteException
+                           or Mailserver.Core.Backup.BackupException or HttpRequestException)
 {
     Console.Error.WriteLine($"Fehler: {ex.Message}");
     return 1;
@@ -133,9 +137,6 @@ int Run(string[] a)
 
         case ["tls"]:
             return CheckTls();
-
-        case ["backup", "list"]:
-            return ListBackups();
 
         case ["ip", "list"]:
         {
@@ -410,8 +411,13 @@ int Run(string[] a)
                   diagnose                                prüft DNS, Reverse DNS, Blacklists, Ports, Zertifikat, Sicherung …
                   antivirus test                          prüft den Virenscanner mit der harmlosen EICAR-Testdatei
                   backup [run] [--to <ordner>]            Datensicherung jetzt (Ziel aus Admin → Datensicherung)
-                  backup list                             letzte Sicherungen anzeigen
-                  backup restore <ordner> [--force]       Sicherung zurückspielen (Dienst vorher anhalten)
+                  backup list                             letzte und vorhandene Sicherungen anzeigen
+                  backup connect onedrive --client-id <id> [--tenant common] [--folder <ordner>]
+                  backup connect pcloud --email <adresse> [--region EU|US] [--folder <ordner>]
+                                                          Cloud-Speicher verbinden und als Sicherungsziel wählen
+                  backup disconnect onedrive|pcloud
+                  backup restore <ordner> | onedrive | pcloud [--snapshot <name>] [--folder <cloud-ordner>] [--force]
+                                                          Sicherung zurückspielen (Dienst vorher anhalten)
 
                   alias add <adresse> <ziel>[,<ziel>...]  Ziele dürfen auch externe Adressen sein (Weiterleitung)
                   alias remove <adresse> | alias list
@@ -651,25 +657,27 @@ async Task<int> BackupAsync(string[] a)
 {
     if (Option(a, "--to") is { } directory)
     {
-        options.Backup.Directory = Path.GetFullPath(directory);
+        options.Backup = options.Backup with { Target = BackupOptions.FolderTarget, Directory = Path.GetFullPath(directory) };
     }
 
     var manager = CreateBackupManager(options);
     if (manager.Problem() is { } problem)
     {
-        return Fail($"{problem} Zielordner in der Weboberfläche (Admin → Datensicherung) einstellen oder --to <ordner> angeben.");
+        return Fail($"{problem} Ziel in der Weboberfläche (Admin → Datensicherung) einstellen, --to <ordner> angeben " +
+                    "oder mailadmin backup connect onedrive|pcloud.");
     }
 
-    Console.WriteLine($"Sichere nach {options.Backup.Directory} … (die erste Sicherung kopiert alle Mails und kann dauern)");
+    Console.WriteLine($"Sichere nach {manager.Stores.Describe(options.Backup)} … (die erste Sicherung überträgt alle Mails und kann dauern)");
     var run = await manager.RunAsync();
     return run.Success == true ? Ok($"Fertig: Sicherung {run.Snapshot}, {run.Message}") : Fail(run.Message ?? "Fehlgeschlagen.");
 }
 
-int ListBackups()
+async Task<int> ListBackupsAsync()
 {
     var manager = CreateBackupManager(options);
+    var target = manager.Stores.Describe(options.Backup);
     Console.WriteLine(options.Backup.Enabled
-        ? $"Automatische Sicherung: täglich {options.Backup.Time:hh\\:mm} Uhr nach {options.Backup.Directory}, {options.Backup.KeepDays} Tage aufbewahrt"
+        ? $"Automatische Sicherung: täglich {options.Backup.Time:hh\\:mm} Uhr nach {target}, {options.Backup.KeepDays} Tage aufbewahrt"
         : "Automatische Sicherung: aus");
     foreach (var run in manager.RecentRuns(10))
     {
@@ -677,51 +685,131 @@ int ListBackups()
         Console.WriteLine($"  {run.Started.ToLocalTime():dd.MM.yyyy HH:mm}  {state}  {run.Message}");
     }
 
-    if (!string.IsNullOrWhiteSpace(options.Backup.Directory) && Directory.Exists(options.Backup.Directory))
+    if (manager.Problem() is { } problem)
     {
-        Console.WriteLine("Vorhandene Sicherungen:");
-        foreach (var snapshot in Mailserver.Core.Backup.BackupManager.ListSnapshots(options.Backup.Directory))
-        {
-            Console.WriteLine($"  {snapshot.Path}");
-        }
+        Console.WriteLine(problem);
+        return 0;
+    }
+
+    using var store = manager.Stores.Open(options.Backup);
+    Console.WriteLine($"Vorhandene Sicherungen in {store.Description}:");
+    foreach (var snapshot in await Mailserver.Core.Backup.BackupManager.ListSnapshotsAsync(store))
+    {
+        Console.WriteLine($"  {snapshot.Name}  {snapshot.Manifest.Accounts} Postfächer, {snapshot.Manifest.Messages} Mails");
     }
 
     return 0;
 }
 
-int RestoreBackup(string[] a)
+int Disconnect(string provider)
+{
+    new Mailserver.Core.Backup.CloudTokens(paths).Delete(provider);
+    return Ok("Verbindung getrennt. Die Sicherungen in der Cloud bleiben erhalten.");
+}
+
+async Task<int> ConnectCloudAsync(string[] a)
+{
+    var settingsStore = new Mailserver.Core.Configuration.SettingsStore(paths);
+    var tokens = new Mailserver.Core.Backup.CloudTokens(paths);
+    var folder = Option(a, "--folder") ?? options.Backup.RemoteFolder;
+    if (a[2] == "onedrive")
+    {
+        var backup = options.Backup with
+        {
+            Target = BackupOptions.OneDriveTarget,
+            RemoteFolder = folder,
+            OneDriveClientId = Option(a, "--client-id") ?? options.Backup.OneDriveClientId,
+            OneDriveTenant = Option(a, "--tenant") ?? options.Backup.OneDriveTenant,
+        };
+        var login = await Mailserver.Core.Backup.OneDriveStore.StartLoginAsync(backup, CancellationToken.None);
+        Console.WriteLine($"Im Browser {login.VerificationUri} öffnen, den Code {login.UserCode} eingeben und mit dem Microsoft-Konto anmelden.");
+        Console.WriteLine("Warte auf die Anmeldung …");
+        var account = await Mailserver.Core.Backup.OneDriveStore.CompleteLoginAsync(backup, login, tokens, CancellationToken.None);
+        settingsStore.SaveBackup(backup);
+        return Ok($"Mit OneDrive verbunden ({account}). Gesichert wird nach /{backup.RemoteFolder}.");
+    }
+
+    var pcloud = options.Backup with
+    {
+        Target = BackupOptions.PCloudTarget,
+        RemoteFolder = folder,
+        PCloudRegion = Option(a, "--region")?.ToUpperInvariant() ?? options.Backup.PCloudRegion,
+    };
+    var email = Option(a, "--email") ?? throw new ArgumentException("Bitte --email <adresse> des pCloud-Kontos angeben.");
+    var password = ReadHidden("pCloud-Passwort: ");
+    var result = await Mailserver.Core.Backup.PCloudStore.LoginAsync(pcloud, email, password, null, null, CancellationToken.None);
+    if (result.NeedsCode)
+    {
+        Console.Write("Code der Zwei-Faktor-Anmeldung: ");
+        result = await Mailserver.Core.Backup.PCloudStore.LoginAsync(pcloud, email, password, Console.ReadLine(), result.TwoFactorToken, CancellationToken.None);
+    }
+
+    tokens.Save(Mailserver.Core.Backup.PCloudStore.Provider, result.Token!);
+    settingsStore.SaveBackup(pcloud);
+    return Ok($"Mit pCloud verbunden ({result.Token!.Account}). Gesichert wird nach /{pcloud.RemoteFolder}. Das Passwort wurde nicht gespeichert.");
+}
+
+async Task<int> RestoreBackupAsync(string[] a)
 {
     if (a.Length < 3)
     {
-        return Fail("Aufruf: mailadmin backup restore <sicherungsordner> [--force]");
+        return Fail("Aufruf: mailadmin backup restore <ordner> | onedrive | pcloud [--folder <cloud-ordner>] [--snapshot <name>] [--force]");
     }
-
-    // Either one snapshot folder or the backup folder itself (then the newest snapshot).
-    var source = Path.GetFullPath(a[2]);
-    var snapshot = Mailserver.Core.Backup.BackupManager.ReadManifest(source) is not null
-        ? source
-        : Mailserver.Core.Backup.BackupManager.ListSnapshots(source).FirstOrDefault()?.Path
-          ?? throw new Mailserver.Core.Backup.BackupException($"In {source} gibt es keine vollständige Sicherung.");
-    var manifest = Mailserver.Core.Backup.BackupManager.ReadManifest(snapshot)!;
 
     if (OperatingSystem.IsWindows() && System.Diagnostics.Process.GetProcessesByName("Mailserver").Length > 0)
     {
         return Fail("Der Mailserver läuft noch. Zuerst anhalten: Stop-Service Mailserver");
     }
 
-    Console.WriteLine($"Sicherung vom {manifest.Created.ToLocalTime():dd.MM.yyyy HH:mm} ({manifest.Hostname}, {manifest.Accounts} Postfächer, {manifest.Messages} Mails)");
-    if (File.Exists(paths.DatabaseFile) && !a.Contains("--force") && !Confirm($"Die Datenbank in {paths.Root} wird ersetzt. Fortfahren?"))
+    Mailserver.Core.Backup.IBackupStore store;
+    var snapshot = Option(a, "--snapshot");
+    if (a[2] is "onedrive" or "pcloud")
     {
-        return 1;
+        var settings = options.Backup with
+        {
+            Target = a[2] == "onedrive" ? BackupOptions.OneDriveTarget : BackupOptions.PCloudTarget,
+            RemoteFolder = Option(a, "--folder") ?? options.Backup.RemoteFolder,
+        };
+        store = new Mailserver.Core.Backup.BackupStores(paths, new Mailserver.Core.Backup.CloudTokens(paths)).Open(settings);
+    }
+    else
+    {
+        // Either the backup folder or one snapshot folder in it.
+        var source = Path.GetFullPath(a[2]);
+        if (File.Exists(Path.Combine(source, Mailserver.Core.Backup.BackupManager.ManifestFile)))
+        {
+            snapshot ??= Path.GetFileName(source.TrimEnd(Path.DirectorySeparatorChar));
+            source = Path.GetDirectoryName(Path.GetDirectoryName(source.TrimEnd(Path.DirectorySeparatorChar)))!;
+        }
+
+        store = new Mailserver.Core.Backup.FolderBackupStore(source);
     }
 
-    var result = Mailserver.Core.Backup.BackupManager.Restore(snapshot, paths, Console.WriteLine);
-    if (!result.MirrorFound)
+    using (store)
     {
-        Console.WriteLine("Warnung: neben dem Ordner snapshots liegt kein Ordner mail – die Mails selbst fehlen.");
-    }
+        var snapshots = await Mailserver.Core.Backup.BackupManager.ListSnapshotsAsync(store);
+        var chosen = snapshot is null ? snapshots.FirstOrDefault() : snapshots.FirstOrDefault(s => s.Name == snapshot);
+        if (chosen is null)
+        {
+            return Fail($"In {store.Description} gibt es {(snapshot is null ? "keine vollständige Sicherung" : $"keine Sicherung {snapshot}")}." +
+                        (snapshots.Count > 0 ? $" Vorhanden: {string.Join(", ", snapshots.Select(s => s.Name))}" : ""));
+        }
 
-    return Ok($"Zurückgespielt ({result.MailFiles} Mail-Dateien kopiert). Jetzt den Dienst starten: Start-Service Mailserver");
+        var manifest = chosen.Manifest;
+        Console.WriteLine($"Sicherung {chosen.Name} vom {manifest.Created.ToLocalTime():dd.MM.yyyy HH:mm} ({manifest.Hostname}, {manifest.Accounts} Postfächer, {manifest.Messages} Mails)");
+        if (File.Exists(paths.DatabaseFile) && !a.Contains("--force") && !Confirm($"Die Datenbank in {paths.Root} wird ersetzt. Fortfahren?"))
+        {
+            return 1;
+        }
+
+        var result = await Mailserver.Core.Backup.BackupManager.RestoreAsync(store, chosen.Name, paths, Console.WriteLine);
+        if (!result.MirrorFound && manifest.Messages > 0)
+        {
+            Console.WriteLine("Warnung: in der Sicherung gibt es keinen Ordner mail – die Mails selbst fehlen.");
+        }
+
+        return Ok($"Zurückgespielt ({result.MailFiles} Mail-Dateien übertragen). Jetzt den Dienst starten: Start-Service Mailserver");
+    }
 }
 
 async Task<int> DiagnoseAsync()

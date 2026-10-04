@@ -58,6 +58,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SendingLimiter>();
         services.AddSingleton<IpRules>();
         services.AddSingleton<AuthThrottle>();
+        services.AddSingleton<Mailserver.Core.Backup.CloudTokens>();
+        services.AddSingleton<Mailserver.Core.Backup.BackupStores>();
+        services.AddSingleton<Mailserver.Core.Backup.CloudConnector>();
         services.AddSingleton<Mailserver.Core.Backup.BackupManager>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeChallengeStore>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeCertificateManager>();

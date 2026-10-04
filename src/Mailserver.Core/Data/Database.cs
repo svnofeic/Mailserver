@@ -208,6 +208,16 @@ public sealed class Database
             expires_utc TEXT
         );
         """,
+        """
+        -- Mail files already in the backup store, so only new ones are uploaded (a cloud cannot be listed cheaply every night).
+        CREATE TABLE backup_files (
+            store_key         TEXT NOT NULL,
+            path              TEXT NOT NULL,
+            size              INTEGER NOT NULL,
+            missing_since_utc TEXT,
+            PRIMARY KEY (store_key, path)
+        ) WITHOUT ROWID;
+        """,
     ];
 
     private readonly string _connectionString;

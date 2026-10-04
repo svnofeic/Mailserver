@@ -44,6 +44,12 @@ public sealed class BackupTests : IDisposable
         }
     }
 
+    private IReadOnlyList<BackupSnapshot> Snapshots()
+    {
+        using var store = new FolderBackupStore(_target);
+        return BackupManager.ListSnapshotsAsync(store).GetAwaiter().GetResult();
+    }
+
     private Task<StoredMessage> AppendAsync(string subject) =>
         _data.Mailboxes.AppendAsync(_alice, Encoding.ASCII.GetBytes($"Subject: {subject}\r\n\r\n{subject}\r\n"));
 
@@ -55,11 +61,12 @@ public sealed class BackupTests : IDisposable
         var run = await _backups.RunAsync();
 
         Assert.True(run.Success, run.Message);
-        var snapshot = Assert.Single(BackupManager.ListSnapshots(_target));
-        Assert.True(File.Exists(Path.Combine(snapshot.Path, "mailserver.db")));
-        Assert.Equal("KEY", File.ReadAllText(Path.Combine(snapshot.Path, "dkim", "example.test.mail.pem")));
-        Assert.False(Directory.Exists(Path.Combine(snapshot.Path, "keys")));
-        var manifest = BackupManager.ReadManifest(snapshot.Path)!;
+        var snapshot = Assert.Single(Snapshots());
+        var folder = Path.Combine(_target, "snapshots", snapshot.Name);
+        Assert.True(File.Exists(Path.Combine(folder, "mailserver.db")));
+        Assert.Equal("KEY", File.ReadAllText(Path.Combine(folder, "dkim", "example.test.mail.pem")));
+        Assert.False(Directory.Exists(Path.Combine(folder, "keys")));
+        var manifest = snapshot.Manifest;
         Assert.Equal((1, 1L), (manifest.Accounts, manifest.Messages));
         Assert.True(File.Exists(Path.Combine(_target, "mail", message.FileName)));
         Assert.Equal(run.Snapshot, snapshot.Name);
@@ -78,7 +85,7 @@ public sealed class BackupTests : IDisposable
 
         // Snapshot files as before plus the new mail – the two old mails are not copied again.
         Assert.Equal(first.FilesCopied - 1, second.FilesCopied);
-        Assert.Equal(2, BackupManager.ListSnapshots(_target).Count);
+        Assert.Equal(2, Snapshots().Count);
     }
 
     [Fact]
@@ -98,12 +105,12 @@ public sealed class BackupTests : IDisposable
             Assert.True(File.Exists(mirrored), $"day {day}");
         }
 
-        Assert.Equal(8, BackupManager.ListSnapshots(_target).Count);
+        Assert.Equal(8, Snapshots().Count);
         _time.Now = _time.Now.AddDays(2);
         await _backups.RunAsync();
 
         Assert.False(File.Exists(mirrored));
-        var snapshots = BackupManager.ListSnapshots(_target);
+        var snapshots = Snapshots();
         Assert.All(snapshots, s => Assert.True(_time.Now - s.Created <= TimeSpan.FromDays(7)));
     }
 
@@ -114,7 +121,7 @@ public sealed class BackupTests : IDisposable
         _time.Now = _time.Now.AddDays(30);
 
         Assert.True((await _backups.RunAsync()).Success);
-        Assert.Single(BackupManager.ListSnapshots(_target));
+        Assert.Single(Snapshots());
     }
 
     [Fact]
@@ -126,7 +133,8 @@ public sealed class BackupTests : IDisposable
 
         using var fresh = new TestData();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        var result = BackupManager.Restore(BackupManager.ListSnapshots(_target)[0].Path, fresh.Paths);
+        using var store = new FolderBackupStore(_target);
+        var result = await BackupManager.RestoreAsync(store, null, fresh.Paths);
 
         Assert.True(result.MirrorFound);
         var database = new Mailserver.Core.Data.Database(fresh.Paths);
@@ -221,7 +229,8 @@ public sealed class BackupWebTests : IAsyncLifetime
         await _web.GetAsync("/Admin/Backup");
         Assert.Contains("letzte Sicherung", _web.LastPage);
         Assert.Contains("erfolgreich", _web.LastPage);
-        Assert.Contains(BackupManager.ListSnapshots(_target).Single().Name, _web.LastPage);
+        using var store = new FolderBackupStore(_target);
+        Assert.Contains((await BackupManager.ListSnapshotsAsync(store)).Single().Name, _web.LastPage);
     }
 
     [Fact]

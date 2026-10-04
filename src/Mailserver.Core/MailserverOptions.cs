@@ -35,12 +35,41 @@ public sealed class MailserverOptions
 }
 
 /// <summary>Automatic nightly backup of the data directory (database, settings, keys, mails).</summary>
-public sealed class BackupOptions
+public sealed record BackupOptions
 {
+    public const string FolderTarget = "Folder";
+    public const string OneDriveTarget = "OneDrive";
+    public const string PCloudTarget = "pCloud";
+
     public bool Enabled { get; set; }
+
+    /// <summary>"Folder" (disk, USB drive, network share), "OneDrive" or "pCloud".</summary>
+    public string Target { get; set; } = FolderTarget;
 
     /// <summary>Target folder: another disk, a USB drive or a network share (\\server\freigabe\mailserver).</summary>
     public string? Directory { get; set; }
+
+    /// <summary>Folder in the cloud storage.</summary>
+    public string RemoteFolder { get; set; } = "Mailserver-Sicherung";
+
+    /// <summary>Application (client) ID of the app registration in Microsoft Entra, see docs/datensicherung.md.</summary>
+    public string? OneDriveClientId { get; set; }
+
+    /// <summary>"common" (personal and work accounts), "consumers" (personal only) or the tenant ID.</summary>
+    public string OneDriveTenant { get; set; } = "common";
+
+    /// <summary>"EU" (eapi.pcloud.com) or "US" (api.pcloud.com) – where the pCloud account was created.</summary>
+    public string PCloudRegion { get; set; } = "EU";
+
+    /// <summary>Only for tests: other endpoints than Microsoft's and pCloud's.</summary>
+    public string? OneDriveLoginUrl { get; set; }
+
+    public string? OneDriveGraphUrl { get; set; }
+
+    public string? PCloudApiUrl { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsCloud => !string.Equals(Target, FolderTarget, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Local time of day of the backup.</summary>
     public TimeSpan Time { get; set; } = new(3, 0, 0);

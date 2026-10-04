@@ -1,8 +1,28 @@
 @page
 @model Mailserver.Web.Pages.Admin.Backup.IndexModel
+@using Mailserver.Core
+@using Mailserver.Core.Backup
 @{
     ViewData["Title"] = "Datensicherung";
     var f = Model.Form;
+    var oneDriveConnected = Model.Cloud.IsConnected(OneDriveStore.Provider);
+    var pCloudConnected = Model.Cloud.IsConnected(PCloudStore.Provider);
+}
+@section Head {
+    @if (Model.Cloud.PendingOneDrive is not null)
+    {
+        <meta http-equiv="refresh" content="5" />
+    }
+    <style>
+        .target-choice { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 6px; }
+        .for-folder, .for-onedrive, .for-pcloud, .for-cloud { display: none; }
+        form:has(#target-folder:checked) .for-folder,
+        form:has(#target-onedrive:checked) .for-onedrive,
+        form:has(#target-pcloud:checked) .for-pcloud,
+        form:has(#target-onedrive:checked) .for-cloud,
+        form:has(#target-pcloud:checked) .for-cloud { display: block; }
+        .code { font-size: 26px; font-weight: 600; letter-spacing: 2px; }
+    </style>
 }
 <h1>Datensicherung</h1>
 
@@ -26,22 +46,122 @@
     }
 </div>
 
+@if (Model.Cloud.PendingOneDrive is { } login)
+{
+    <div class="notice warn">
+        <p style="margin-top: 0"><strong>Anmeldung bei OneDrive:</strong> <a href="@login.VerificationUri" target="_blank" rel="noopener">@login.VerificationUri</a>
+            öffnen (auf einem beliebigen Gerät), diesen Code eingeben und mit dem Microsoft-Konto anmelden, in dessen OneDrive gesichert werden soll:</p>
+        <p class="code mono">@login.UserCode</p>
+        <p class="small" style="margin-bottom: 0">Gültig bis @Format.Time(login.Expires). Diese Seite aktualisiert sich von selbst, sobald die Anmeldung bestätigt ist.</p>
+    </div>
+}
+@if (Model.Cloud.OneDriveError is { } oneDriveError)
+{
+    <div class="notice bad">OneDrive: @oneDriveError</div>
+}
+
 <h2>Einstellungen</h2>
 <form method="post" class="card" style="max-width: 760px">
     <label class="check"><input type="checkbox" name="Form.Enabled" value="true" checked="@f.Enabled" /> täglich automatisch sichern</label>
-    <label class="stack">Zielordner
-        <input name="Form.Directory" value="@f.Directory" placeholder="D:\Sicherung\Mailserver oder \\server\freigabe\mailserver" />
-    </label>
-    <p class="small muted" style="margin-top: -4px">Am besten außerhalb des Servers: eine Netzwerkfreigabe (z. B. Storage Box des Hosters) oder
-        zumindest eine zweite Festplatte. Eine Sicherung auf derselben Festplatte hilft nicht bei deren Ausfall.</p>
-    <div class="row">
+
+    <p class="small muted" style="margin-bottom: 4px">Wohin?</p>
+    <div class="target-choice">
+        <label class="check"><input type="radio" id="target-folder" name="Form.Target" value="@BackupOptions.FolderTarget"
+                                    checked="@(f.Target == BackupOptions.FolderTarget)" /> Ordner / Netzwerkfreigabe</label>
+        <label class="check"><input type="radio" id="target-onedrive" name="Form.Target" value="@BackupOptions.OneDriveTarget"
+                                    checked="@(f.Target == BackupOptions.OneDriveTarget)" /> Microsoft OneDrive</label>
+        <label class="check"><input type="radio" id="target-pcloud" name="Form.Target" value="@BackupOptions.PCloudTarget"
+                                    checked="@(f.Target == BackupOptions.PCloudTarget)" /> pCloud</label>
+    </div>
+
+    <div class="for-folder">
+        <label class="stack">Zielordner
+            <input name="Form.Directory" value="@f.Directory" placeholder="D:\Sicherung\Mailserver oder \\server\freigabe\mailserver" />
+        </label>
+        <p class="small muted" style="margin-top: -4px">Am besten außerhalb des Servers: eine Netzwerkfreigabe (z. B. Storage Box des Hosters) oder
+            zumindest eine zweite Festplatte. Eine Sicherung auf derselben Festplatte hilft nicht bei deren Ausfall.</p>
+        <p class="small muted">Nur für Netzwerkfreigaben mit Anmeldung:</p>
+        <div class="row">
+            <label>Benutzer<input name="Form.Username" value="@f.Username" autocomplete="off" placeholder="u12345 oder server\benutzer" /></label>
+            <label>Passwort (leer = unverändert)<input name="Form.Password" type="password" autocomplete="new-password" /></label>
+        </div>
+    </div>
+
+    <div class="for-cloud">
+        <label class="stack">Ordner in der Cloud
+            <input name="Form.RemoteFolder" value="@f.RemoteFolder" placeholder="Mailserver-Sicherung" />
+        </label>
+    </div>
+
+    <div class="for-onedrive">
+        <p class="small muted">Für OneDrive braucht der Server eine eigene App-Registrierung bei Microsoft (einmalig, kostenlos, etwa 5 Minuten –
+            Schritt für Schritt in docs/datensicherung.md). Danach hier die Anwendungs-ID eintragen und verbinden.</p>
+        <div class="row">
+            <label>Anwendungs-ID (Client-ID)<input name="Form.OneDriveClientId" value="@f.OneDriveClientId" class="mono" style="width: 320px"
+                                                   placeholder="00000000-0000-0000-0000-000000000000" /></label>
+            <label>Kontotyp
+                <select name="Form.OneDriveTenant">
+                    <option value="common" selected="@(f.OneDriveTenant == "common")">privat oder Microsoft 365</option>
+                    <option value="consumers" selected="@(f.OneDriveTenant == "consumers")">nur privates Microsoft-Konto</option>
+                    @if (f.OneDriveTenant is not ("common" or "consumers"))
+                    {
+                        <option value="@f.OneDriveTenant" selected>Mandant @f.OneDriveTenant</option>
+                    }
+                </select>
+            </label>
+        </div>
+        <div class="row" style="margin-top: 10px">
+            @if (oneDriveConnected)
+            {
+                <span class="pill good">verbunden@(Model.Cloud.Account(OneDriveStore.Provider) is { } account ? $" mit {account}" : "")</span>
+                <button type="submit" asp-page-handler="Disconnect" name="provider" value="@OneDriveStore.Provider" class="secondary">Trennen</button>
+                <button type="submit" asp-page-handler="ConnectOneDrive" class="secondary">Neu verbinden</button>
+            }
+            else
+            {
+                <span class="pill warn">nicht verbunden</span>
+                <button type="submit" asp-page-handler="ConnectOneDrive">Mit OneDrive verbinden</button>
+            }
+        </div>
+    </div>
+
+    <div class="for-pcloud">
+        <div class="row">
+            <label>Region des Kontos
+                <select name="Form.PCloudRegion">
+                    <option value="EU" selected="@(f.PCloudRegion != "US")">Europa (Luxemburg)</option>
+                    <option value="US" selected="@(f.PCloudRegion == "US")">USA</option>
+                </select>
+            </label>
+        </div>
+        @if (pCloudConnected)
+        {
+            <div class="row" style="margin-top: 10px">
+                <span class="pill good">verbunden mit @Model.Cloud.Account(PCloudStore.Provider)</span>
+                <button type="submit" asp-page-handler="Disconnect" name="provider" value="@PCloudStore.Provider" class="secondary">Trennen</button>
+            </div>
+        }
+        else
+        {
+            <div class="row" style="margin-top: 10px">
+                <label>E-Mail-Adresse<input name="email" type="email" autocomplete="off" value="@Model.Cloud.PendingPCloudCode?.Email" /></label>
+                <label>Passwort<input name="password" type="password" autocomplete="new-password" /></label>
+                @if (Model.Cloud.PendingPCloudCode is not null)
+                {
+                    <label>Code (Zwei-Faktor)<input name="code" autocomplete="one-time-code" style="width: 120px" /></label>
+                }
+            </div>
+            <div class="row" style="margin-top: 10px">
+                <span class="pill warn">nicht verbunden</span>
+                <button type="submit" asp-page-handler="ConnectPCloud">Mit pCloud verbinden</button>
+            </div>
+            <p class="small muted">Das Passwort wird nicht gespeichert – der Server erhält von pCloud ein Zugangstoken (gültig bis zu zwei Jahre).</p>
+        }
+    </div>
+
+    <div class="row" style="margin-top: 14px">
         <label>Uhrzeit<input name="Form.Time" type="time" value="@f.Time.ToString("hh\\:mm")" style="width: 110px" /></label>
         <label>Aufbewahren (Tage)<input name="Form.KeepDays" type="number" min="1" max="365" value="@f.KeepDays" style="width: 90px" /></label>
-    </div>
-    <p class="small muted">Nur für Netzwerkfreigaben mit Anmeldung:</p>
-    <div class="row">
-        <label>Benutzer<input name="Form.Username" value="@f.Username" autocomplete="off" placeholder="u12345 oder server\benutzer" /></label>
-        <label>Passwort (leer = unverändert)<input name="Form.Password" type="password" autocomplete="new-password" /></label>
     </div>
     <input type="hidden" name="Form.Enabled" value="false" />
     <div class="row" style="margin-top: 12px">
@@ -53,32 +173,46 @@
 <h2>Was gesichert wird</h2>
 <ul class="small">
     <li><strong>Datenbank</strong> (Postfächer mit Passwörtern, Ordner, Aliase, Regeln, Weiterleitungen, Verlauf) – als konsistente Kopie im laufenden Betrieb</li>
-    <li><strong>alle Mails</strong> (data\mail) – nur neue Dateien werden kopiert, daher geht es nach der ersten Sicherung schnell</li>
+    <li><strong>alle Mails</strong> (data\mail) – nur neue Dateien werden übertragen, daher geht es nach der ersten Sicherung schnell</li>
     <li>DKIM-Schlüssel, Let's-Encrypt-Zertifikat, Warteschlange, settings.json und appsettings.json</li>
     <li>Jede Sicherung ist ein eigener Ordner unter <span class="mono">snapshots</span>; ältere als @Model.Current.KeepDays Tage werden entfernt (die neueste bleibt immer).
         Gelöschte Mails bleiben ebenso lange in der Sicherung.</li>
+    <li class="muted">In der Cloud liegen die Daten unverschlüsselt (wie auf dem Server) – Zugang zum Cloud-Konto daher mit Zwei-Faktor-Anmeldung schützen.</li>
 </ul>
 
-@if (Model.Snapshots.Count > 0 || Model.SnapshotProblem is not null)
+@if (Model.Snapshots.Count > 0 || Model.SnapshotProblem is not null || Model.CloudStatus is not null)
 {
-    <h2>Vorhandene Sicherungen</h2>
+    <h2>Vorhandene Sicherungen in @Model.TargetDescription</h2>
+    @if (Model.CloudStatus is { } status)
+    {
+        <p class="small muted">@status</p>
+    }
     @if (Model.SnapshotProblem is { } problem)
     {
-        <p class="notice bad">Zielordner nicht lesbar: @problem</p>
+        <p class="notice bad">Sicherungsziel nicht erreichbar: @problem</p>
     }
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Sicherung</th><th>Erstellt</th><th>Größe (ohne Mails)</th></tr></thead>
-            <tbody>
-                @foreach (var snapshot in Model.Snapshots)
-                {
-                    <tr><td class="mono">@snapshot.Name</td><td>@Format.Time(snapshot.Created)</td><td>@Format.Size(snapshot.Bytes)</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-    <p class="small muted">Zurückspielen: Dienst anhalten (<span class="mono">Stop-Service Mailserver</span>), dann
-        <span class="mono">mailadmin backup restore "@(Model.Snapshots.FirstOrDefault()?.Path ?? "…")"</span> und den Dienst wieder starten.</p>
+    @if (Model.Snapshots.Count > 0)
+    {
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Sicherung</th><th>Erstellt</th><th>Inhalt</th><th>Version</th></tr></thead>
+                <tbody>
+                    @foreach (var snapshot in Model.Snapshots)
+                    {
+                        <tr>
+                            <td class="mono">@snapshot.Name</td>
+                            <td>@Format.Time(snapshot.Created)</td>
+                            <td>@snapshot.Manifest.Accounts Postfächer, @snapshot.Manifest.Messages Mails</td>
+                            <td class="small">@snapshot.Manifest.Version</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="small muted">Zurückspielen: Dienst anhalten (<span class="mono">Stop-Service Mailserver</span>), dann
+            <span class="mono">@(Model.Current.IsCloud ? $"mailadmin backup restore {Model.Current.Target.ToLowerInvariant()}" : $"mailadmin backup restore \"{Model.Current.Directory}\"")</span>
+            und den Dienst wieder starten – siehe docs/datensicherung.md.</p>
+    }
 }
 
 @if (Model.Runs.Count > 0)
