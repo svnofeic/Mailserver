@@ -25,7 +25,10 @@ jobs:
             -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
           echo '{"pebble":{"listenAddress":"127.0.0.1:14000","managementListenAddress":"127.0.0.1:15000","certificate":"pebble-cert.pem","privateKey":"pebble-key.pem","httpPort":5002,"tlsPort":5001,"ocspResponderURL":"","externalAccountBindingRequired":false}}' > pebble.json
           echo "127.0.0.1 mail.example.test webmail.example.test" | sudo tee -a /etc/hosts
+          chmod +x /tmp/pebble-linux-amd64/linux/amd64/pebble
           PEBBLE_VA_NOSLEEP=1 nohup /tmp/pebble-linux-amd64/linux/amd64/pebble -config pebble.json > pebble.log 2>&1 &
+          for i in $(seq 1 30); do curl -skf https://127.0.0.1:14000/dir > /dev/null && break; sleep 1; done
+          curl -skf https://127.0.0.1:14000/dir > /dev/null || { cat pebble.log; exit 1; }
           echo "PEBBLE_DIRECTORY=https://127.0.0.1:14000/dir" >> "$GITHUB_ENV"
       - run: dotnet test Mailserver.slnx -c Release
 
