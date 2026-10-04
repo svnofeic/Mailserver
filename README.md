@@ -16,6 +16,9 @@ Ein eigener Mailserver in C#/.NET 10 für Windows Server. Er ersetzt SmarterMail
 > **Umzug von SmarterMail:** siehe [docs/umzug-smartermail.md](docs/umzug-smartermail.md). Beide Server können nicht
 > gleichzeitig dieselben Ports (25, 587, 465, 143, 993) belegen; der Import läuft deshalb, bevor der neue Dienst startet.
 >
+> **Windows neu installieren:** Sicherung, Neuinstallation und Zurückspielen Schritt für Schritt in
+> [docs/neuinstallation.md](docs/neuinstallation.md).
+>
 > **Server mit Plesk:** Was in Plesk umgestellt werden muss (Mail-Dienst, Webmail, DNS, Zertifikate, Mails von Websites),
 > steht in [docs/plesk.md](docs/plesk.md).
 
