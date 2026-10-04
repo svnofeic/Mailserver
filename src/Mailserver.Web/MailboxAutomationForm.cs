@@ -35,7 +35,7 @@ public sealed class MailboxAutomationForm
 
         // Both parts are checked before anything is written, so a mistake never leaves a half-saved form.
         store.ValidateForwarding(account, forwarding);
-        MailboxSettingsStore.ValidateAutoReply(reply);
+        store.ValidateAutoReply(reply);
         store.SetForwarding(account, forwarding);
         store.SetAutoReply(account.Id, reply);
     }
@@ -54,7 +54,7 @@ public sealed class MailboxAutomationForm
         {
             parts.Add(reply.IsActiveOn(today)
                 ? $"Abwesenheitsnotiz aktiv{(reply.Until is { } until ? $" bis {until:dd.MM.yyyy}" : "")}"
-                : reply.From is { } from && from > today ? $"Abwesenheitsnotiz ab {from:dd.MM.yyyy}" : "Abwesenheitsnotiz abgelaufen");
+                : $"Abwesenheitsnotiz ab {reply.From:dd.MM.yyyy}");
         }
 
         return parts.Count == 0 ? null : string.Join(" · ", parts);

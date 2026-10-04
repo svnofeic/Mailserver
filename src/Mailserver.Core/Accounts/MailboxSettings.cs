@@ -35,7 +35,25 @@ public sealed record AutoReply(bool Enabled, string Subject, string Body, DateOn
 
 public sealed class MailboxSettingsStore(Database database, AccountStore accounts, TimeProvider timeProvider)
 {
+    private DateOnly Today => DateOnly.FromDateTime(timeProvider.GetLocalNow().DateTime);
+
+    /// <summary>
+    /// The settings of a mailbox. An out-of-office reply whose end date has passed is switched off here (and stays off),
+    /// so it neither answers nor shows up as active anywhere.
+    /// </summary>
     public MailboxSettings Get(long accountId)
+    {
+        var settings = Read(accountId);
+        if (settings.AutoReply is { Enabled: true, Until: { } until } && until < Today)
+        {
+            SwitchOff(accountId);
+            settings = settings with { AutoReply = settings.AutoReply with { Enabled = false } };
+        }
+
+        return settings;
+    }
+
+    private MailboxSettings Read(long accountId)
     {
         using var connection = database.Open();
         return connection.Query(
@@ -82,6 +100,7 @@ public sealed class MailboxSettingsStore(Database database, AccountStore account
     public void SetAutoReply(long accountId, AutoReply reply)
     {
         ValidateAutoReply(reply);
+        var previous = Read(accountId).AutoReply;
         Upsert(accountId,
             """
             autoreply_enabled = $enabled, autoreply_subject = $subject, autoreply_body = $body, autoreply_from = $from,
@@ -90,16 +109,37 @@ public sealed class MailboxSettingsStore(Database database, AccountStore account
             ("$enabled", reply.Enabled ? 1 : 0), ("$subject", reply.Subject.Trim()), ("$body", reply.Body.Replace("\r\n", "\n").TrimEnd()),
             ("$from", FormatDay(reply.From)), ("$until", FormatDay(reply.Until)), ("$interval", reply.IntervalDays));
 
-        if (!reply.Enabled)
+        // A new absence starts with a clean slate: everyone gets the next notice again. That is the case when the reply
+        // is switched off, switched on again, or gets a different period.
+        if (!reply.Enabled || !previous.Enabled || reply.From != previous.From || reply.Until != previous.Until)
         {
-            // A new absence starts with a clean slate: everyone gets the next notice again.
-            using var connection = database.Open();
-            connection.Execute("DELETE FROM autoreply_log WHERE account_id = $account", ("$account", accountId));
+            ClearReplyLog(accountId);
         }
     }
 
-    public static void ValidateAutoReply(AutoReply reply)
+    private void SwitchOff(long accountId)
     {
+        using (var connection = database.Open())
+        {
+            connection.Execute("UPDATE mailbox_settings SET autoreply_enabled = 0 WHERE account_id = $account", ("$account", accountId));
+        }
+
+        ClearReplyLog(accountId);
+    }
+
+    private void ClearReplyLog(long accountId)
+    {
+        using var connection = database.Open();
+        connection.Execute("DELETE FROM autoreply_log WHERE account_id = $account", ("$account", accountId));
+    }
+
+    public void ValidateAutoReply(AutoReply reply)
+    {
+        if (reply.Enabled && reply.Until is { } end && end < Today)
+        {
+            throw new ArgumentException("Das Bis-Datum liegt in der Vergangenheit.");
+        }
+
         if (reply.Enabled && string.IsNullOrWhiteSpace(reply.Body))
         {
             throw new ArgumentException("Bitte einen Text für die Abwesenheitsnotiz eingeben.");

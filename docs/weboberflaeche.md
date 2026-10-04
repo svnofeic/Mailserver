@@ -54,9 +54,10 @@ entziehen; die Domain des eigenen Postfachs kann nicht gelöscht werden.
   Postfächer, die sich gegenseitig weiterleiten, erzeugen also keine Endlosschleife.
 
 **Abwesenheitsnotiz** (nach RFC 3834)
-- Gilt im eingestellten Zeitraum (beide Daten einschließlich, ohne Datum sofort bzw. bis zum Ausschalten).
-- Jeder Absender bekommt sie höchstens einmal pro eingestelltem Zeitraum (Standard 7 Tage). Beim Ausschalten wird das
-  vergessen – bei der nächsten Abwesenheit bekommt jeder sie wieder.
+- Gilt im eingestellten Zeitraum (beide Daten einschließlich, ohne Datum sofort bzw. bis zum Ausschalten). Nach dem
+  Bis-Datum schaltet sie sich selbst aus; Betreff und Text bleiben für das nächste Mal gespeichert.
+- Jeder Absender bekommt sie höchstens einmal pro eingestelltem Zeitraum (Standard 7 Tage). Beim Ausschalten, beim
+  automatischen Ablauf und bei einem neuen Zeitraum wird das vergessen – bei der nächsten Abwesenheit bekommt jeder sie wieder.
 - Keine Antwort auf Spam, Newsletter und Mailinglisten (List-Id, Precedence: bulk), automatische Mails (Auto-Submitted,
   andere Abwesenheitsnotizen), Systemadressen (mailer-daemon, noreply …) und Mails, in denen die Adresse nur in BCC steht.
 - Die Antwort geht an den tatsächlichen Absender (Return-Path), trägt `Auto-Submitted: auto-replied`, ist DKIM-signiert

@@ -148,7 +148,7 @@ public sealed class AutomationTests : IAsyncLifetime
         Assert.Contains("Text", Assert.Throws<ArgumentException>(() =>
             Settings.SetAutoReply(1, new AutoReply(true, "", " ", null, null, 7))).Message);
         Assert.Contains("Enddatum", Assert.Throws<ArgumentException>(() =>
-            Settings.SetAutoReply(1, new AutoReply(true, "", "x", today, today.AddDays(-1), 7))).Message);
+            Settings.SetAutoReply(1, new AutoReply(true, "", "x", today.AddDays(5), today.AddDays(3), 7))).Message);
     }
 
     private async Task<MimeMessage> SendAsync(string from, string to, string subject, (string Name, string Value)? header = null,
@@ -239,5 +239,77 @@ public sealed class AutomationWebTests : IAsyncLifetime
         Assert.Equal("info@example.test", Settings.Get(_server.User("bob").Id).Forwarding.Targets.Single().ToString());
         await _web.GetAsync("/Admin/Mailboxes");
         Assert.Contains(">Weiterleitung</span>", _web.LastPage);
+    }
+}
+
+/// <summary>Life cycle of an out-of-office reply over several days, with a clock the test controls.</summary>
+public sealed class AutoReplyPeriodTests : IDisposable
+{
+    private static readonly EmailAddress Sender = EmailAddress.Parse("kunde@remote.test");
+    private readonly TestData _data = new();
+    private readonly ManualTime _time = new(new DateTimeOffset(2026, 10, 10, 10, 0, 0, TimeSpan.Zero));
+    private readonly MailboxSettingsStore _store;
+    private readonly Account _alice;
+
+    public AutoReplyPeriodTests()
+    {
+        _store = new MailboxSettingsStore(_data.Database, _data.Accounts, _time);
+        _data.Accounts.AddDomain("example.test");
+        _alice = _data.Accounts.AddAccount(EmailAddress.Parse("alice@example.test"), "irrelevant-passwort");
+    }
+
+    public void Dispose() => _data.Dispose();
+
+    private DateOnly Today => DateOnly.FromDateTime(_time.GetLocalNow().DateTime);
+
+    [Fact]
+    public void Switches_itself_off_after_the_end_date()
+    {
+        _store.SetAutoReply(_alice.Id, new AutoReply(true, "", "Urlaub", null, Today.AddDays(2), 7));
+
+        _time.Now = _time.Now.AddDays(2);
+        Assert.True(_store.Get(_alice.Id).AutoReply.Enabled); // the end date itself still counts
+
+        _time.Now = _time.Now.AddDays(1);
+        var reply = _store.Get(_alice.Id).AutoReply;
+        Assert.False(reply.Enabled);
+        Assert.Equal("Urlaub", reply.Body); // text stays for the next absence
+        Assert.Empty(_store.ListActive());
+    }
+
+    [Fact]
+    public void A_new_period_answers_everyone_again()
+    {
+        _store.SetAutoReply(_alice.Id, new AutoReply(true, "", "Urlaub", null, Today.AddDays(1), 7));
+        Assert.True(_store.TryRecordReply(_alice.Id, Sender, 7));
+        Assert.False(_store.TryRecordReply(_alice.Id, Sender, 7));
+
+        // Next absence entered right away, without switching off in between.
+        _store.SetAutoReply(_alice.Id, new AutoReply(true, "", "Urlaub", Today.AddDays(3), Today.AddDays(5), 7));
+        Assert.True(_store.TryRecordReply(_alice.Id, Sender, 7));
+
+        // Saving the same period again (e.g. only the text changed) keeps the list.
+        _store.SetAutoReply(_alice.Id, new AutoReply(true, "", "Anderer Text", Today.AddDays(3), Today.AddDays(5), 7));
+        Assert.False(_store.TryRecordReply(_alice.Id, Sender, 7));
+    }
+
+    [Fact]
+    public void Expired_reply_starts_fresh()
+    {
+        _store.SetAutoReply(_alice.Id, new AutoReply(true, "", "Urlaub", null, Today, 7));
+        Assert.True(_store.TryRecordReply(_alice.Id, Sender, 7));
+
+        _time.Now = _time.Now.AddDays(1);
+        _store.Get(_alice.Id);
+
+        Assert.True(_store.TryRecordReply(_alice.Id, Sender, 7));
+    }
+
+    [Fact]
+    public void Rejects_an_end_date_in_the_past()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            _store.SetAutoReply(_alice.Id, new AutoReply(true, "", "Urlaub", null, Today.AddDays(-1), 7)));
+        Assert.Contains("Vergangenheit", ex.Message);
     }
 }
