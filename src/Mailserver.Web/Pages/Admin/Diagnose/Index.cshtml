@@ -1,0 +1,43 @@
+@page
+@model Mailserver.Web.Pages.Admin.Diagnose.IndexModel
+@{ ViewData["Title"] = "Diagnose"; }
+<h1>Diagnose</h1>
+
+<div class="card row">
+    @if (Model.Errors == 0 && Model.Warnings == 0)
+    {
+        <span class="pill good">alles in Ordnung</span>
+    }
+    else
+    {
+        @if (Model.Errors > 0) { <span class="pill bad">@Model.Errors Fehler</span> }
+        @if (Model.Warnings > 0) { <span class="pill warn">@Model.Warnings Warnungen</span> }
+    }
+    <a class="button secondary" href="/Admin/Diagnose">Erneut prüfen</a>
+    <span class="small muted">Geprüft @Format.Time(DateTimeOffset.Now) – DNS-Änderungen werden je nach TTL erst nach einiger Zeit sichtbar.</span>
+</div>
+
+@foreach (var group in Model.Checks.GroupBy(c => c.Group))
+{
+    <h2>@group.Key</h2>
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                @foreach (var check in group)
+                {
+                    <tr>
+                        <td style="width: 1%"><span class="pill @Mailserver.Web.Pages.Admin.Diagnose.IndexModel.PillClass(check.Status)">@Mailserver.Web.Pages.Admin.Diagnose.IndexModel.Label(check.Status)</span></td>
+                        <th>@check.Title</th>
+                        <td>
+                            <span style="overflow-wrap: anywhere">@check.Detail</span>
+                            @if (check.Hint is not null)
+                            {
+                                <div class="small muted">@check.Hint</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mailserver.Core\Mailserver.Core.csproj" />
+    <ProjectReference Include="..\Mailserver.AntiSpam\Mailserver.AntiSpam.csproj" />
     <ProjectReference Include="..\Mailserver.Migration\Mailserver.Migration.csproj" />
   </ItemGroup>
 

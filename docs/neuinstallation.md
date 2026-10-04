@@ -109,6 +109,7 @@ Alternativ geht weiterhin win-acme (Zertifikat im Windows-Speicher) oder eine PF
 Start-Service Mailserver
 Set-Service Mailserver -StartupType Automatic
 Get-NetFirewallRule -DisplayName "Mailserver*" | Select DisplayName, Enabled
+.\mailadmin.exe diagnose     # DNS, Reverse DNS, Blacklists, Ports, Zertifikat – alles mit Hinweisen
 ```
 
 - Weboberfläche `https://mail.feicht.me:9443` (bzw. ohne Port bei 443): Anmeldung, Postfächer, Ordner, Mails.

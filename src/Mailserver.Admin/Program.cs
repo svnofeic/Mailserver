@@ -74,6 +74,7 @@ try
         ["tls", "acme", ..] => await AcmeAsync(args),
         ["antivirus", "test"] => await AntivirusTestAsync(),
         ["backup"] or ["backup", "run" or "--to", ..] => await BackupAsync(args),
+        ["diagnose"] => await DiagnoseAsync(),
         _ => Run(args),
     };
 }
@@ -368,6 +369,7 @@ int Run(string[] a)
                   user admin <adresse> on|off             Zugang zum Admin-Bereich der Weboberfläche
                   user list [domain]
 
+                  diagnose                                prüft DNS, Reverse DNS, Blacklists, Ports, Zertifikat, Sicherung …
                   antivirus test                          prüft den Virenscanner mit der harmlosen EICAR-Testdatei
                   backup [run] [--to <ordner>]            Datensicherung jetzt (Ziel aus Admin → Datensicherung)
                   backup list                             letzte Sicherungen anzeigen
@@ -682,6 +684,49 @@ int RestoreBackup(string[] a)
     }
 
     return Ok($"Zurückgespielt ({result.MailFiles} Mail-Dateien kopiert). Jetzt den Dienst starten: Start-Service Mailserver");
+}
+
+async Task<int> DiagnoseAsync()
+{
+    var live = Microsoft.Extensions.Options.Options.Create(options);
+    var diagnostics = new Mailserver.AntiSpam.Diagnostics.ServerDiagnostics(
+        new Mailserver.AntiSpam.Dns.DnsClientResolver(new DnsClient.LookupClient(new DnsClient.LookupClientOptions { Timeout = TimeSpan.FromSeconds(10) })),
+        accounts, dkim, queue,
+        new Mailserver.Core.Security.CertificateProvider(live, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Mailserver.Core.Security.CertificateProvider>.Instance, CreateAcmeManager(options.Tls.Acme)),
+        CreateBackupManager(options),
+        new Mailserver.Core.Antivirus.MalwareFilter(live, paths,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Mailserver.Core.Antivirus.MalwareFilter>.Instance),
+        paths, live, TimeProvider.System);
+
+    Console.WriteLine("Prüfe … (dauert einige Sekunden)");
+    var checks = await diagnostics.RunAsync();
+    foreach (var group in checks.GroupBy(c => c.Group))
+    {
+        Console.WriteLine();
+        Console.WriteLine(group.Key);
+        foreach (var check in group)
+        {
+            var label = check.Status switch
+            {
+                Mailserver.AntiSpam.Diagnostics.CheckStatus.Ok => "[OK]     ",
+                Mailserver.AntiSpam.Diagnostics.CheckStatus.Warning => "[WARNUNG]",
+                Mailserver.AntiSpam.Diagnostics.CheckStatus.Error => "[FEHLER] ",
+                _ => "[INFO]   ",
+            };
+            Console.WriteLine($"  {label} {check.Title}: {check.Detail}");
+            if (check.Hint is not null)
+            {
+                Console.WriteLine($"            → {check.Hint}");
+            }
+        }
+    }
+
+    var errors = checks.Count(c => c.Status == Mailserver.AntiSpam.Diagnostics.CheckStatus.Error);
+    var warnings = checks.Count(c => c.Status == Mailserver.AntiSpam.Diagnostics.CheckStatus.Warning);
+    Console.WriteLine();
+    Console.WriteLine(errors + warnings == 0 ? "Alles in Ordnung." : $"{errors} Fehler, {warnings} Warnungen.");
+    return errors > 0 ? 1 : 0;
 }
 
 async Task<int> AntivirusTestAsync()

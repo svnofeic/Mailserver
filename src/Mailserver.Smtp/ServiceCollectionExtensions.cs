@@ -65,6 +65,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RemoteDeliveryClient>();
         services.AddSingleton<DeliveryService>();
         services.AddAntiSpam();
+        services.AddSingleton<Mailserver.AntiSpam.Diagnostics.ServerDiagnostics>();
 
         // Before SMTP/IMAP: on a fresh installation the first certificate is requested before their TLS ports start.
         services.AddHostedService<AcmeRenewalService>();
