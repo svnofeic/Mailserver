@@ -771,6 +771,12 @@ static List<(EmailAddress Address, string Password)> ReadAccountFile(string file
         users.Add((address, separator < 0 ? ReadHidden($"Passwort für {address}: ") : line[(separator + 1)..]));
     }
 
+    if (users.Count == 0)
+    {
+        throw new ArgumentException($"In {Path.GetFullPath(file)} steht kein Postfach. Eine Adresse pro Zeile, z. B. sven@feicht.me " +
+                                    "(Zeilen mit # am Anfang werden ignoriert).");
+    }
+
     return users;
 }
 
