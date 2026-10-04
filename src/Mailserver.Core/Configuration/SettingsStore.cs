@@ -28,10 +28,37 @@ public sealed class SettingsStore(DataPaths paths)
                 delivery.SmartHost,
             }, Json);
 
-            var temp = paths.SettingsFile + ".tmp";
-            File.WriteAllText(temp, root.ToJsonString(Json));
-            File.Move(temp, paths.SettingsFile, overwrite: true);
+            Write(root);
         }
+    }
+
+    /// <summary>Stores the Let's Encrypt settings (Mailserver:Tls:Acme); the other TLS settings stay in appsettings.json.</summary>
+    public void SaveAcme(AcmeOptions acme)
+    {
+        lock (_lock)
+        {
+            var root = Load();
+            var section = root["Mailserver"] as JsonObject ?? new JsonObject();
+            root["Mailserver"] = section;
+            var tls = section["Tls"] as JsonObject ?? new JsonObject();
+            section["Tls"] = tls;
+            tls["Acme"] = JsonSerializer.SerializeToNode(new
+            {
+                acme.Enabled,
+                acme.Email,
+                acme.Hostnames,
+                acme.UseStaging,
+                acme.ChallengeDirectory,
+            }, Json);
+            Write(root);
+        }
+    }
+
+    private void Write(JsonObject root)
+    {
+        var temp = paths.SettingsFile + ".tmp";
+        File.WriteAllText(temp, root.ToJsonString(Json));
+        File.Move(temp, paths.SettingsFile, overwrite: true);
     }
 
     private JsonObject Load()

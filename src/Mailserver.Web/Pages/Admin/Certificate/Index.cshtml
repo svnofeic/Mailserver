@@ -1,0 +1,100 @@
+@page
+@model Mailserver.Web.Pages.Admin.Certificate.IndexModel
+@using System.Security.Cryptography.X509Certificates
+@{ ViewData["Title"] = "Zertifikat"; }
+<h1>Zertifikat</h1>
+
+@if (Model.RestartRecommended)
+{
+    <div class="notice warn">
+        Es gibt jetzt ein Zertifikat, aber der Server ist ohne gestartet: SMTP-Versand (587/465) und IMAPS (993) öffnen erst nach
+        einem Neustart des Dienstes.
+        <form method="post" asp-page-handler="Restart" class="inline"><button type="submit" class="secondary">Dienst neu starten</button></form>
+    </div>
+}
+
+<h2>Verwendetes Zertifikat</h2>
+<div class="card">
+    @if (Model.Current is { } current)
+    {
+        <dl class="headers">
+            <dt>Namen</dt><dd>@string.Join(", ", Model.CurrentNames.DefaultIfEmpty(current.GetNameInfo(X509NameType.SimpleName, false)))</dd>
+            <dt>Aussteller</dt><dd>@current.GetNameInfo(X509NameType.SimpleName, true)</dd>
+            <dt>Gültig bis</dt>
+            <dd>
+                @current.NotAfter.ToString("dd.MM.yyyy HH:mm")
+                @{ var days = (int)(current.NotAfter - DateTime.Now).TotalDays; }
+                <span class="pill @(days < 14 ? "bad" : days < 30 ? "warn" : "good")">noch @days Tage</span>
+            </dd>
+            <dt>Quelle</dt><dd>@Model.Source</dd>
+        </dl>
+    }
+    else
+    {
+        <p class="notice bad" style="margin: 0">
+            Kein gültiges Zertifikat für @Model.Hostname. Diese Seite läuft mit einem Notfall-Zertifikat (daher die Browser-Warnung);
+            Mailprogramme können sich nicht verschlüsselt verbinden. Unten Let's Encrypt einschalten und „Jetzt ausstellen“.
+        </p>
+    }
+</div>
+
+<h2>Automatische Zertifikate (Let's Encrypt)</h2>
+@if (Model.UsesPfxFile)
+{
+    <p class="notice warn small">In appsettings.json ist eine PFX-Datei eingetragen (Tls:PfxPath) – sie hat Vorrang. Für Let's Encrypt den
+        Eintrag dort leeren.</p>
+}
+<form method="post" class="card" style="max-width: 760px">
+    <label class="check"><input type="checkbox" name="Form.Enabled" value="true" checked="@Model.Form.Enabled" /> Zertifikate automatisch ausstellen und verlängern</label>
+    <label class="stack">E-Mail-Adresse für Benachrichtigungen von Let's Encrypt
+        <input name="Form.Email" type="email" value="@Model.Form.Email" placeholder="admin@@feicht.me" />
+    </label>
+    <label class="stack">Hostnamen, einer pro Zeile (leer = @Model.Hostname)
+        <textarea name="Form.Hostnames" rows="3" placeholder="@Model.Hostname">@Model.Form.Hostnames</textarea>
+    </label>
+    <p class="small muted" style="margin-top: -4px">Alle Namen, unter denen Mailprogramme und Browser den Server erreichen, z. B. mail.feicht.me und
+        webmail.feicht.me. Jeder Name muss per DNS auf diesen Server zeigen.</p>
+    <label class="stack">Challenge-Ordner (optional)
+        <input name="Form.ChallengeDirectory" value="@Model.Form.ChallengeDirectory" placeholder="leer = der Mailserver antwortet selbst auf Port 80" />
+    </label>
+    <p class="small muted" style="margin-top: -4px">Nur nötig, solange ein anderer Webserver (z. B. IIS) Port 80 belegt: dann dessen Webroot für die
+        Hostnamen angeben, z. B. C:\inetpub\wwwroot.</p>
+    <label class="check"><input type="checkbox" name="Form.UseStaging" value="true" checked="@Model.Form.UseStaging" /> Testmodus (Let's-Encrypt-Staging –
+        Zertifikate gelten bei Mailprogrammen nicht als vertrauenswürdig)</label>
+    <div class="row" style="margin-top: 12px">
+        <button type="submit" asp-page-handler="Save" class="secondary">Speichern</button>
+        <button type="submit" asp-page-handler="Issue">Speichern und jetzt ausstellen</button>
+        <span class="small muted">Das Ausstellen dauert etwa 10–60 Sekunden.</span>
+    </div>
+</form>
+
+<h2>Letzter Versuch</h2>
+<div class="card">
+    @if (Model.Status.LastAttempt is { } last)
+    {
+        <p style="margin-top: 0">
+            <span class="pill @(Model.Status.Success == true ? "good" : "bad")">@(Model.Status.Success == true ? "erfolgreich" : "fehlgeschlagen")</span>
+            @Format.Time(last) – @Model.Status.Message
+        </p>
+    }
+    else
+    {
+        <p class="muted" style="margin-top: 0">Noch kein Zertifikat bei Let's Encrypt angefordert.</p>
+    }
+    @if (Model.Form.Enabled)
+    {
+        <p class="small muted" style="margin-bottom: 0">
+            @(Model.RenewalReason is { } reason
+                ? $"Fällig: {reason} – der Server versucht es selbst innerhalb weniger Stunden, sofort mit „Jetzt ausstellen“."
+                : "Die Verlängerung erfolgt automatisch 30 Tage vor Ablauf; der Server prüft das zweimal täglich.")
+        </p>
+    }
+</div>
+
+<h2>Voraussetzungen</h2>
+<ul class="small">
+    <li>Jeder Hostname zeigt per DNS (A-Eintrag) auf diesen Server.</li>
+    <li>Port 80 ist von außen erreichbar (Firewall-Regel „Mailserver Let's Encrypt 80“, legt install.ps1 an). Der Mailserver öffnet
+        ihn nur während der Prüfung.</li>
+    <li>Das Zertifikat liegt in data\acme und wird ohne Neustart übernommen – für SMTP, IMAP und diese Weboberfläche.</li>
+</ul>

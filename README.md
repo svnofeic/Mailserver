@@ -69,7 +69,9 @@ Für ein Backup sichert man den ganzen `data`-Ordner. Die Datenbank sollte man d
 
 1. **VPS:** Port 25 ausgehend ist freigeschaltet, und der **PTR-Eintrag** (Reverse DNS) der IP zeigt auf den Hostnamen, z. B. `mail.example.de`.
    Ist Port 25 gesperrt, trägt man einen Relay-Server unter `Delivery:SmartHost` ein.
-2. **TLS-Zertifikat** für den Hostnamen, z. B. kostenlos über [win-acme](https://www.win-acme.com/):
+2. **TLS-Zertifikat** für den Hostnamen. Am einfachsten holt der Mailserver es selbst bei Let's Encrypt und verlängert es
+   automatisch: `mailadmin tls acme --email <adresse> --hosts "mail.example.de"` (Port 80 muss erreichbar sein) oder in der
+   Weboberfläche unter *Verwaltung → Zertifikat*. Alternativ über [win-acme](https://www.win-acme.com/):
    - **Variante 1:** win-acme legt das Zertifikat im Windows-Zertifikatsspeicher ab (Standard). Der Server findet es dann über den Hostnamen und übernimmt Verlängerungen automatisch.
    - **Variante 2:** win-acme exportiert eine PFX-Datei. Deren Pfad gehört nach `Tls:PfxPath`.
    - Für die Prüfung durch Let's Encrypt (HTTP-01) muss Port 80 kurz erreichbar sein, oder man nutzt die DNS-Prüfung.
@@ -151,6 +153,7 @@ mailadmin user admin <adresse> on|off   Zugang zum Admin-Bereich der Weboberflä
 mailadmin forward <adresse> [<ziele>|off] [--no-copy]          Weiterleitung eines Postfachs
 mailadmin autoreply <adresse> [on --text "…" [--until JJJJ-MM-TT]|off]  Abwesenheitsnotiz
 mailadmin tls                           zeigt das verwendete TLS-Zertifikat bzw. warum keines passt
+mailadmin tls acme --email <adresse> [--hosts "…"] [--staging]   Zertifikat von Let's Encrypt, automatisch verlängert
 mailadmin import imap <host> <datei> [--port 993] [--starttls] [--insecure-cert] [--dry-run]
 mailadmin export <host> <datei> <zielordner> [--insecure-cert] [--dav <url>]   Sicherung (siehe docs/sicherung-export.md)
 mailadmin import export <exportordner> [<datei>] [--dry-run]                  Sicherung einspielen

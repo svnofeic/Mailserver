@@ -4,7 +4,7 @@
 .DESCRIPTION
     - copies the package to the install directory (an existing appsettings.json and the data folder are kept)
     - registers the "Mailserver" service with automatic start and restart on failure
-    - opens the firewall for SMTP (25), submission (587), SMTPS (465), IMAP (143), IMAPS (993) and the web interface (9443)
+    - opens the firewall for SMTP (25), submission (587), SMTPS (465), IMAP (143), IMAPS (993), the web interface (9443) and Let's Encrypt (80)
     - restricts the data folder to SYSTEM and Administrators
 .EXAMPLE
     .\install.ps1                              # from the unpacked package folder
@@ -67,7 +67,9 @@ foreach ($rule in @(
         @{ Name = 'Mailserver SMTPS 465'; Port = 465 },
         @{ Name = 'Mailserver IMAP 143'; Port = 143 },
         @{ Name = 'Mailserver IMAPS 993'; Port = 993 },
-        @{ Name = 'Mailserver Web 9443'; Port = 9443 })) {
+        @{ Name = 'Mailserver Web 9443'; Port = 9443 },
+        # Let's Encrypt checks on port 80; the mail server only listens there while a certificate is being issued.
+        @{ Name = "Mailserver Let's Encrypt 80"; Port = 80 })) {
     if (-not (Get-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -DisplayName $rule.Name -Direction Inbound -Protocol TCP -LocalPort $rule.Port -Action Allow | Out-Null
     }

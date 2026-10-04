@@ -23,6 +23,9 @@ public sealed class DataPaths
 
     public string DkimRoot => Path.Combine(Root, "dkim");
 
+    /// <summary>Let's Encrypt account key, issued certificate and status.</summary>
+    public string AcmeRoot => Path.Combine(Root, "acme");
+
     /// <summary>Settings changed in the web interface; overrides appsettings.json and is reloaded while running.</summary>
     public string SettingsFile => Path.Combine(Root, "settings.json");
 

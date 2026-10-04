@@ -57,6 +57,7 @@ public sealed class ImapServer(
                 else
                 {
                     logger.LogError("IMAPS port {Port} is disabled: no TLS certificate configured", settings.Imap.TlsPort);
+                    certificates.ReportTlsUnavailable();
                 }
             }
         }

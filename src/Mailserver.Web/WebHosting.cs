@@ -47,7 +47,7 @@ public static class WebHosting
                     {
                         // Same certificate as SMTP/IMAP, reloaded after renewals.
                         var certificates = kestrel.ApplicationServices.GetRequiredService<CertificateProvider>();
-                        https.ServerCertificateSelector = (_, _) => certificates.GetCertificate();
+                        https.ServerCertificateSelector = (_, _) => certificates.GetWebCertificate();
                     }));
                 }
 
@@ -148,6 +148,15 @@ public static class WebHosting
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapRazorPages();
+        // Let's Encrypt check, if this web interface itself listens on port 80 (Web:InsecureHttpPort).
+        var settings = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<MailserverOptions>>().Value;
+        if (settings.Web.Enabled && settings.Web.InsecureHttpPort > 0 && settings.Web.InsecureHttpPort == settings.Tls.Acme.HttpPort)
+        {
+            app.Services.GetRequiredService<Mailserver.Core.Security.Acme.AcmeCertificateManager>().ChallengesServedByWeb = true;
+        }
+
+        app.MapGet(Mailserver.Core.Security.Acme.AcmeChallengeStore.PathPrefix + "{token}", (string token, Mailserver.Core.Security.Acme.AcmeChallengeStore store) =>
+            store.Find(token) is { } answer ? Results.Text(answer, "text/plain") : Results.NotFound()).AllowAnonymous();
         app.MapGet("/assets/editor.js", (HttpContext context) =>
         {
             context.Response.Headers.CacheControl = "public, max-age=3600";

@@ -5,14 +5,67 @@ using Microsoft.Extensions.Options;
 namespace Mailserver.Core.Security;
 
 /// <summary>
-/// Supplies the TLS server certificate from a PFX file or the Windows certificate stores (My, Plesk's WebHosting) and reloads it periodically,
-/// so renewed Let's Encrypt certificates (win-acme) are used without a restart.
+/// Supplies the TLS server certificate from a PFX file, the server's own Let's Encrypt certificate or the Windows
+/// certificate stores (My, Plesk's WebHosting) and reloads it periodically, so renewals are used without a restart.
 /// </summary>
-public sealed class CertificateProvider(IOptions<MailserverOptions> options, TimeProvider timeProvider, ILogger<CertificateProvider> logger)
+public sealed class CertificateProvider(
+    IOptions<MailserverOptions> options,
+    TimeProvider timeProvider,
+    ILogger<CertificateProvider> logger,
+    Acme.AcmeCertificateManager? acme = null)
 {
     private readonly Lock _lock = new();
     private X509Certificate2? _current;
     private DateTimeOffset _nextReload = DateTimeOffset.MinValue;
+    private X509Certificate2? _acmeCertificate;
+    private DateTime _acmeFileTime;
+    private X509Certificate2? _fallback;
+    private bool _tlsUnavailable;
+
+    /// <summary>Forces a reload on the next request, e.g. right after a new certificate was issued.</summary>
+    public void Invalidate()
+    {
+        lock (_lock)
+        {
+            _nextReload = DateTimeOffset.MinValue;
+        }
+    }
+
+    /// <summary>Called by SMTP/IMAP when they had to start without TLS ports.</summary>
+    public void ReportTlsUnavailable() => _tlsUnavailable = true;
+
+    /// <summary>A certificate exists now, but SMTP/IMAP started without one: their TLS ports open only after a restart.</summary>
+    public bool RestartRecommended => _tlsUnavailable && GetCertificate() is not null;
+
+    /// <summary>
+    /// For the web interface: the real certificate or, if there is none yet, a self-signed one. The browser warns, but the
+    /// administrator can still sign in and request a certificate.
+    /// </summary>
+    public X509Certificate2 GetWebCertificate()
+    {
+        if (GetCertificate() is { } certificate)
+        {
+            return certificate;
+        }
+
+        lock (_lock)
+        {
+            return _fallback ??= CreateSelfSigned(options.Value.Hostname);
+        }
+    }
+
+    private static X509Certificate2 CreateSelfSigned(string hostname)
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new CertificateRequest($"CN={hostname}", key, System.Security.Cryptography.HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        var names = new SubjectAlternativeNameBuilder();
+        names.AddDnsName(hostname);
+        request.CertificateExtensions.Add(names.Build());
+        using var created = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        // Windows TLS cannot use an in-memory (ephemeral) key; a PKCS#12 round trip gives it a usable one.
+        return X509CertificateLoader.LoadPkcs12(created.Export(X509ContentType.Pkcs12), null);
+    }
 
     public X509Certificate2? GetCertificate()
     {
@@ -30,8 +83,8 @@ public sealed class CertificateProvider(IOptions<MailserverOptions> options, Tim
                 var loaded = Load();
                 if (loaded is not null && loaded.Thumbprint != _current?.Thumbprint)
                 {
-                    logger.LogInformation("Using TLS certificate {Subject} (thumbprint {Thumbprint}, valid until {NotAfter:u})",
-                        loaded.Subject, loaded.Thumbprint, loaded.NotAfter.ToUniversalTime());
+                    logger.LogInformation("Using TLS certificate for {Name} (thumbprint {Thumbprint}, valid until {NotAfter:u})",
+                        loaded.GetNameInfo(X509NameType.DnsName, false), loaded.Thumbprint, loaded.NotAfter.ToUniversalTime());
                     _current = loaded;
                 }
             }
@@ -64,17 +117,32 @@ public sealed class CertificateProvider(IOptions<MailserverOptions> options, Tim
             return X509CertificateLoader.LoadPkcs12FromFile(path, tls.PfxPassword);
         }
 
-        if (!OperatingSystem.IsWindows())
+        var hostname = tls.StoreSubject ?? options.Value.Hostname;
+        var candidates = Inspect(hostname).Where(c => c.Problem is null).Select(c => c.Certificate).ToList();
+        if (LoadAcmeCertificate() is { } issued && issued.MatchesHostname(hostname) && issued.NotAfter > DateTime.Now)
+        {
+            candidates.Add(issued);
+        }
+
+        return candidates.OrderByDescending(c => c.NotAfter).FirstOrDefault();
+    }
+
+    /// <summary>data\acme\certificate.pfx, read again only when the file changed.</summary>
+    private X509Certificate2? LoadAcmeCertificate()
+    {
+        if (acme is null || !File.Exists(acme.CertificateFile))
         {
             return null;
         }
 
-        var hostname = tls.StoreSubject ?? options.Value.Hostname;
-        return Inspect(hostname)
-            .Where(c => c.Problem is null)
-            .OrderByDescending(c => c.Certificate.NotAfter)
-            .Select(c => c.Certificate)
-            .FirstOrDefault();
+        var time = File.GetLastWriteTimeUtc(acme.CertificateFile);
+        if (_acmeCertificate is null || time != _acmeFileTime)
+        {
+            _acmeCertificate = acme.LoadCertificate();
+            _acmeFileTime = time;
+        }
+
+        return _acmeCertificate;
     }
 
     /// <summary>

@@ -53,6 +53,7 @@ public sealed class SmtpHostedService(
         if (certificateFactory is null && !settings.Smtp.AllowInsecureAuthentication)
         {
             _logger.LogError("Submission ports are disabled: no TLS certificate configured. Passwords are never accepted without TLS.");
+            certificates.ReportTlsUnavailable();
         }
         else
         {

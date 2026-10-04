@@ -54,7 +54,12 @@ var mailboxSettings = new MailboxSettingsStore(database, accounts, TimeProvider.
 
 try
 {
-    return args is ["import", ..] ? await ImportAsync(args) : Run(args);
+    return args switch
+    {
+        ["import", ..] => await ImportAsync(args),
+        ["tls", "acme", ..] => await AcmeAsync(args),
+        _ => Run(args),
+    };
 }
 catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or IOException or Microsoft.Data.Sqlite.SqliteException)
 {
@@ -374,6 +379,9 @@ int Run(string[] a)
                       Passwort aus <datei> ("adresse;passwort") angelegt oder es wird abgefragt.
 
                   tls                                   zeigt, welches TLS-Zertifikat verwendet wird bzw. warum keines passt
+                  tls acme --email <adresse> [--hosts "mail.feicht.me,webmail.feicht.me"] [--staging] [--challenge-dir <webroot>]
+                      Zertifikat von Let's Encrypt holen und automatische Verlängerung einschalten (Port 80 muss frei und von
+                      außen erreichbar sein, sonst --challenge-dir mit dem Webroot von IIS) | tls acme --off
 
                   import imap <host> <datei> [--port 993] [--starttls | --no-tls] [--insecure-cert] [--dry-run]
                       Übernimmt Postfächer von einem anderen IMAP-Server (z. B. SmarterMail). Port 143: --port 143 --starttls
@@ -517,9 +525,20 @@ int CheckTls()
         }
     }
 
+    var manager = CreateAcmeManager(options.Tls.Acme);
+    var acmeStatus = manager.Status;
+    Console.WriteLine($"Let's Encrypt: {(options.Tls.Acme.Enabled ? $"an für {string.Join(", ", options.Tls.Acme.EffectiveHostnames(options.Hostname))}" : "aus")}" +
+                      (acmeStatus.LastAttempt is { } last ? $"; letzter Versuch {last.ToLocalTime():dd.MM.yyyy HH:mm}: {acmeStatus.Message}" : ""));
+    using var issued = manager.LoadCertificate();
+    if (issued is not null)
+    {
+        Console.WriteLine($"  [Let's Encrypt] gültig bis {issued.NotAfter:dd.MM.yyyy}, " +
+                          $"{(issued.MatchesHostname(hostname) && issued.NotAfter > DateTime.Now ? "-> verwendbar" : "nicht verwendbar")}");
+    }
+
     if (!OperatingSystem.IsWindows())
     {
-        return Fail("Der Zertifikatsspeicher wird nur unter Windows durchsucht; sonst Tls:PfxPath setzen.");
+        return issued is not null && issued.MatchesHostname(hostname) ? 0 : Fail("Kein verwendbares Zertifikat.");
     }
 
     var candidates = Mailserver.Core.Security.CertificateProvider.Inspect(hostname);
@@ -533,6 +552,12 @@ int CheckTls()
 
     var usable = candidates.Where(c => c.Problem is null).OrderByDescending(c => c.Certificate.NotAfter).FirstOrDefault();
     Console.WriteLine();
+    if (issued is not null && issued.MatchesHostname(hostname) && issued.NotAfter > DateTime.Now && (usable is null || issued.NotAfter >= usable.Certificate.NotAfter))
+    {
+        Console.WriteLine($"Verwendet wird: Let's Encrypt (data\\acme), gültig bis {issued.NotAfter:dd.MM.yyyy}");
+        return 0;
+    }
+
     if (usable is not null)
     {
         Console.WriteLine($"Verwendet wird: [{usable.Store}] {usable.Certificate.Thumbprint}, gültig bis {usable.Certificate.NotAfter:dd.MM.yyyy}");
@@ -540,9 +565,61 @@ int CheckTls()
     }
 
     Console.WriteLine($"Kein verwendbares Zertifikat für {hostname} ({candidates.Count} Zertifikate in My und WebHosting geprüft).");
-    Console.WriteLine("Möglichkeiten: in Plesk ein Let's-Encrypt-Zertifikat ausstellen, das " + hostname + " enthält; mit win-acme ein");
-    Console.WriteLine("Zertifikat erzeugen; oder eine vorhandene PFX-Datei unter Mailserver:Tls:PfxPath/PfxPassword eintragen.");
+    Console.WriteLine($"Möglichkeiten: mailadmin tls acme --email <adresse> (Let's Encrypt, siehe Hilfe); in Plesk ein Zertifikat ausstellen,");
+    Console.WriteLine($"das {hostname} enthält; oder eine vorhandene PFX-Datei unter Mailserver:Tls:PfxPath/PfxPassword eintragen.");
     return 1;
+}
+
+Mailserver.Core.Security.Acme.AcmeCertificateManager CreateAcmeManager(AcmeOptions acme)
+{
+    var copy = new MailserverOptions { Hostname = options.Hostname, DataDirectory = options.DataDirectory };
+    copy.Tls.Acme = acme;
+    return new Mailserver.Core.Security.Acme.AcmeCertificateManager(Microsoft.Extensions.Options.Options.Create(copy), paths,
+        new Mailserver.Core.Security.Acme.AcmeChallengeStore(), TimeProvider.System,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<Mailserver.Core.Security.Acme.AcmeCertificateManager>.Instance);
+}
+
+async Task<int> AcmeAsync(string[] a)
+{
+    var current = options.Tls.Acme;
+    if (a.Contains("--off"))
+    {
+        new Mailserver.Core.Configuration.SettingsStore(paths).SaveAcme(new AcmeOptions
+        {
+            Enabled = false, Email = current.Email, Hostnames = current.Hostnames, UseStaging = current.UseStaging,
+            ChallengeDirectory = current.ChallengeDirectory,
+        });
+        return Ok("Let's Encrypt ausgeschaltet. Das vorhandene Zertifikat bleibt bis zu seinem Ablauf in Gebrauch.");
+    }
+
+    var acme = new AcmeOptions
+    {
+        Enabled = true,
+        Email = Option(a, "--email") ?? current.Email,
+        Hostnames = Option(a, "--hosts") ?? current.Hostnames,
+        UseStaging = a.Contains("--staging"),
+        ChallengeDirectory = Option(a, "--challenge-dir") ?? current.ChallengeDirectory,
+        DirectoryUrl = current.DirectoryUrl,
+        HttpPort = current.HttpPort,
+        RenewDaysBefore = current.RenewDaysBefore,
+    };
+    if (string.IsNullOrWhiteSpace(acme.Email))
+    {
+        return Fail("Bitte --email <adresse> angeben (für Benachrichtigungen von Let's Encrypt).");
+    }
+
+    Console.WriteLine($"Let's Encrypt{(acme.UseStaging ? " (Testmodus)" : "")} für {string.Join(", ", acme.EffectiveHostnames(options.Hostname))}");
+    var status = await CreateAcmeManager(acme).IssueAsync(step => Console.WriteLine($"  {step}"));
+    if (status.Success != true)
+    {
+        return Fail($"Fehlgeschlagen: {status.Message}");
+    }
+
+    new Mailserver.Core.Configuration.SettingsStore(paths).SaveAcme(acme);
+    Console.WriteLine(status.Message);
+    Console.WriteLine("Gespeichert: der Dienst verlängert das Zertifikat ab jetzt selbst. Läuft er schon, übernimmt er es innerhalb einer Stunde");
+    Console.WriteLine("(sofort: Restart-Service Mailserver).");
+    return 0;
 }
 
 void PrintDns(string name)

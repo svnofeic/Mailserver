@@ -45,6 +45,51 @@ public sealed class TlsOptions
 
     /// <summary>How often the certificate is reloaded to pick up renewals.</summary>
     public TimeSpan ReloadInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>Certificates from Let's Encrypt, issued and renewed by the server itself.</summary>
+    public AcmeOptions Acme { get; set; } = new();
+}
+
+public sealed class AcmeOptions
+{
+    public const string LetsEncrypt = "https://acme-v02.api.letsencrypt.org/directory";
+    public const string LetsEncryptStaging = "https://acme-staging-v02.api.letsencrypt.org/directory";
+
+    public bool Enabled { get; set; }
+
+    /// <summary>Let's Encrypt writes here before a certificate would expire (e.g. if renewing keeps failing).</summary>
+    public string? Email { get; set; }
+
+    /// <summary>
+    /// Names on the certificate, separated by commas or spaces, e.g. "mail.feicht.me, webmail.feicht.me". Empty means
+    /// <see cref="MailserverOptions.Hostname"/>. A plain string, because list settings from settings.json and
+    /// appsettings.json would be merged entry by entry.
+    /// </summary>
+    public string? Hostnames { get; set; }
+
+    /// <summary>Test certificates from the Let's Encrypt staging environment (not trusted by clients, generous limits).</summary>
+    public bool UseStaging { get; set; }
+
+    /// <summary>Another ACME server instead of Let's Encrypt.</summary>
+    public string? DirectoryUrl { get; set; }
+
+    /// <summary>Port for the http-01 check. Let's Encrypt always connects to port 80; other values only for tests.</summary>
+    public int HttpPort { get; set; } = 80;
+
+    /// <summary>
+    /// Web root of another web server answering on port 80 (e.g. IIS). Challenge files are written there instead of the
+    /// server answering on port 80 itself.
+    /// </summary>
+    public string? ChallengeDirectory { get; set; }
+
+    /// <summary>Renew this many days before expiry (Let's Encrypt certificates are valid for 90 days).</summary>
+    public int RenewDaysBefore { get; set; } = 30;
+
+    public IReadOnlyList<string> EffectiveHostnames(string hostname) =>
+        (string.IsNullOrWhiteSpace(Hostnames) ? [hostname] : Hostnames.Split([',', ';', ' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries))
+        .Select(h => h.Trim().TrimEnd('.').ToLowerInvariant()).Where(h => h.Length > 0).Distinct().ToList();
+
+    public Uri EffectiveDirectoryUrl => new(string.IsNullOrWhiteSpace(DirectoryUrl) ? UseStaging ? LetsEncryptStaging : LetsEncrypt : DirectoryUrl);
 }
 
 public sealed class SmtpOptions

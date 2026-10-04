@@ -85,17 +85,23 @@ Dann `notepad C:\Mailserver\appsettings.json`:
 - `"Tls"`: `"StoreSubject": null` (der Umweg über webmail.feicht.me ist nicht mehr nötig)
 - optional `"Web": { "HttpsPort": 443 }` – ohne IIS ist Port 443 frei; dann die Firewall-Regel anpassen
 
-## E. Zertifikat
+## E. Zertifikat (Let's Encrypt, eingebaut)
 
-Plesk gibt es nicht mehr, daher [win-acme](https://www.win-acme.com/) verwenden:
+Der Mailserver holt und verlängert sein Zertifikat selbst. Einmalig, **bevor** der Dienst gestartet wird:
 
-1. `wacs.exe` starten → *Create certificate (full options)* → *Manual input* → `mail.feicht.me`
-   (weitere Namen wie `webmail.feicht.me` gleich mit angeben).
-2. Prüfung per *HTTP validation (self-hosting)* – Port 80 muss dafür von außen erreichbar sein
-   (`New-NetFirewallRule -DisplayName "ACME 80" -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow`).
-3. Speicherort: *Windows Certificate Store*. Verlängerungen erledigt win-acme automatisch, der Mailserver übernimmt sie
-   ohne Neustart.
-4. Prüfen: `C:\Mailserver\mailadmin.exe tls` muss „Verwendet wird …“ anzeigen.
+```powershell
+cd C:\Mailserver
+.\mailadmin.exe tls acme --email sven@feicht.me --hosts "mail.feicht.me, webmail.feicht.me"
+```
+
+- Jeder Name muss per DNS auf den Server zeigen; Port 80 muss von außen erreichbar sein (die Firewall-Regel
+  „Mailserver Let's Encrypt 80“ legt `install.ps1` an). Der Mailserver öffnet Port 80 nur für die Prüfung.
+- Zum Ausprobieren erst mit `--staging` (Testzertifikat, keine Limits bei Fehlversuchen), danach ohne.
+- Verlängert wird automatisch 30 Tage vor Ablauf, ohne Neustart. Später lässt sich alles unter
+  *Verwaltung → Zertifikat* in der Weboberfläche ändern („Speichern und jetzt ausstellen“).
+- Prüfen: `.\mailadmin.exe tls` zeigt „Verwendet wird: Let's Encrypt“.
+
+Alternativ geht weiterhin win-acme (Zertifikat im Windows-Speicher) oder eine PFX-Datei (`Tls:PfxPath`).
 
 ## F. Starten und prüfen
 

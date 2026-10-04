@@ -15,6 +15,18 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      # Pebble, the ACME test server of Let's Encrypt: real certificate issuance in AcmePebbleTests (Linux only).
+      - name: Start Pebble
+        if: runner.os == 'Linux'
+        run: |
+          curl -sSL https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-amd64.tar.gz | tar xz -C /tmp
+          cd /tmp
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout pebble-key.pem -out pebble-cert.pem -days 7 -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+          echo '{"pebble":{"listenAddress":"127.0.0.1:14000","managementListenAddress":"127.0.0.1:15000","certificate":"pebble-cert.pem","privateKey":"pebble-key.pem","httpPort":5002,"tlsPort":5001,"ocspResponderURL":"","externalAccountBindingRequired":false}}' > pebble.json
+          echo "127.0.0.1 mail.example.test webmail.example.test" | sudo tee -a /etc/hosts
+          PEBBLE_VA_NOSLEEP=1 nohup /tmp/pebble-linux-amd64/linux/amd64/pebble -config pebble.json > pebble.log 2>&1 &
+          echo "PEBBLE_DIRECTORY=https://127.0.0.1:14000/dir" >> "$GITHUB_ENV"
       - run: dotnet test Mailserver.slnx -c Release
 
   # Ready-to-install Windows package (self-contained, no .NET needed on the server).

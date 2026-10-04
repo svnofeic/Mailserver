@@ -54,12 +54,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AutoResponder>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AuthThrottle>();
+        services.AddSingleton<Mailserver.Core.Security.Acme.AcmeChallengeStore>();
+        services.AddSingleton<Mailserver.Core.Security.Acme.AcmeCertificateManager>();
         services.AddSingleton<CertificateProvider>();
         services.AddSingleton<ILookupClient>(_ => new LookupClient(new LookupClientOptions { UseCache = true, Timeout = TimeSpan.FromSeconds(10) }));
         services.AddSingleton<RemoteDeliveryClient>();
         services.AddSingleton<DeliveryService>();
         services.AddAntiSpam();
 
+        // Before SMTP/IMAP: on a fresh installation the first certificate is requested before their TLS ports start.
+        services.AddHostedService<AcmeRenewalService>();
         services.AddHostedService<SmtpHostedService>();
         services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());
         return services;
