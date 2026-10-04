@@ -6,8 +6,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Mailserver.Web.Pages.Admin.Mailboxes;
 
-public sealed class EditModel(AccountStore accounts, MailboxStore mailboxes, RuleStore rules, MailboxSettingsStore settings) : MailPageModel
+public sealed class EditModel(AccountStore accounts, MailboxStore mailboxes, RuleStore rules, MailboxSettingsStore settings,
+    Mailserver.Core.Security.SendingLimiter sendingLimiter, Microsoft.Extensions.Options.IOptions<MailserverOptions> options) : MailPageModel
 {
+    public SendingState Sending { get; private set; } = SendingState.Default;
+    public (long Hour, long Day) SendingUsage { get; private set; }
+    public SendingLimitOptions DefaultLimits => options.Value.Security.Sending;
+
     [BindProperty]
     public MailboxAutomationForm Form { get; set; } = new();
 
@@ -29,8 +34,42 @@ public sealed class EditModel(AccountStore accounts, MailboxStore mailboxes, Rul
         return Page();
     }
 
+    public IActionResult OnPostUnblock(string address)
+    {
+        if (!Load(address))
+        {
+            return NotFound();
+        }
+
+        settings.UnblockSending(Account.Id);
+        Message = $"Versand für {Account.Address} wieder freigegeben.";
+        return Redirect($"/Admin/Mailboxes/Edit?address={Account.Address}");
+    }
+
+    public IActionResult OnPostSendingLimits(string address, int? perHour, int? perDay)
+    {
+        if (!Load(address))
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            settings.SetSendingLimits(Account.Id, perHour, perDay);
+            Message = "Versandlimits gespeichert.";
+        }
+        catch (ArgumentException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return Redirect($"/Admin/Mailboxes/Edit?address={Account.Address}");
+    }
+
     private void Describe()
     {
+        Sending = settings.Get(Account.Id).Sending;
+        SendingUsage = sendingLimiter.Usage(Account.Id);
         Usage = mailboxes.GetUsage(Account.Id);
         RuleCount = rules.List(Account.Address.ToString()).Count;
         foreach (var folder in mailboxes.ListFolders(Account.Id))

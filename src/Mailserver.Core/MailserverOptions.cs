@@ -28,6 +28,55 @@ public sealed class MailserverOptions
     public SecurityOptions Security { get; set; } = new();
 
     public SpamOptions Spam { get; set; } = new();
+
+    public AntivirusOptions Antivirus { get; set; } = new();
+}
+
+public sealed class AntivirusOptions
+{
+    /// <summary>File types that are never accepted from outside, as attachments or inside ZIP archives.</summary>
+    public const string DefaultBlockedExtensions =
+        "exe, com, scr, pif, bat, cmd, vbs, vbe, js, jse, wsf, wsh, ps1, psm1, msi, msp, hta, cpl, jar, lnk, reg, iso, img, vhd, vhdx, " +
+        "chm, scf, appx, msix, appref-ms, application, gadget, inf, sct, url";
+
+    /// <summary>Checks attachments and scans mail for viruses.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>"Auto" (Windows Defender if present), "Defender", "ClamAV" or "None" (only the attachment filter).</summary>
+    public string Scanner { get; set; } = "Auto";
+
+    /// <summary>clamd for Scanner = "ClamAV".</summary>
+    public string ClamAvHost { get; set; } = "127.0.0.1";
+
+    public int ClamAvPort { get; set; } = 3310;
+
+    /// <summary>MpCmdRun.exe; empty means the usual place under Program Files.</summary>
+    public string? DefenderPath { get; set; }
+
+    /// <summary>Also scan mail that users send (SMTP, webmail); infected messages are refused instead of sent.</summary>
+    public bool ScanOutgoing { get; set; } = true;
+
+    /// <summary>Comma separated list; empty means <see cref="DefaultBlockedExtensions"/>. A plain string, see AcmeOptions.Hostnames.</summary>
+    public string? BlockedExtensions { get; set; }
+
+    /// <summary>
+    /// Office files with macros and password-protected archives (common for malware, but also used legitimately):
+    /// "Junk" (deliver to the spam folder), "Reject" or "Allow".
+    /// </summary>
+    public string SuspiciousAttachments { get; set; } = "Junk";
+
+    /// <summary>When the scanner fails: "Accept" (deliver unscanned, logged) or "Defer" (temporary error, the sender retries).</summary>
+    public string OnScanError { get; set; } = "Accept";
+
+    /// <summary>Larger messages are only checked by the attachment filter.</summary>
+    public long MaxScanSizeBytes { get; set; } = 50 * 1024 * 1024;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlySet<string> EffectiveBlockedExtensions =>
+        (string.IsNullOrWhiteSpace(BlockedExtensions) ? DefaultBlockedExtensions : BlockedExtensions)
+        .Split([',', ';', ' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+        .Select(e => e.Trim().TrimStart('.').ToLowerInvariant())
+        .ToHashSet();
 }
 
 public sealed class TlsOptions
@@ -226,6 +275,25 @@ public sealed class SecurityOptions
 
     /// <summary>Messages with more Received headers than this are rejected (mail loop protection).</summary>
     public int MaxHopCount { get; set; } = 30;
+
+    /// <summary>Limits for mail sent by users, against stolen passwords used for spam.</summary>
+    public SendingLimitOptions Sending { get; set; } = new();
+}
+
+/// <summary>
+/// Counts external recipients per mailbox (and per IP for Smtp:RelayNetworks). 0 switches a limit off.
+/// A stolen password used for spam would otherwise get the server's IP blocklisted for all domains.
+/// </summary>
+public sealed class SendingLimitOptions
+{
+    public int MaxRecipientsPerMessage { get; set; } = 100;
+
+    public int MaxRecipientsPerHour { get; set; } = 300;
+
+    public int MaxRecipientsPerDay { get; set; } = 1000;
+
+    /// <summary>Exceeding the hourly or daily limit locks sending for the mailbox until an admin releases it.</summary>
+    public bool BlockOnLimit { get; set; } = true;
 }
 
 public sealed class SpamOptions

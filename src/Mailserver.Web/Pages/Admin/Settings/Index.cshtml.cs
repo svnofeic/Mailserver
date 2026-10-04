@@ -12,12 +12,14 @@ namespace Mailserver.Web.Pages.Admin.Settings;
 /// Edits the settings that apply at runtime. They are written to data/settings.json, which overrides appsettings.json and is
 /// reloaded automatically.
 /// </summary>
-public sealed class IndexModel(IOptions<MailserverOptions> options, SettingsStore store, CertificateProvider certificates, DataPaths paths)
-    : MailPageModel
+public sealed class IndexModel(IOptions<MailserverOptions> options, SettingsStore store, CertificateProvider certificates, DataPaths paths,
+    Mailserver.Core.Antivirus.MalwareFilter malwareFilter) : MailPageModel
 {
     public MailserverOptions Current => options.Value;
     public string SettingsFile => paths.SettingsFile;
     public string Certificate { get; private set; } = "";
+    public string? ScannerName { get; private set; }
+    public string? ScannerProblem { get; private set; }
 
     [BindProperty]
     public SettingsForm Form { get; set; } = new();
@@ -36,8 +38,9 @@ public sealed class IndexModel(IOptions<MailserverOptions> options, SettingsStor
             var spam = Clone(Current.Spam);
             var security = Clone(Current.Security);
             var delivery = Clone(Current.Delivery);
-            Form.ApplyTo(spam, security, delivery);
-            store.Save(spam, security, delivery);
+            var antivirus = Clone(Current.Antivirus);
+            Form.ApplyTo(spam, security, delivery, antivirus);
+            store.Save(spam, security, delivery, antivirus);
         }
         catch (FormatException ex)
         {
@@ -50,8 +53,35 @@ public sealed class IndexModel(IOptions<MailserverOptions> options, SettingsStor
         return RedirectToPage();
     }
 
+    /// <summary>Scans the harmless EICAR test file; every virus scanner must report it.</summary>
+    public async Task<IActionResult> OnPostTestScannerAsync(CancellationToken cancellationToken)
+    {
+        if (malwareFilter.Scanner is not { } scanner)
+        {
+            ErrorMessage = malwareFilter.ScannerProblem;
+            return RedirectToPage();
+        }
+
+        var result = await scanner.ScanAsync([new Mailserver.Core.Antivirus.Attachment("eicar.com", Mailserver.Core.Antivirus.MalwareFilter.Eicar)],
+            cancellationToken);
+        if (result.Outcome == Mailserver.Core.Antivirus.ScanOutcome.Infected)
+        {
+            Message = $"{scanner.Name} funktioniert: die EICAR-Testdatei wurde erkannt ({result.Threat}).";
+        }
+        else
+        {
+            ErrorMessage = result.Outcome == Mailserver.Core.Antivirus.ScanOutcome.Clean
+                ? $"{scanner.Name} hat die EICAR-Testdatei NICHT erkannt – der Scanner arbeitet nicht richtig."
+                : $"{scanner.Name}: {result.Detail}";
+        }
+
+        return RedirectToPage();
+    }
+
     private void Describe()
     {
+        ScannerName = malwareFilter.Scanner?.Name;
+        ScannerProblem = malwareFilter.ScannerProblem;
         var certificate = certificates.GetCertificate();
         Certificate = certificate is null ? "kein Zertifikat gefunden" : $"{certificate.Subject}, gültig bis {Format.Time(certificate.NotAfter)}";
     }
@@ -92,6 +122,20 @@ public sealed class SettingsForm
     public string? SmartHostPassword { get; set; }
     public string SmartHostSecurity { get; set; } = "Auto";
 
+    public bool AntivirusEnabled { get; set; }
+    public string Scanner { get; set; } = "Auto";
+    public string? ClamAvHost { get; set; }
+    public int ClamAvPort { get; set; } = 3310;
+    public bool ScanOutgoing { get; set; }
+    public string? BlockedExtensions { get; set; }
+    public string SuspiciousAttachments { get; set; } = "Junk";
+    public string OnScanError { get; set; } = "Accept";
+
+    public int SendMaxPerMessage { get; set; }
+    public int SendMaxPerHour { get; set; }
+    public int SendMaxPerDay { get; set; }
+    public bool SendBlockOnLimit { get; set; }
+
     public static SettingsForm From(MailserverOptions o) => new()
     {
         SpamEnabled = o.Spam.Enabled, JunkThreshold = o.Spam.JunkThreshold, DeleteThreshold = o.Spam.DeleteThreshold,
@@ -109,10 +153,37 @@ public sealed class SettingsForm
         MaxQueueLifetimeDays = o.Delivery.MaxQueueLifetime.TotalDays, MaxParallelDeliveries = o.Delivery.MaxParallelDeliveries,
         SmartHost = o.Delivery.SmartHost?.Host, SmartHostPort = o.Delivery.SmartHost?.Port ?? 587, SmartHostUsername = o.Delivery.SmartHost?.Username,
         SmartHostSecurity = o.Delivery.SmartHost?.Security ?? "Auto",
+        AntivirusEnabled = o.Antivirus.Enabled, Scanner = o.Antivirus.Scanner, ClamAvHost = o.Antivirus.ClamAvHost, ClamAvPort = o.Antivirus.ClamAvPort,
+        ScanOutgoing = o.Antivirus.ScanOutgoing, SuspiciousAttachments = o.Antivirus.SuspiciousAttachments, OnScanError = o.Antivirus.OnScanError,
+        BlockedExtensions = string.IsNullOrWhiteSpace(o.Antivirus.BlockedExtensions) ? AntivirusOptions.DefaultBlockedExtensions : o.Antivirus.BlockedExtensions,
+        SendMaxPerMessage = o.Security.Sending.MaxRecipientsPerMessage, SendMaxPerHour = o.Security.Sending.MaxRecipientsPerHour,
+        SendMaxPerDay = o.Security.Sending.MaxRecipientsPerDay, SendBlockOnLimit = o.Security.Sending.BlockOnLimit,
     };
 
-    public void ApplyTo(SpamOptions spam, SecurityOptions security, DeliveryOptions delivery)
+    public void ApplyTo(SpamOptions spam, SecurityOptions security, DeliveryOptions delivery, AntivirusOptions antivirus)
     {
+        Require(Scanner is "Auto" or "Defender" or "ClamAV" or "None", "Unbekannter Virenscanner.");
+        Require(SuspiciousAttachments is "Junk" or "Reject" or "Allow", "Ungültige Aktion für verdächtige Anhänge.");
+        Require(OnScanError is "Accept" or "Defer", "Ungültige Aktion bei Scanfehlern.");
+        Require(ClamAvPort is > 0 and < 65536, "Ungültiger ClamAV-Port.");
+        Require(SendMaxPerMessage >= 0 && SendMaxPerHour >= 0 && SendMaxPerDay >= 0, "Versandlimits dürfen nicht negativ sein (0 = ohne Limit).");
+        antivirus.Enabled = AntivirusEnabled;
+        antivirus.Scanner = Scanner;
+        antivirus.ClamAvHost = string.IsNullOrWhiteSpace(ClamAvHost) ? "127.0.0.1" : ClamAvHost.Trim();
+        antivirus.ClamAvPort = ClamAvPort;
+        antivirus.ScanOutgoing = ScanOutgoing;
+        antivirus.SuspiciousAttachments = SuspiciousAttachments;
+        antivirus.OnScanError = OnScanError;
+        var extensions = (BlockedExtensions ?? "").Split([',', ';', ' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(e => e.Trim().TrimStart('.').ToLowerInvariant()).Distinct().ToList();
+        Require(extensions.All(e => e.All(c => char.IsLetterOrDigit(c) || c == '-')), "Dateiendungen bitte ohne Sonderzeichen angeben, z. B. exe, js, vbs.");
+        antivirus.BlockedExtensions = string.Join(", ", extensions);
+
+        security.Sending.MaxRecipientsPerMessage = SendMaxPerMessage;
+        security.Sending.MaxRecipientsPerHour = SendMaxPerHour;
+        security.Sending.MaxRecipientsPerDay = SendMaxPerDay;
+        security.Sending.BlockOnLimit = SendBlockOnLimit;
+
         Require(JunkThreshold > 0, "Die Spam-Schwelle muss größer als 0 sein.");
         Require(DeleteThreshold == 0 || DeleteThreshold > JunkThreshold, "Die Lösch-Schwelle muss 0 (aus) oder größer als die Spam-Schwelle sein.");
         Require(LogRetentionDays is >= 1 and <= 3650, "Die Aufbewahrung muss zwischen 1 und 3650 Tagen liegen.");

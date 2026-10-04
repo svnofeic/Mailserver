@@ -30,6 +30,60 @@
         <label class="check" style="margin-top: 8px; display: flex"><input type="checkbox" name="Form.DnsBlocklistsEnabled" value="true" checked="@f.DnsBlocklistsEnabled" /> Blacklists abfragen</label>
     </div>
 
+    <h2>Virenschutz</h2>
+    <div class="card">
+        <p class="small" style="margin-top: 0">
+            @if (Model.ScannerName is { } scanner) { <span class="pill good">@scanner aktiv</span> }
+            else { <span class="pill warn">nur Anhangfilter</span> <span class="muted">@Model.ScannerProblem</span> }
+        </p>
+        <div class="row">
+            <label class="check"><input type="checkbox" name="Form.AntivirusEnabled" value="true" checked="@f.AntivirusEnabled" /> Anhänge prüfen und Viren suchen</label>
+            <label>Virenscanner
+                <select name="Form.Scanner">
+                    @foreach (var (value, text) in new[] { ("Auto", "automatisch (Microsoft Defender)"), ("Defender", "Microsoft Defender"), ("ClamAV", "ClamAV (clamd)"), ("None", "keiner – nur Anhangfilter") })
+                    {
+                        <option value="@value" selected="@(f.Scanner == value)">@text</option>
+                    }
+                </select>
+            </label>
+            <label>ClamAV-Server<input name="Form.ClamAvHost" value="@f.ClamAvHost" style="width: 140px" /></label>
+            <label>Port<input name="Form.ClamAvPort" type="number" value="@f.ClamAvPort" style="width: 90px" /></label>
+        </div>
+        <div class="row" style="margin-top: 10px">
+            <label class="check"><input type="checkbox" name="Form.ScanOutgoing" value="true" checked="@f.ScanOutgoing" /> auch gesendete Mails prüfen</label>
+            <label>Office mit Makros, verschlüsselte Archive
+                <select name="Form.SuspiciousAttachments">
+                    @foreach (var (value, text) in new[] { ("Junk", "in den Spam-Ordner"), ("Reject", "ablehnen"), ("Allow", "zustellen") })
+                    {
+                        <option value="@value" selected="@(f.SuspiciousAttachments == value)">@text</option>
+                    }
+                </select>
+            </label>
+            <label>Wenn der Scanner ausfällt
+                <select name="Form.OnScanError">
+                    <option value="Accept" selected="@(f.OnScanError == "Accept")">trotzdem zustellen (protokolliert)</option>
+                    <option value="Defer" selected="@(f.OnScanError == "Defer")">später erneut versuchen lassen</option>
+                </select>
+            </label>
+        </div>
+        <label class="stack">Blockierte Dateitypen (auch in ZIP-Archiven; Programme werden zusätzlich am Inhalt erkannt)
+            <textarea name="Form.BlockedExtensions" rows="2">@f.BlockedExtensions</textarea>
+        </label>
+    </div>
+
+    <h2>Versandlimits</h2>
+    <div class="card">
+        <p class="small muted" style="margin-top: 0">Externe Empfänger pro Postfach (0 = ohne Limit). Schutz für den Fall, dass ein Passwort gestohlen und das
+            Postfach für Spam missbraucht wird – sonst landet die Server-IP auf Blacklists und keine Domain kann mehr zustellen.
+            Einzelne Postfächer können eigene Limits bekommen (Postfächer → Bearbeiten).</p>
+        <div class="row">
+            <label>pro Nachricht<input name="Form.SendMaxPerMessage" type="number" min="0" value="@f.SendMaxPerMessage" style="width: 90px" /></label>
+            <label>pro Stunde<input name="Form.SendMaxPerHour" type="number" min="0" value="@f.SendMaxPerHour" style="width: 90px" /></label>
+            <label>pro Tag<input name="Form.SendMaxPerDay" type="number" min="0" value="@f.SendMaxPerDay" style="width: 90px" /></label>
+            <label class="check"><input type="checkbox" name="Form.SendBlockOnLimit" value="true" checked="@f.SendBlockOnLimit" /> bei Überschreitung Versand sperren und Admins benachrichtigen</label>
+        </div>
+    </div>
+
     <h2>Greylisting</h2>
     <div class="card row">
         <label class="check"><input type="checkbox" name="Form.GreylistingEnabled" value="true" checked="@f.GreylistingEnabled" /> aktiv</label>
@@ -75,11 +129,18 @@
     </div>
 
     @foreach (var name in new[] { "SpamEnabled", "EnforceDmarcReject", "RejectSpfFail", "TrustLoopback", "DnsBlocklistsEnabled", "GreylistingEnabled",
-                 "GreylistingSkipOnSpfPass", "LogEnabled", "LogIncludeSubject", "RejectUnauthenticatedLocalSender" })
+                 "GreylistingSkipOnSpfPass", "LogEnabled", "LogIncludeSubject", "RejectUnauthenticatedLocalSender", "AntivirusEnabled", "ScanOutgoing",
+                 "SendBlockOnLimit" })
     {
         <input type="hidden" name="Form.@name" value="false" />
     }
     <button type="submit">Speichern</button>
+</form>
+
+<h2>Virenscanner testen</h2>
+<form method="post" asp-page-handler="TestScanner" class="card row">
+    <button type="submit" class="secondary">EICAR-Testdatei scannen</button>
+    <span class="small muted">Die EICAR-Datei ist harmlos, wird aber von jedem Virenscanner gemeldet – so lässt sich prüfen, ob der Scan funktioniert.</span>
 </form>
 
 <h2>Nur in appsettings.json (Neustart nötig)</h2>

@@ -3,10 +3,19 @@ using Mailserver.Core.Data;
 
 namespace Mailserver.Core.Accounts;
 
-/// <summary>Per-mailbox automatic forwarding and out-of-office reply.</summary>
-public sealed record MailboxSettings(Forwarding Forwarding, AutoReply AutoReply)
+/// <summary>Per-mailbox automatic forwarding, out-of-office reply and sending limits.</summary>
+public sealed record MailboxSettings(Forwarding Forwarding, AutoReply AutoReply, SendingState Sending)
 {
-    public static readonly MailboxSettings Default = new(Forwarding.None, AutoReply.Off);
+    public static readonly MailboxSettings Default = new(Forwarding.None, AutoReply.Off, SendingState.Default);
+}
+
+/// <param name="PerHour">Own limit of external recipients per hour; null = server default.</param>
+/// <param name="BlockedSince">Sending locked after the limit was exceeded; released by an admin.</param>
+public sealed record SendingState(int? PerHour, int? PerDay, DateTimeOffset? BlockedSince, string? BlockedReason)
+{
+    public static readonly SendingState Default = new(null, null, null, null);
+
+    public bool IsBlocked => BlockedSince is not null;
 }
 
 /// <param name="Targets">Addresses every incoming message is forwarded to (spam excluded).</param>
@@ -59,12 +68,14 @@ public sealed class MailboxSettingsStore(Database database, AccountStore account
         return connection.Query(
             """
             SELECT forward_to, forward_keep_copy, autoreply_enabled, autoreply_subject, autoreply_body, autoreply_from,
-                   autoreply_until, autoreply_interval_days
+                   autoreply_until, autoreply_interval_days, send_limit_hour, send_limit_day, send_blocked_utc, send_blocked_reason
             FROM mailbox_settings WHERE account_id = $account
             """,
             r => new MailboxSettings(
                 new Forwarding(ParseTargets(r.GetString(0)), r.GetInt64(1) != 0),
-                new AutoReply(r.GetInt64(2) != 0, r.GetString(3), r.GetString(4), ParseDay(r, 5), ParseDay(r, 6), (int)r.GetInt64(7))),
+                new AutoReply(r.GetInt64(2) != 0, r.GetString(3), r.GetString(4), ParseDay(r, 5), ParseDay(r, 6), (int)r.GetInt64(7)),
+                new SendingState(r.IsDBNull(8) ? null : (int)r.GetInt64(8), r.IsDBNull(9) ? null : (int)r.GetInt64(9),
+                    r.IsDBNull(10) ? null : r.GetDbTime(10), r.IsDBNull(11) ? null : r.GetString(11))),
             ("$account", accountId)).SingleOrDefault() ?? MailboxSettings.Default;
     }
 
@@ -190,8 +201,32 @@ public sealed class MailboxSettingsStore(Database database, AccountStore account
     public IReadOnlyDictionary<long, MailboxSettings> ListActive()
     {
         using var connection = database.Open();
-        var ids = connection.Query("SELECT account_id FROM mailbox_settings WHERE forward_to <> '' OR autoreply_enabled = 1", r => r.GetInt64(0));
+        var ids = connection.Query(
+            "SELECT account_id FROM mailbox_settings WHERE forward_to <> '' OR autoreply_enabled = 1 OR send_blocked_utc IS NOT NULL",
+            r => r.GetInt64(0));
         return ids.ToDictionary(id => id, Get);
+    }
+
+    /// <summary>Own sending limits of a mailbox (null = server default, 0 = unlimited).</summary>
+    public void SetSendingLimits(long accountId, int? perHour, int? perDay)
+    {
+        if (perHour < 0 || perDay < 0)
+        {
+            throw new ArgumentException("Limits dürfen nicht negativ sein.");
+        }
+
+        Upsert(accountId, "send_limit_hour = $hour, send_limit_day = $day", ("$hour", perHour), ("$day", perDay));
+    }
+
+    public void BlockSending(long accountId, string reason) =>
+        Upsert(accountId, "send_blocked_utc = $now, send_blocked_reason = $reason", ("$now", timeProvider.GetUtcNow().ToDbTime()), ("$reason", reason));
+
+    /// <summary>Releases the lock and starts counting from zero, so the next message does not lock the mailbox again.</summary>
+    public void UnblockSending(long accountId)
+    {
+        Upsert(accountId, "send_blocked_utc = NULL, send_blocked_reason = NULL");
+        using var connection = database.Open();
+        connection.Execute("DELETE FROM send_log WHERE sender_key = $key", ("$key", $"account:{accountId}"));
     }
 
     public static IReadOnlyList<EmailAddress> ParseTargets(string? text)

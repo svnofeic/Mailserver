@@ -12,7 +12,7 @@ public sealed class SettingsStore(DataPaths paths)
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly Lock _lock = new();
 
-    public void Save(SpamOptions spam, SecurityOptions security, DeliveryOptions delivery)
+    public void Save(SpamOptions spam, SecurityOptions security, DeliveryOptions delivery, AntivirusOptions? antivirus = null)
     {
         lock (_lock)
         {
@@ -21,6 +21,11 @@ public sealed class SettingsStore(DataPaths paths)
             root["Mailserver"] = section;
             section["Spam"] = JsonSerializer.SerializeToNode(spam, Json);
             section["Security"] = JsonSerializer.SerializeToNode(security, Json);
+            if (antivirus is not null)
+            {
+                section["Antivirus"] = JsonSerializer.SerializeToNode(antivirus, Json);
+            }
+
             section["Delivery"] = JsonSerializer.SerializeToNode(new
             {
                 delivery.MaxQueueLifetime,

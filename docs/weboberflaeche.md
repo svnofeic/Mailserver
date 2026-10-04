@@ -29,14 +29,14 @@ mailadmin user admin sven@feicht.me on
 |---|---|
 | **Admin** | Kennzahlen (Domains, Postfächer, Warteschlange; letzte 24 h: eingegangen, Spam, abgelehnt, Greylisting, versendet, Zustellfehler, Fehl-Logins), Hinweise zum Spamfilter, Zertifikat mit Ablaufwarnung |
 | **Domains** | anlegen (mit DKIM-Schlüssel), löschen, **benötigte DNS-Einträge** zum Kopieren, DKIM-Schlüsselwechsel |
-| **Postfächer** | anlegen, Passwort setzen, Speicherlimit, aktivieren/deaktivieren, Admin-Recht, löschen; Ordnerübersicht; Weiterleitung und Abwesenheitsnotiz für jedes Postfach (z. B. Vertretung bei Krankheit). Die Liste zeigt „Weiterleitung“ / „abwesend“ an. |
+| **Postfächer** | anlegen, Passwort setzen, Speicherlimit, aktivieren/deaktivieren, Admin-Recht, löschen; Ordnerübersicht; Weiterleitung und Abwesenheitsnotiz für jedes Postfach (z. B. Vertretung bei Krankheit). Die Liste zeigt „Weiterleitung“ / „abwesend“ / „Versand gesperrt“ an. Karte **Versand**: Verbrauch der letzten Stunde/24 h, eigene Limits für das Postfach (leer = Standard, 0 = ohne Limit), „Versand freigeben“ nach einer Sperre. |
 | **Zertifikat** | Verwendetes TLS-Zertifikat (Namen, Aussteller, Ablauf). **Let's Encrypt**: automatisch ausstellen und verlängern – E-Mail, Hostnamen, Testmodus, optional Challenge-Ordner für IIS; „Jetzt ausstellen“, letzter Versuch mit Fehlermeldung. Ohne Zertifikat läuft die Weboberfläche mit einem Notfall-Zertifikat (Browser-Warnung), damit man hier eines anfordern kann. |
 | **Aliase** | Aliase und Weiterleitungen anlegen und löschen |
 | **Alle Regeln** | Regeln für alle Postfächer, einzelne Domains oder Postfächer |
 | **Warteschlange** | noch nicht zugestellte ausgehende Mails, sofort erneut versuchen, einzelne entfernen |
 | **Verlauf** | alles, was der Server getan hat: Prüfung und Zustellung eingehender Mails, Versand durch Benutzer, Zustellung nach außen (inkl. Fehler), Rückmeldungen der Benutzer, fehlgeschlagene Anmeldungen (SMTP, IMAP, Web). Filter nach Zeitraum, Bereich, Ergebnis, Adresse/Betreff, IP und Score; Detailansicht aller Schritte einer Mail; **CSV-Export** |
 | **Spam-Statistik** | Score-Verteilung, Häufigkeit jedes Tests in normalen Mails, Spam, Fehlalarmen und übersehenem Spam, Regel-Treffer, häufigste Spam-Absender und abgelehnte IPs, Optimierungshinweise |
-| **Einstellungen** | Spamfilter (Schwellen, DMARC, SPF, vertrauenswürdige Netze, Blacklists), Greylisting, Verlauf (Aufbewahrung, Betreffzeilen), Login-Sperren, Zustellung inkl. Relay-Server. **Gilt nach wenigen Sekunden ohne Neustart.** |
+| **Einstellungen** | Spamfilter (Schwellen, DMARC, SPF, vertrauenswürdige Netze, Blacklists), Greylisting, Verlauf (Aufbewahrung, Betreffzeilen), **Virenschutz** (Scanner, blockierte Dateitypen, Umgang mit Makro-Dokumenten und Scanner-Ausfall, Knopf „EICAR-Testdatei scannen“), **Versandlimits**, Login-Sperren, Zustellung inkl. Relay-Server. **Gilt nach wenigen Sekunden ohne Neustart.** |
 
 Einstellungen aus der Weboberfläche werden in `data\settings.json` gespeichert und haben Vorrang vor `appsettings.json`.
 Hostname, Ports, Zertifikat und maximale Mailgröße stehen weiterhin nur in `appsettings.json` und brauchen einen Neustart.

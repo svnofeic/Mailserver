@@ -58,6 +58,7 @@ try
     {
         ["import", ..] => await ImportAsync(args),
         ["tls", "acme", ..] => await AcmeAsync(args),
+        ["antivirus", "test"] => await AntivirusTestAsync(),
         _ => Run(args),
     };
 }
@@ -172,6 +173,14 @@ int Run(string[] a)
             }
 
             return 0;
+
+        case ["user", "unblock", var address]:
+        {
+            var account = accounts.FindAccount(EmailAddress.Parse(address)) ?? throw new InvalidOperationException($"Postfach {address} gibt es nicht.");
+            var state = mailboxSettings.Get(account.Id).Sending;
+            mailboxSettings.UnblockSending(account.Id);
+            return Ok(state.IsBlocked ? $"Versand für {account.Address} freigegeben (gesperrt war: {state.BlockedReason})." : $"{account.Address} war nicht gesperrt.");
+        }
 
         case ["forward", var address, ..]:
         {
@@ -337,6 +346,8 @@ int Run(string[] a)
                   user passwd <adresse> [--password <pw>]
                   user quota <adresse> <MB>               0 = unbegrenzt
                   user enable|disable|remove <adresse>
+                  user unblock <adresse>                  Versand nach Überschreiten des Versandlimits wieder freigeben
+                  antivirus test                          prüft den Virenscanner mit der harmlosen EICAR-Testdatei
                   user admin <adresse> on|off             Zugang zum Admin-Bereich der Weboberfläche
                   user list [domain]
 
@@ -568,6 +579,25 @@ int CheckTls()
     Console.WriteLine($"Möglichkeiten: mailadmin tls acme --email <adresse> (Let's Encrypt, siehe Hilfe); in Plesk ein Zertifikat ausstellen,");
     Console.WriteLine($"das {hostname} enthält; oder eine vorhandene PFX-Datei unter Mailserver:Tls:PfxPath/PfxPassword eintragen.");
     return 1;
+}
+
+async Task<int> AntivirusTestAsync()
+{
+    var filter = new Mailserver.Core.Antivirus.MalwareFilter(Microsoft.Extensions.Options.Options.Create(options), paths,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<Mailserver.Core.Antivirus.MalwareFilter>.Instance);
+    if (filter.Scanner is not { } scanner)
+    {
+        return Fail(filter.ScannerProblem ?? "Kein Virenscanner.");
+    }
+
+    Console.WriteLine($"Scanne die EICAR-Testdatei mit {scanner.Name} …");
+    var result = await scanner.ScanAsync([new Mailserver.Core.Antivirus.Attachment("eicar.com", Mailserver.Core.Antivirus.MalwareFilter.Eicar)], CancellationToken.None);
+    return result.Outcome switch
+    {
+        Mailserver.Core.Antivirus.ScanOutcome.Infected => Ok($"Funktioniert: erkannt als {result.Threat}."),
+        Mailserver.Core.Antivirus.ScanOutcome.Clean => Fail("Die Testdatei wurde NICHT erkannt – der Scanner arbeitet nicht richtig."),
+        _ => Fail($"Fehler: {result.Detail}"),
+    };
 }
 
 Mailserver.Core.Security.Acme.AcmeCertificateManager CreateAcmeManager(AcmeOptions acme)

@@ -257,6 +257,8 @@ public sealed class SpamFilter(
     /// </summary>
     public bool IsSpoofableHeader(string name, string value) =>
         name.StartsWith("X-Spam-", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("X-Virus-Scanned", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("X-Mailserver-Warning", StringComparison.OrdinalIgnoreCase) ||
         (name.Equals("Authentication-Results", StringComparison.OrdinalIgnoreCase) &&
          value.TrimStart().StartsWith(options.Value.Hostname, StringComparison.OrdinalIgnoreCase));
 

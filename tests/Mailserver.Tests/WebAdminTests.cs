@@ -140,6 +140,36 @@ public sealed class WebAdminTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Antivirus_and_sending_limits_are_saved()
+    {
+        var options = _server.Services.GetRequiredService<IOptions<MailserverOptions>>();
+        await _web.PostAsync("/Admin/Settings", "/Admin/Settings", SettingsFields(
+            ("Form.AntivirusEnabled", "true"), ("Form.Scanner", "ClamAV"), ("Form.ClamAvHost", "10.0.0.5"), ("Form.ClamAvPort", "3311"),
+            ("Form.ScanOutgoing", "false"), ("Form.SuspiciousAttachments", "Reject"), ("Form.OnScanError", "Defer"),
+            ("Form.BlockedExtensions", "exe, .JS; iso"), ("Form.SendMaxPerMessage", "20"), ("Form.SendMaxPerHour", "50"),
+            ("Form.SendMaxPerDay", "200"), ("Form.SendBlockOnLimit", "true")));
+
+        Assert.Contains("Einstellungen gespeichert", _web.LastPage);
+        await TestServer.WaitUntilAsync(() => options.Value.Security.Sending.MaxRecipientsPerHour == 50, "reloaded settings");
+        var antivirus = options.Value.Antivirus;
+        Assert.Equal(("ClamAV", "10.0.0.5", 3311, "Reject", "Defer"), (antivirus.Scanner, antivirus.ClamAvHost, antivirus.ClamAvPort,
+            antivirus.SuspiciousAttachments, antivirus.OnScanError));
+        Assert.False(antivirus.ScanOutgoing);
+        Assert.Equal(["exe", "iso", "js"], antivirus.EffectiveBlockedExtensions.Order());
+        Assert.Equal((20, 200), (options.Value.Security.Sending.MaxRecipientsPerMessage, options.Value.Security.Sending.MaxRecipientsPerDay));
+
+        await _web.PostAsync("/Admin/Settings", "/Admin/Settings", SettingsFields(("Form.SendMaxPerHour", "-1")));
+        Assert.Contains("Versandlimits dürfen nicht negativ sein", _web.LastPage);
+    }
+
+    [Fact]
+    public async Task Scanner_test_reports_a_missing_scanner()
+    {
+        await _web.PostAsync("/Admin/Settings", "/Admin/Settings?handler=TestScanner");
+        Assert.Contains("nur Anhangfilter", _web.LastPage);
+    }
+
+    [Fact]
     public async Task Invalid_settings_are_rejected()
     {
         await _web.PostAsync("/Admin/Settings", "/Admin/Settings", SettingsFields(("Form.TrustedNetworks", "kein-netz")));

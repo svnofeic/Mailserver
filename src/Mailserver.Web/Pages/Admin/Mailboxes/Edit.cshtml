@@ -29,6 +29,29 @@
     <button type="submit">Weiterleitung und Abwesenheit speichern</button>
 </form>
 
+<h2>Versand</h2>
+<div class="card">
+    @if (Model.Sending.BlockedSince is { } blocked)
+    {
+        <div class="notice bad">
+            Versand gesperrt seit @Format.Time(blocked): @Model.Sending.BlockedReason. Vor dem Freigeben am besten das Passwort ändern und im
+            <a href="/Admin/Log?search=@Model.Account.Address">Verlauf</a> prüfen, was verschickt wurde.
+            <form method="post" asp-page-handler="Unblock" asp-route-address="@Model.Account.Address" class="inline">
+                <button type="submit" class="secondary">Versand freigeben</button>
+            </form>
+        </div>
+    }
+    <p class="small" style="margin-top: 0">Externe Empfänger: @Model.SendingUsage.Hour in der letzten Stunde, @Model.SendingUsage.Day in den letzten 24 Stunden.</p>
+    <form method="post" asp-page-handler="SendingLimits" asp-route-address="@Model.Account.Address" class="row">
+        <label>Limit pro Stunde (leer = Standard @Model.DefaultLimits.MaxRecipientsPerHour)
+            <input name="perHour" type="number" min="0" value="@Model.Sending.PerHour" style="width: 120px" /></label>
+        <label>Limit pro Tag (leer = Standard @Model.DefaultLimits.MaxRecipientsPerDay)
+            <input name="perDay" type="number" min="0" value="@Model.Sending.PerDay" style="width: 120px" /></label>
+        <button type="submit" class="secondary">Limits speichern</button>
+        <span class="small muted">0 = ohne Limit, z. B. für ein Newsletter-Postfach.</span>
+    </form>
+</div>
+
 <h2>Passwort setzen</h2>
 <form method="post" asp-page-handler="Password" asp-route-address="@Model.Account.Address" class="row card">
     <label>Neues Passwort (mind. @PasswordRules.MinLength Zeichen)<input name="password" type="password" autocomplete="new-password" required /></label>

@@ -43,6 +43,8 @@ public sealed class WebmailSender(
     OutgoingMessagePreparer preparer,
     MessageRouter router,
     SpamLog spamLog,
+    Mailserver.Core.Antivirus.MalwareFilter malwareFilter,
+    Mailserver.Core.Security.SendingLimiter sendingLimiter,
     IOptions<MailserverOptions> options)
 {
     public const int MaxRecipients = 100;
@@ -65,6 +67,25 @@ public sealed class WebmailSender(
         using var raw = new MemoryStream();
         raw.Write(received);
         await message.WriteToAsync(raw, cancellationToken);
+        var limit = await sendingLimiter.CheckAsync(account, null, recipients, cancellationToken);
+        if (limit.Decision != Mailserver.Core.Security.SendingDecision.Allowed)
+        {
+            throw new ComposeException($"Nicht gesendet – {limit.Reason}");
+        }
+
+        var scan = await malwareFilter.CheckAsync(raw.ToArray(), incoming: false, cancellationToken);
+        if (scan.Action is Mailserver.Core.Antivirus.MalwareAction.Reject or Mailserver.Core.Antivirus.MalwareAction.Defer)
+        {
+            spamLog.Write(new SpamLogEntry
+            {
+                Stage = SpamLogStage.Submission, Action = SpamLogAction.Rejected, ClientIp = clientIp?.ToString(), MailFrom = envelopeSender,
+                Recipient = string.Join(", ", recipients), Subject = message.Subject, Tests = scan.Code, Detail = $"Webmail: {scan.Reason}",
+            });
+            throw new ComposeException(scan.Action == Mailserver.Core.Antivirus.MalwareAction.Defer
+                ? "Der Virenscan ist gerade nicht verfügbar. Bitte in einigen Minuten erneut senden – der Entwurf bleibt erhalten."
+                : $"Nicht gesendet – {scan.Reason}.");
+        }
+
         var prepared = await preparer.PrepareAsync(raw.ToArray(), cancellationToken);
 
         await router.RouteAsync(prepared, envelopeSender, recipients, allowRelay: true, cancellationToken);

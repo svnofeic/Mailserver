@@ -172,6 +172,19 @@ public sealed class Database
             PRIMARY KEY (account_id, sender)
         );
         """,
+        """
+        ALTER TABLE mailbox_settings ADD COLUMN send_limit_hour INTEGER NULL;
+        ALTER TABLE mailbox_settings ADD COLUMN send_limit_day INTEGER NULL;
+        ALTER TABLE mailbox_settings ADD COLUMN send_blocked_utc TEXT NULL;
+        ALTER TABLE mailbox_settings ADD COLUMN send_blocked_reason TEXT NULL;
+
+        CREATE TABLE send_log (
+            sender_key TEXT NOT NULL,
+            sent_utc   TEXT NOT NULL,
+            recipients INTEGER NOT NULL
+        );
+        CREATE INDEX ix_send_log ON send_log (sender_key, sent_utc);
+        """,
     ];
 
     private readonly string _connectionString;

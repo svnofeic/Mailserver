@@ -44,6 +44,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AccountStore>();
         services.AddSingleton<MailboxStore>();
         services.AddSingleton<SentCopies>();
+        services.AddSingleton<Mailserver.Core.Antivirus.MalwareFilter>();
         services.AddSingleton<OutboundQueue>();
         services.AddSingleton<DkimKeyStore>();
         services.AddSingleton<OutgoingMessagePreparer>();
@@ -53,6 +54,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MailboxSettingsStore>();
         services.AddSingleton<AutoResponder>();
         services.AddSingleton<MessageRouter>();
+        services.AddSingleton<AdminNotifier>();
+        services.AddSingleton<SendingLimiter>();
         services.AddSingleton<AuthThrottle>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeChallengeStore>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeCertificateManager>();

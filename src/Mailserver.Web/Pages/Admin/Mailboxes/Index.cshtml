@@ -28,6 +28,7 @@
                     {
                         if (automation.Forwarding.IsActive) { <span class="pill warn" title="@string.Join(", ", automation.Forwarding.Targets)">Weiterleitung</span> }
                         if (automation.AutoReply.IsActiveOn(DateOnly.FromDateTime(DateTime.Now))) { <span class="pill warn">abwesend</span> }
+                        if (automation.Sending.IsBlocked) { <span class="pill bad" title="@automation.Sending.BlockedReason">Versand gesperrt</span> }
                     }
                 </td>
                 <td><a href="/Admin/Mailboxes/Edit?address=@account.Address">Bearbeiten</a></td>

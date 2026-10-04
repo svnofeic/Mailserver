@@ -24,6 +24,8 @@ public sealed class SmtpHostedService(
     AccountStore accounts,
     MailboxStore mailboxes,
     SentCopies sentCopies,
+    Mailserver.Core.Antivirus.MalwareFilter malwareFilter,
+    Mailserver.Core.Security.SendingLimiter sendingLimiter,
     MessageRouter router,
     OutgoingMessagePreparer preparer,
     AuthThrottle throttle,
@@ -107,7 +109,7 @@ public sealed class SmtpHostedService(
         provider.Add(isSubmission
             ? new SubmissionMailboxFilter(accounts)
             : new InboundMailboxFilter(accounts, mailboxes, spamFilter, options));
-        provider.Add((IMessageStore)new RoutingMessageStore(router, preparer, spamFilter, spamLog, accounts, sentCopies, options, loggerFactory.CreateLogger<RoutingMessageStore>(), isSubmission));
+        provider.Add((IMessageStore)new RoutingMessageStore(router, preparer, spamFilter, spamLog, accounts, sentCopies, malwareFilter, sendingLimiter, options, loggerFactory.CreateLogger<RoutingMessageStore>(), isSubmission));
 
         var server = new SmtpServer.SmtpServer(builder.Build(), provider);
         server.SessionCreated += (_, e) => SessionInfo.Track(e.Context);
