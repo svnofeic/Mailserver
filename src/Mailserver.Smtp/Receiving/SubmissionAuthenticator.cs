@@ -16,7 +16,8 @@ internal sealed class SubmissionAuthenticator(AccountStore accounts, AuthThrottl
         var ip = SessionInfo.GetRemoteAddress(context);
         if (throttle.IsBlocked(ip))
         {
-            throw new SmtpResponseException(new SmtpResponse((SmtpReplyCode)554, "5.7.1 Access denied"), true);
+            // The connection stays open: closing right after the reply can abort it before the client has read it (Windows).
+            throw new SmtpResponseException(new SmtpResponse((SmtpReplyCode)554, "5.7.1 Access denied"));
         }
 
         if (throttle.IsLockedOut(ip))
