@@ -24,6 +24,11 @@
                 <td>
                     @if (!account.Enabled) { <span class="pill warn">deaktiviert</span> } else { <span class="pill good">aktiv</span> }
                     @if (account.IsAdmin) { <span class="pill warn">Admin</span> }
+                    @if (Model.Automation.TryGetValue(account.Id, out var automation))
+                    {
+                        if (automation.Forwarding.IsActive) { <span class="pill warn" title="@string.Join(", ", automation.Forwarding.Targets)">Weiterleitung</span> }
+                        if (automation.AutoReply.IsActiveOn(DateOnly.FromDateTime(DateTime.Now))) { <span class="pill warn">abwesend</span> }
+                    }
                 </td>
                 <td><a href="/Admin/Mailboxes/Edit?address=@account.Address">Bearbeiten</a></td>
             </tr>

@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Mailserver.Web.Pages.Admin.Mailboxes;
 
-public sealed class IndexModel(AccountStore accounts, MailboxStore mailboxes) : MailPageModel
+public sealed class IndexModel(AccountStore accounts, MailboxStore mailboxes, MailboxSettingsStore settings) : MailPageModel
 {
+    public IReadOnlyDictionary<long, MailboxSettings> Automation { get; private set; } = new Dictionary<long, MailboxSettings>();
+
     public string? Domain { get; private set; }
     public IReadOnlyList<string> Domains { get; private set; } = [];
     public List<(Mailserver.Core.Accounts.Account Account, long Usage)> Accounts { get; } = [];
@@ -15,6 +17,7 @@ public sealed class IndexModel(AccountStore accounts, MailboxStore mailboxes) : 
     {
         Domain = string.IsNullOrEmpty(domain) ? null : domain;
         Domains = accounts.ListDomains().Select(d => d.Name).ToList();
+        Automation = settings.ListActive();
         foreach (var account in accounts.ListAccounts(Domain))
         {
             Accounts.Add((account, mailboxes.GetUsage(account.Id)));

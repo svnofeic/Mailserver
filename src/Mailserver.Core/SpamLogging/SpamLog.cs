@@ -36,6 +36,8 @@ public static class SpamLogAction
     public const string Delivered = "delivered";
     public const string Discarded = "discarded";
     public const string NotForwarded = "not-forwarded";
+    public const string Forwarded = "forwarded";
+    public const string AutoReplied = "auto-replied";
     /// <summary>Moved into Junk by the user: the filter missed it (false negative) unless it was already scored as spam.</summary>
     public const string MarkedSpam = "marked-spam";
     /// <summary>Moved out of Junk by the user: the filter was wrong (false positive) unless a rule put it there.</summary>

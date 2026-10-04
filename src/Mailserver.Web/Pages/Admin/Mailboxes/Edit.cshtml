@@ -24,6 +24,11 @@
     @if (Model.IsSelf) { <p class="small muted">Das eigene Postfach kann man sich nicht selbst deaktivieren oder die Admin-Rechte entziehen.</p> }
 </form>
 
+<form method="post" asp-page-handler="Automation" asp-route-address="@Model.Account.Address" style="max-width: 760px">
+    <partial name="_MailboxAutomation" model="Model.Form" />
+    <button type="submit">Weiterleitung und Abwesenheit speichern</button>
+</form>
+
 <h2>Passwort setzen</h2>
 <form method="post" asp-page-handler="Password" asp-route-address="@Model.Account.Address" class="row card">
     <label>Neues Passwort (mind. @PasswordRules.MinLength Zeichen)<input name="password" type="password" autocomplete="new-password" required /></label>

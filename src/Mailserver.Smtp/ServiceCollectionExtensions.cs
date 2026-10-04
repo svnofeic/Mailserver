@@ -50,6 +50,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RuleStore>();
         services.AddSingleton<SpamLog>();
         services.AddSingleton<SpamFeedback>();
+        services.AddSingleton<MailboxSettingsStore>();
+        services.AddSingleton<AutoResponder>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AuthThrottle>();
         services.AddSingleton<CertificateProvider>();

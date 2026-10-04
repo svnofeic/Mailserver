@@ -15,7 +15,7 @@ public sealed class IndexModel(SpamLog log) : MailPageModel
     public static readonly string[] Actions =
     [
         SpamLogAction.Accepted, SpamLogAction.Spam, SpamLogAction.Rejected, SpamLogAction.Deferred, SpamLogAction.Delivered,
-        SpamLogAction.Discarded, SpamLogAction.NotForwarded, SpamLogAction.MarkedSpam, SpamLogAction.MarkedHam, SpamLogAction.Sent,
+        SpamLogAction.Discarded, SpamLogAction.Forwarded, SpamLogAction.AutoReplied, SpamLogAction.NotForwarded, SpamLogAction.MarkedSpam, SpamLogAction.MarkedHam, SpamLogAction.Sent,
         SpamLogAction.Failed, SpamLogAction.LoginFailed, SpamLogAction.LockedOut,
     ];
 

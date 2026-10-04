@@ -1,3 +1,4 @@
+@inject Mailserver.Core.Accounts.MailboxSettingsStore MailboxSettings
 @{
     var signedIn = User.Identity?.IsAuthenticated == true;
     var isAdmin = User.HasClaim(WebHosting.AdminClaim, "true");
@@ -109,6 +110,8 @@
         .bars .fill { background: var(--chart); border-radius: 0 4px 4px 0; height: 16px; min-width: 2px; }
         .bars .fill.zero { min-width: 0; }
         .login { max-width: 380px; margin: 60px auto; }
+        label.stack { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); margin: 10px 0; }
+        label.stack input, label.stack textarea { width: 100%; font-size: 15px; }
         .login label { display: block; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
         .login input { width: 100%; margin-top: 4px; }
         ul.hints { margin: 0; padding-left: 20px; }
@@ -185,7 +188,8 @@
                 <a class="@Active("/", exact: true)" href="/">Übersicht</a>
                 <a class="@Active("/Rules")" href="/Rules">Regeln</a>
                 <a class="@Active("/Spam")" href="/Spam">Spam-Verlauf</a>
-                <a class="@Active("/Account")" href="/Account/Password">Passwort</a>
+                <a class="@Active("/Account/Away")" href="/Account/Away">Abwesenheit</a>
+                <a class="@Active("/Account/Password")" href="/Account/Password">Passwort</a>
                 @if (isAdmin)
                 {
                     <details open="@path.StartsWith("/Admin", StringComparison.OrdinalIgnoreCase)">
@@ -219,6 +223,12 @@
     {
         <div class="notice bad" role="alert">@error</div>
         TempData.Remove("ErrorMessage");
+    }
+    @if (signedIn && !path.StartsWith("/Account/Away", StringComparison.OrdinalIgnoreCase) &&
+         long.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var accountId) &&
+         MailboxAutomationForm.Describe(MailboxSettings.Get(accountId), DateOnly.FromDateTime(DateTime.Now)) is { } automation)
+    {
+        <div class="notice warn small">Für Ihr Postfach gilt: @automation. <a href="/Account/Away">Ändern</a></div>
     }
     @RenderBody()
 </main>

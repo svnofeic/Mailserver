@@ -152,6 +152,26 @@ public sealed class Database
             PRIMARY KEY (account_id, message_id)
         );
         """,
+        """
+        CREATE TABLE mailbox_settings (
+            account_id              INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+            forward_to              TEXT NOT NULL DEFAULT '',
+            forward_keep_copy       INTEGER NOT NULL DEFAULT 1,
+            autoreply_enabled       INTEGER NOT NULL DEFAULT 0,
+            autoreply_subject       TEXT NOT NULL DEFAULT '',
+            autoreply_body          TEXT NOT NULL DEFAULT '',
+            autoreply_from          TEXT NULL,
+            autoreply_until         TEXT NULL,
+            autoreply_interval_days INTEGER NOT NULL DEFAULT 7
+        );
+
+        CREATE TABLE autoreply_log (
+            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            sender     TEXT NOT NULL,
+            sent_utc   TEXT NOT NULL,
+            PRIMARY KEY (account_id, sender)
+        );
+        """,
     ];
 
     private readonly string _connectionString;

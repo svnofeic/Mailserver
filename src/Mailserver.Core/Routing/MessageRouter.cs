@@ -17,6 +17,9 @@ public sealed class MessageRouter(
     OutboundQueue queue,
     RuleStore rules,
     SpamLog spamLog,
+    MailboxSettingsStore mailboxSettings,
+    AutoResponder autoResponder,
+    OutgoingMessagePreparer preparer,
     ILogger<MessageRouter> logger)
 {
     /// <param name="message">The complete message including the Received header added by this server.</param>
@@ -62,6 +65,8 @@ public sealed class MessageRouter(
         }
 
         RuleSubject? subject = null;
+        MimeMessage? parsed = null;
+        var replies = new List<(MimeMessage Reply, EmailAddress To)>();
         foreach (var account in localTargets.Values)
         {
             var decision = Decide(account, message, verdict, ref subject);
@@ -74,12 +79,44 @@ public sealed class MessageRouter(
                 continue;
             }
 
-            var stored = await mailboxes.AppendAsync(account, message, decision.Folder ?? MailboxStore.Inbox,
-                MessageFlags.Format(decision.Flags), cancellationToken: cancellationToken);
-            LogDelivery(verdict, account, SpamLogAction.Delivered, decision.Folder ?? MailboxStore.Inbox, decision,
-                decision.NotSpam && verdict.IsSpam ? "spam verdict overridden by rule" : null);
-            logger.LogInformation("Delivered message to {Account} in {Folder} (uid {Uid}, score {Score:F1}{Rules})", account.Address,
-                decision.Folder, stored.Uid, verdict.Score, decision.MatchedRules.Count > 0 ? ", rules: " + string.Join(", ", decision.MatchedRules) : "");
+            // Forwarding and out-of-office replies apply to wanted mail only, never to spam.
+            var settings = mailboxSettings.Get(account.Id);
+            var isJunk = string.Equals(decision.Folder, "Junk", StringComparison.OrdinalIgnoreCase);
+            var forwarding = settings.Forwarding.IsActive && !isJunk;
+            if (forwarding)
+            {
+                await ForwardAsync(message, envelopeSender, account, settings.Forwarding, verdict, cancellationToken);
+            }
+
+            if (!forwarding || settings.Forwarding.KeepCopy)
+            {
+                var stored = await mailboxes.AppendAsync(account, message, decision.Folder ?? MailboxStore.Inbox,
+                    MessageFlags.Format(decision.Flags), cancellationToken: cancellationToken);
+                LogDelivery(verdict, account, SpamLogAction.Delivered, decision.Folder ?? MailboxStore.Inbox, decision,
+                    decision.NotSpam && verdict.IsSpam ? "spam verdict overridden by rule" : null);
+                logger.LogInformation("Delivered message to {Account} in {Folder} (uid {Uid}, score {Score:F1}{Rules})", account.Address,
+                    decision.Folder, stored.Uid, verdict.Score, decision.MatchedRules.Count > 0 ? ", rules: " + string.Join(", ", decision.MatchedRules) : "");
+            }
+
+            if (settings.AutoReply.Enabled && !isJunk)
+            {
+                parsed ??= MimeMessage.Load(new MemoryStream(message, writable: false));
+                if (autoResponder.CreateReply(account, settings.AutoReply, parsed, envelopeSender) is { } reply)
+                {
+                    replies.Add(reply);
+                    LogAction(verdict, SpamLogAction.AutoReplied, account.Address.ToString(), $"Abwesenheitsnotiz an {reply.To}");
+                }
+            }
+        }
+
+        foreach (var (reply, to) in replies)
+        {
+            // Empty envelope sender (RFC 3834): a bounce of the notice goes nowhere, and no other autoresponder answers it.
+            using var buffer = new MemoryStream();
+            await reply.WriteToAsync(buffer, cancellationToken);
+            var prepared = await preparer.PrepareAsync(buffer.ToArray(), cancellationToken);
+            await RouteAsync(prepared, "", [to], allowRelay: true, cancellationToken);
+            logger.LogInformation("Sent out-of-office reply to {Recipient}", to);
         }
 
         if (relay.Count > 0)
@@ -111,6 +148,53 @@ public sealed class MessageRouter(
             var sender = envelopeSender.Length == 0 ? "" : group.Key.ToString();
             await queue.EnqueueAsync(message, sender, group.Select(f => f.Target), cancellationToken);
             logger.LogInformation("Forwarding message for {Alias} to {Targets}", group.Key, string.Join(", ", group.Select(f => f.Target)));
+        }
+    }
+
+    /// <summary>
+    /// Mailbox forwarding: like an alias, external copies are sent with the mailbox as envelope sender (SPF passes, bounces
+    /// return here). Local targets get the message directly; their own forwarding does not apply again, so two mailboxes
+    /// forwarding to each other cannot loop.
+    /// </summary>
+    private async Task ForwardAsync(byte[] message, string envelopeSender, Account account, Forwarding forwarding, InboundVerdict verdict,
+        CancellationToken cancellationToken)
+    {
+        var external = new List<EmailAddress>();
+        foreach (var target in forwarding.Targets)
+        {
+            if (!accounts.IsLocalDomain(target.Domain))
+            {
+                external.Add(target);
+                continue;
+            }
+
+            foreach (var local in accounts.Resolve(target).LocalAccounts.Where(a => a.Id != account.Id))
+            {
+                await mailboxes.AppendAsync(local, message, MailboxStore.Inbox, cancellationToken: cancellationToken);
+            }
+
+            external.AddRange(accounts.Resolve(target).ExternalAddresses);
+        }
+
+        if (external.Count > 0)
+        {
+            await queue.EnqueueAsync(message, envelopeSender.Length == 0 ? "" : account.Address.ToString(), external.Distinct(), cancellationToken);
+        }
+
+        logger.LogInformation("Forwarding message for {Account} to {Targets}", account.Address, string.Join(", ", forwarding.Targets));
+        LogAction(verdict, SpamLogAction.Forwarded, account.Address.ToString(),
+            $"weitergeleitet an {string.Join(", ", forwarding.Targets)}{(forwarding.KeepCopy ? "" : " (ohne Kopie im Postfach)")}");
+    }
+
+    private void LogAction(InboundVerdict verdict, string action, string recipient, string detail)
+    {
+        if (verdict.TraceId is not null)
+        {
+            spamLog.Write(new SpamLogEntry
+            {
+                Session = verdict.TraceId, Stage = SpamLogStage.Delivery, Action = action, Recipient = recipient, Score = verdict.Score,
+                Detail = detail,
+            });
         }
     }
 

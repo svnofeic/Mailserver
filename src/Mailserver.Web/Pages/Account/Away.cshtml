@@ -1,0 +1,8 @@
+@page
+@model Mailserver.Web.Pages.Account.AwayModel
+@{ ViewData["Title"] = "Abwesenheit & Weiterleitung"; }
+<h1>Abwesenheit &amp; Weiterleitung</h1>
+<form method="post" style="max-width: 760px">
+    <partial name="_MailboxAutomation" model="Model.Form" />
+    <button type="submit">Speichern</button>
+</form>

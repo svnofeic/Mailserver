@@ -41,6 +41,8 @@ public static class Format
         "delivered" => "zugestellt",
         "discarded" => "gelöscht",
         "not-forwarded" => "nicht weitergeleitet",
+        "forwarded" => "weitergeleitet",
+        "auto-replied" => "Abwesenheitsnotiz",
         "marked-spam" => "als Spam markiert",
         "marked-ham" => "aus Spam geholt",
         "sent" => "versendet",

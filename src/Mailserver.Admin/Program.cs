@@ -50,6 +50,7 @@ var dkim = new DkimKeyStore(paths);
 var queue = new OutboundQueue(database, paths);
 var rules = new RuleStore(database);
 var spamLog = new SpamLog(database, Microsoft.Extensions.Options.Options.Create(options), TimeProvider.System);
+var mailboxSettings = new MailboxSettingsStore(database, accounts, TimeProvider.System);
 
 try
 {
@@ -166,6 +167,51 @@ int Run(string[] a)
             }
 
             return 0;
+
+        case ["forward", var address, ..]:
+        {
+            var account = accounts.FindAccount(EmailAddress.Parse(address)) ?? throw new InvalidOperationException($"Postfach {address} gibt es nicht.");
+            if (a.Length > 2)
+            {
+                var targets = a[2] is "off" or "aus" ? [] : MailboxSettingsStore.ParseTargets(a[2]);
+                mailboxSettings.SetForwarding(account, new Forwarding(targets, !a.Contains("--no-copy")));
+            }
+
+            var forwarding = mailboxSettings.Get(account.Id).Forwarding;
+            return Ok(forwarding.IsActive
+                ? $"{account.Address} leitet weiter an {string.Join(", ", forwarding.Targets)}{(forwarding.KeepCopy ? " (Kopie bleibt im Postfach)" : " (ohne Kopie)")}."
+                : $"{account.Address}: keine Weiterleitung.");
+        }
+
+        case ["autoreply", var address, ..]:
+        {
+            var account = accounts.FindAccount(EmailAddress.Parse(address)) ?? throw new InvalidOperationException($"Postfach {address} gibt es nicht.");
+            var current = mailboxSettings.Get(account.Id).AutoReply;
+            if (a.Length > 2 && a[2] is "off" or "aus")
+            {
+                mailboxSettings.SetAutoReply(account.Id, current with { Enabled = false });
+            }
+            else if (a.Length > 2 && a[2] is "on" or "an")
+            {
+                var text = Option(a, "--text-file") is { } file ? File.ReadAllText(file) : Option(a, "--text") ?? current.Body;
+                mailboxSettings.SetAutoReply(account.Id, new AutoReply(true, Option(a, "--subject") ?? current.Subject, text,
+                    Option(a, "--from") is { } from ? DateOnly.Parse(from, System.Globalization.CultureInfo.InvariantCulture) : current.From,
+                    Option(a, "--until") is { } until ? DateOnly.Parse(until, System.Globalization.CultureInfo.InvariantCulture) : current.Until,
+                    Option(a, "--interval") is { } interval ? int.Parse(interval) : current.IntervalDays));
+            }
+
+            var reply = mailboxSettings.Get(account.Id).AutoReply;
+            Console.WriteLine($"Abwesenheitsnotiz für {account.Address}: {(reply.Enabled ? "an" : "aus")}" +
+                              (reply.From is { } f ? $", ab {f:dd.MM.yyyy}" : "") + (reply.Until is { } u ? $", bis {u:dd.MM.yyyy}" : "") +
+                              $", je Absender alle {reply.IntervalDays} Tage");
+            if (reply.Body.Length > 0)
+            {
+                Console.WriteLine($"Betreff: {(reply.Subject.Length > 0 ? reply.Subject : "Automatische Antwort: <Betreff der Mail>")}");
+                Console.WriteLine(reply.Body);
+            }
+
+            return 0;
+        }
 
         case ["rule", "add", var scope, .. var definition]:
         {
@@ -291,6 +337,12 @@ int Run(string[] a)
 
                   alias add <adresse> <ziel>[,<ziel>...]  Ziele dürfen auch externe Adressen sein (Weiterleitung)
                   alias remove <adresse> | alias list
+
+                  forward <adresse> [<ziel>[,<ziel>...] [--no-copy] | off]
+                      Leitet alle eingehenden Mails (ohne Spam) weiter; ohne Ziel wird der Stand angezeigt.
+                  autoreply <adresse> [on --text "…" | --text-file <datei>] [--subject "…"] [--from 2026-10-10] [--until 2026-10-24]
+                            [--interval 7] | autoreply <adresse> off
+                      Abwesenheitsnotiz; jeder Absender bekommt sie höchstens alle <interval> Tage.
 
                   queue list | queue retry
 

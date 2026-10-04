@@ -14,6 +14,7 @@ belegt, 8443 und 8880 durch Plesk; der Port lässt sich unter `Mailserver:Web:Ht
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
+| **Abwesenheit** | Automatische **Weiterleitung** an bis zu 10 Adressen (wahlweise mit oder ohne Kopie im Postfach) und **Abwesenheitsnotiz** mit Zeitraum, Betreff und Text. Solange etwas davon aktiv ist, erinnert ein Hinweis auf jeder Seite daran. |
 | **Passwort** | Passwort ändern (gilt auch für IMAP/SMTP). Alle anderen angemeldeten Browser werden abgemeldet. |
 
 ## Für Administratoren
@@ -28,7 +29,7 @@ mailadmin user admin sven@feicht.me on
 |---|---|
 | **Admin** | Kennzahlen (Domains, Postfächer, Warteschlange; letzte 24 h: eingegangen, Spam, abgelehnt, Greylisting, versendet, Zustellfehler, Fehl-Logins), Hinweise zum Spamfilter, Zertifikat mit Ablaufwarnung |
 | **Domains** | anlegen (mit DKIM-Schlüssel), löschen, **benötigte DNS-Einträge** zum Kopieren, DKIM-Schlüsselwechsel |
-| **Postfächer** | anlegen, Passwort setzen, Speicherlimit, aktivieren/deaktivieren, Admin-Recht, löschen; Ordnerübersicht |
+| **Postfächer** | anlegen, Passwort setzen, Speicherlimit, aktivieren/deaktivieren, Admin-Recht, löschen; Ordnerübersicht; Weiterleitung und Abwesenheitsnotiz für jedes Postfach (z. B. Vertretung bei Krankheit). Die Liste zeigt „Weiterleitung“ / „abwesend“ an. |
 | **Aliase** | Aliase und Weiterleitungen anlegen und löschen |
 | **Alle Regeln** | Regeln für alle Postfächer, einzelne Domains oder Postfächer |
 | **Warteschlange** | noch nicht zugestellte ausgehende Mails, sofort erneut versuchen, einzelne entfernen |
@@ -41,6 +42,36 @@ Hostname, Ports, Zertifikat und maximale Mailgröße stehen weiterhin nur in `ap
 
 Schutz gegen Aussperren: Das eigene Admin-Postfach kann man sich nicht selbst deaktivieren, löschen oder die Admin-Rechte
 entziehen; die Domain des eigenen Postfachs kann nicht gelöscht werden.
+
+## Weiterleitung und Abwesenheitsnotiz – wie sie arbeiten
+
+**Weiterleitung**
+- Weitergeleitet wird jede eingehende Mail, die nicht als Spam erkannt oder per Regel in den Spam-Ordner sortiert wurde.
+  Spam bleibt im Spam-Ordner, auch wenn „ohne Kopie“ eingestellt ist – das schützt den Ruf des Servers beim Empfänger.
+- Als Absender im Umschlag steht das weiterleitende Postfach (wie bei Aliasen), daher besteht die SPF-Prüfung beim
+  Empfänger; die DKIM-Signatur des ursprünglichen Absenders bleibt erhalten. Unzustellbarkeitsmeldungen kommen ins Postfach.
+- Ziele auf diesem Server bekommen die Mail direkt. Deren eigene Weiterleitung greift dabei nicht noch einmal – zwei
+  Postfächer, die sich gegenseitig weiterleiten, erzeugen also keine Endlosschleife.
+
+**Abwesenheitsnotiz** (nach RFC 3834)
+- Gilt im eingestellten Zeitraum (beide Daten einschließlich, ohne Datum sofort bzw. bis zum Ausschalten).
+- Jeder Absender bekommt sie höchstens einmal pro eingestelltem Zeitraum (Standard 7 Tage). Beim Ausschalten wird das
+  vergessen – bei der nächsten Abwesenheit bekommt jeder sie wieder.
+- Keine Antwort auf Spam, Newsletter und Mailinglisten (List-Id, Precedence: bulk), automatische Mails (Auto-Submitted,
+  andere Abwesenheitsnotizen), Systemadressen (mailer-daemon, noreply …) und Mails, in denen die Adresse nur in BCC steht.
+- Die Antwort geht an den tatsächlichen Absender (Return-Path), trägt `Auto-Submitted: auto-replied`, ist DKIM-signiert
+  und hat einen leeren Umschlag-Absender – sie kann daher keine Schleife mit einem anderen Autoresponder auslösen.
+- Im Verlauf (Admin) erscheinen beide als eigene Einträge: „weitergeleitet“ und „Abwesenheitsnotiz“.
+
+Auch per Kommandozeile:
+
+```powershell
+.\mailadmin.exe forward sven@feicht.me sven2707@live.com            # mit Kopie im Postfach
+.\mailadmin.exe forward sven@feicht.me sven2707@live.com --no-copy
+.\mailadmin.exe forward sven@feicht.me off
+.\mailadmin.exe autoreply sven@feicht.me on --subject "Im Urlaub" --text "Bin bis 18.10. nicht erreichbar." --until 2026-10-18
+.\mailadmin.exe autoreply sven@feicht.me off
+```
 
 ## Sicherheit
 
