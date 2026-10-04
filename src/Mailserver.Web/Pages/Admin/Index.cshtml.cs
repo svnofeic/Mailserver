@@ -15,6 +15,7 @@ public sealed class IndexModel(
     SpamLog log,
     CertificateProvider certificates,
     DataPaths paths,
+    Mailserver.Core.Backup.BackupManager backups,
     IOptions<MailserverOptions> options) : MailPageModel
 {
     public MailserverOptions Options => options.Value;
@@ -32,6 +33,7 @@ public sealed class IndexModel(
     public string? CertificateWarning { get; private set; }
     public long TotalUsage { get; private set; }
     public string DataDirectory => paths.Root;
+    public string? BackupWarning { get; private set; }
 
     public void OnGet()
     {
@@ -53,6 +55,12 @@ public sealed class IndexModel(
 
         var week = DateTimeOffset.UtcNow.AddDays(-7);
         Hints = SpamLogReport.Build(log.Query(new SpamLogQuery(Since: week)), week, Options.Spam.JunkThreshold).Hints;
+
+        var lastBackup = backups.LastSuccess();
+        BackupWarning = !Options.Backup.Enabled ? "Die automatische Datensicherung ist ausgeschaltet."
+            : lastBackup is null ? "Es gibt noch keine erfolgreiche Datensicherung."
+            : DateTimeOffset.UtcNow - lastBackup.Started > TimeSpan.FromHours(50) ? $"Die letzte erfolgreiche Datensicherung ist vom {Format.Time(lastBackup.Started)}."
+            : null;
 
         var certificate = certificates.GetCertificate();
         if (certificate is null)

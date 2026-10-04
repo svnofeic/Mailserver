@@ -125,5 +125,6 @@ behalten, den alten DKIM-Eintrag von SmarterMail/Plesk (z. B. `default._domainke
 
 ## Datensicherung im Betrieb
 
-Den Ordner `C:\Mailserver\data` (ohne `keys`) regelmäßig außerhalb des Servers sichern, z. B. nächtlich per geplanter
-Aufgabe mit `robocopy` auf einen externen Speicher, oder mit `mailadmin export` in offene Formate.
+Unter *Verwaltung → Datensicherung* die nächtliche Sicherung auf einen Speicher außerhalb des Servers einschalten
+(siehe [datensicherung.md](datensicherung.md)). Zurückgespielt wird sie – auch nach einer weiteren Neuinstallation –
+mit `mailadmin backup restore <ordner>`. Zusätzlich sichert `mailadmin export` alles in offene Formate.

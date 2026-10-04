@@ -57,6 +57,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AdminNotifier>();
         services.AddSingleton<SendingLimiter>();
         services.AddSingleton<AuthThrottle>();
+        services.AddSingleton<Mailserver.Core.Backup.BackupManager>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeChallengeStore>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeCertificateManager>();
         services.AddSingleton<CertificateProvider>();
@@ -69,6 +70,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<AcmeRenewalService>();
         services.AddHostedService<SmtpHostedService>();
         services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());
+        services.AddHostedService<BackupService>();
         return services;
     }
 }

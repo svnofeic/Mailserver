@@ -1,0 +1,106 @@
+@page
+@model Mailserver.Web.Pages.Admin.Backup.IndexModel
+@{
+    ViewData["Title"] = "Datensicherung";
+    var f = Model.Form;
+}
+<h1>Datensicherung</h1>
+
+<div class="card">
+    @if (Model.Running)
+    {
+        <p style="margin: 0"><span class="pill warn">läuft</span> Die Sicherung läuft gerade.</p>
+    }
+    else if (Model.LastSuccess is { } last)
+    {
+        var age = DateTimeOffset.Now - last.Started;
+        <p style="margin: 0">
+            <span class="pill @(age.TotalHours < 30 ? "good" : "bad")">letzte Sicherung @Format.Time(last.Started)</span>
+            @last.Message
+        </p>
+    }
+    else
+    {
+        <p style="margin: 0"><span class="pill bad">noch keine Sicherung</span>
+            Ohne Sicherung gehen bei einem Festplattenschaden oder einer Neuinstallation alle Mails verloren.</p>
+    }
+</div>
+
+<h2>Einstellungen</h2>
+<form method="post" class="card" style="max-width: 760px">
+    <label class="check"><input type="checkbox" name="Form.Enabled" value="true" checked="@f.Enabled" /> täglich automatisch sichern</label>
+    <label class="stack">Zielordner
+        <input name="Form.Directory" value="@f.Directory" placeholder="D:\Sicherung\Mailserver oder \\server\freigabe\mailserver" />
+    </label>
+    <p class="small muted" style="margin-top: -4px">Am besten außerhalb des Servers: eine Netzwerkfreigabe (z. B. Storage Box des Hosters) oder
+        zumindest eine zweite Festplatte. Eine Sicherung auf derselben Festplatte hilft nicht bei deren Ausfall.</p>
+    <div class="row">
+        <label>Uhrzeit<input name="Form.Time" type="time" value="@f.Time.ToString("hh\\:mm")" style="width: 110px" /></label>
+        <label>Aufbewahren (Tage)<input name="Form.KeepDays" type="number" min="1" max="365" value="@f.KeepDays" style="width: 90px" /></label>
+    </div>
+    <p class="small muted">Nur für Netzwerkfreigaben mit Anmeldung:</p>
+    <div class="row">
+        <label>Benutzer<input name="Form.Username" value="@f.Username" autocomplete="off" placeholder="u12345 oder server\benutzer" /></label>
+        <label>Passwort (leer = unverändert)<input name="Form.Password" type="password" autocomplete="new-password" /></label>
+    </div>
+    <input type="hidden" name="Form.Enabled" value="false" />
+    <div class="row" style="margin-top: 12px">
+        <button type="submit" asp-page-handler="Save" class="secondary">Speichern</button>
+        <button type="submit" asp-page-handler="Run" disabled="@Model.Running">Speichern und jetzt sichern</button>
+    </div>
+</form>
+
+<h2>Was gesichert wird</h2>
+<ul class="small">
+    <li><strong>Datenbank</strong> (Postfächer mit Passwörtern, Ordner, Aliase, Regeln, Weiterleitungen, Verlauf) – als konsistente Kopie im laufenden Betrieb</li>
+    <li><strong>alle Mails</strong> (data\mail) – nur neue Dateien werden kopiert, daher geht es nach der ersten Sicherung schnell</li>
+    <li>DKIM-Schlüssel, Let's-Encrypt-Zertifikat, Warteschlange, settings.json und appsettings.json</li>
+    <li>Jede Sicherung ist ein eigener Ordner unter <span class="mono">snapshots</span>; ältere als @Model.Current.KeepDays Tage werden entfernt (die neueste bleibt immer).
+        Gelöschte Mails bleiben ebenso lange in der Sicherung.</li>
+</ul>
+
+@if (Model.Snapshots.Count > 0 || Model.SnapshotProblem is not null)
+{
+    <h2>Vorhandene Sicherungen</h2>
+    @if (Model.SnapshotProblem is { } problem)
+    {
+        <p class="notice bad">Zielordner nicht lesbar: @problem</p>
+    }
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Sicherung</th><th>Erstellt</th><th>Größe (ohne Mails)</th></tr></thead>
+            <tbody>
+                @foreach (var snapshot in Model.Snapshots)
+                {
+                    <tr><td class="mono">@snapshot.Name</td><td>@Format.Time(snapshot.Created)</td><td>@Format.Size(snapshot.Bytes)</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="small muted">Zurückspielen: Dienst anhalten (<span class="mono">Stop-Service Mailserver</span>), dann
+        <span class="mono">mailadmin backup restore "@(Model.Snapshots.FirstOrDefault()?.Path ?? "…")"</span> und den Dienst wieder starten.</p>
+}
+
+@if (Model.Runs.Count > 0)
+{
+    <h2>Verlauf</h2>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Start</th><th>Ergebnis</th><th>Details</th></tr></thead>
+            <tbody>
+                @foreach (var run in Model.Runs)
+                {
+                    <tr>
+                        <td>@Format.Time(run.Started)</td>
+                        <td>
+                            @if (run.Success is null) { <span class="pill warn">läuft</span> }
+                            else if (run.Success == true) { <span class="pill good">erfolgreich</span> }
+                            else { <span class="pill bad">fehlgeschlagen</span> }
+                        </td>
+                        <td>@run.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

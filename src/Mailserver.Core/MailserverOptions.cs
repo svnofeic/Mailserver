@@ -30,6 +30,28 @@ public sealed class MailserverOptions
     public SpamOptions Spam { get; set; } = new();
 
     public AntivirusOptions Antivirus { get; set; } = new();
+
+    public BackupOptions Backup { get; set; } = new();
+}
+
+/// <summary>Automatic nightly backup of the data directory (database, settings, keys, mails).</summary>
+public sealed class BackupOptions
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>Target folder: another disk, a USB drive or a network share (\\server\freigabe\mailserver).</summary>
+    public string? Directory { get; set; }
+
+    /// <summary>Local time of day of the backup.</summary>
+    public TimeSpan Time { get; set; } = new(3, 0, 0);
+
+    /// <summary>How long snapshots (and mails deleted in the meantime) are kept.</summary>
+    public int KeepDays { get; set; } = 14;
+
+    /// <summary>Credentials for a network share (Windows only); empty when the share needs none.</summary>
+    public string? Username { get; set; }
+
+    public string? Password { get; set; }
 }
 
 public sealed class AntivirusOptions

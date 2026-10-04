@@ -185,6 +185,18 @@ public sealed class Database
         );
         CREATE INDEX ix_send_log ON send_log (sender_key, sent_utc);
         """,
+        """
+        CREATE TABLE backup_runs (
+            id           INTEGER PRIMARY KEY,
+            started_utc  TEXT NOT NULL,
+            finished_utc TEXT,
+            success      INTEGER,
+            snapshot     TEXT,
+            files_copied INTEGER NOT NULL DEFAULT 0,
+            bytes_copied INTEGER NOT NULL DEFAULT 0,
+            message      TEXT
+        );
+        """,
     ];
 
     private readonly string _connectionString;

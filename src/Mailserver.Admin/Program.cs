@@ -41,6 +41,20 @@ var options = new ConfigurationBuilder()
     .Build()
     .GetSection(MailserverOptions.SectionName).Get<MailserverOptions>() ?? bootstrap;
 
+// Restoring replaces the database, so it must happen before this process opens it.
+if (args is ["backup", "restore", ..])
+{
+    try
+    {
+        return RestoreBackup(args);
+    }
+    catch (Exception ex) when (ex is Mailserver.Core.Backup.BackupException or IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine($"Fehler: {ex.Message}");
+        return 1;
+    }
+}
+
 paths.EnsureCreated();
 var database = new Database(paths);
 database.Migrate();
@@ -59,6 +73,7 @@ try
         ["import", ..] => await ImportAsync(args),
         ["tls", "acme", ..] => await AcmeAsync(args),
         ["antivirus", "test"] => await AntivirusTestAsync(),
+        ["backup"] or ["backup", "run" or "--to", ..] => await BackupAsync(args),
         _ => Run(args),
     };
 }
@@ -117,6 +132,9 @@ int Run(string[] a)
 
         case ["tls"]:
             return CheckTls();
+
+        case ["backup", "list"]:
+            return ListBackups();
 
         case ["user", "add", var address, ..]:
         {
@@ -347,9 +365,13 @@ int Run(string[] a)
                   user quota <adresse> <MB>               0 = unbegrenzt
                   user enable|disable|remove <adresse>
                   user unblock <adresse>                  Versand nach Überschreiten des Versandlimits wieder freigeben
-                  antivirus test                          prüft den Virenscanner mit der harmlosen EICAR-Testdatei
                   user admin <adresse> on|off             Zugang zum Admin-Bereich der Weboberfläche
                   user list [domain]
+
+                  antivirus test                          prüft den Virenscanner mit der harmlosen EICAR-Testdatei
+                  backup [run] [--to <ordner>]            Datensicherung jetzt (Ziel aus Admin → Datensicherung)
+                  backup list                             letzte Sicherungen anzeigen
+                  backup restore <ordner> [--force]       Sicherung zurückspielen (Dienst vorher anhalten)
 
                   alias add <adresse> <ziel>[,<ziel>...]  Ziele dürfen auch externe Adressen sein (Weiterleitung)
                   alias remove <adresse> | alias list
@@ -579,6 +601,87 @@ int CheckTls()
     Console.WriteLine($"Möglichkeiten: mailadmin tls acme --email <adresse> (Let's Encrypt, siehe Hilfe); in Plesk ein Zertifikat ausstellen,");
     Console.WriteLine($"das {hostname} enthält; oder eine vorhandene PFX-Datei unter Mailserver:Tls:PfxPath/PfxPassword eintragen.");
     return 1;
+}
+
+Mailserver.Core.Backup.BackupManager CreateBackupManager(MailserverOptions settings) =>
+    new(database, paths, Microsoft.Extensions.Options.Options.Create(settings), TimeProvider.System,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<Mailserver.Core.Backup.BackupManager>.Instance);
+
+async Task<int> BackupAsync(string[] a)
+{
+    if (Option(a, "--to") is { } directory)
+    {
+        options.Backup.Directory = Path.GetFullPath(directory);
+    }
+
+    var manager = CreateBackupManager(options);
+    if (manager.Problem() is { } problem)
+    {
+        return Fail($"{problem} Zielordner in der Weboberfläche (Admin → Datensicherung) einstellen oder --to <ordner> angeben.");
+    }
+
+    Console.WriteLine($"Sichere nach {options.Backup.Directory} … (die erste Sicherung kopiert alle Mails und kann dauern)");
+    var run = await manager.RunAsync();
+    return run.Success == true ? Ok($"Fertig: Sicherung {run.Snapshot}, {run.Message}") : Fail(run.Message ?? "Fehlgeschlagen.");
+}
+
+int ListBackups()
+{
+    var manager = CreateBackupManager(options);
+    Console.WriteLine(options.Backup.Enabled
+        ? $"Automatische Sicherung: täglich {options.Backup.Time:hh\\:mm} Uhr nach {options.Backup.Directory}, {options.Backup.KeepDays} Tage aufbewahrt"
+        : "Automatische Sicherung: aus");
+    foreach (var run in manager.RecentRuns(10))
+    {
+        var state = run.Success switch { true => "ok    ", false => "FEHLER", null => "läuft " };
+        Console.WriteLine($"  {run.Started.ToLocalTime():dd.MM.yyyy HH:mm}  {state}  {run.Message}");
+    }
+
+    if (!string.IsNullOrWhiteSpace(options.Backup.Directory) && Directory.Exists(options.Backup.Directory))
+    {
+        Console.WriteLine("Vorhandene Sicherungen:");
+        foreach (var snapshot in Mailserver.Core.Backup.BackupManager.ListSnapshots(options.Backup.Directory))
+        {
+            Console.WriteLine($"  {snapshot.Path}");
+        }
+    }
+
+    return 0;
+}
+
+int RestoreBackup(string[] a)
+{
+    if (a.Length < 3)
+    {
+        return Fail("Aufruf: mailadmin backup restore <sicherungsordner> [--force]");
+    }
+
+    // Either one snapshot folder or the backup folder itself (then the newest snapshot).
+    var source = Path.GetFullPath(a[2]);
+    var snapshot = Mailserver.Core.Backup.BackupManager.ReadManifest(source) is not null
+        ? source
+        : Mailserver.Core.Backup.BackupManager.ListSnapshots(source).FirstOrDefault()?.Path
+          ?? throw new Mailserver.Core.Backup.BackupException($"In {source} gibt es keine vollständige Sicherung.");
+    var manifest = Mailserver.Core.Backup.BackupManager.ReadManifest(snapshot)!;
+
+    if (OperatingSystem.IsWindows() && System.Diagnostics.Process.GetProcessesByName("Mailserver").Length > 0)
+    {
+        return Fail("Der Mailserver läuft noch. Zuerst anhalten: Stop-Service Mailserver");
+    }
+
+    Console.WriteLine($"Sicherung vom {manifest.Created.ToLocalTime():dd.MM.yyyy HH:mm} ({manifest.Hostname}, {manifest.Accounts} Postfächer, {manifest.Messages} Mails)");
+    if (File.Exists(paths.DatabaseFile) && !a.Contains("--force") && !Confirm($"Die Datenbank in {paths.Root} wird ersetzt. Fortfahren?"))
+    {
+        return 1;
+    }
+
+    var result = Mailserver.Core.Backup.BackupManager.Restore(snapshot, paths, Console.WriteLine);
+    if (!result.MirrorFound)
+    {
+        Console.WriteLine("Warnung: neben dem Ordner snapshots liegt kein Ordner mail – die Mails selbst fehlen.");
+    }
+
+    return Ok($"Zurückgespielt ({result.MailFiles} Mail-Dateien kopiert). Jetzt den Dienst starten: Start-Service Mailserver");
 }
 
 async Task<int> AntivirusTestAsync()

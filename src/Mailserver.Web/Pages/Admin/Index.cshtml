@@ -7,6 +7,10 @@
 {
     <div class="notice bad">@Model.CertificateWarning</div>
 }
+@if (Model.BackupWarning is not null)
+{
+    <div class="notice warn">@Model.BackupWarning <a href="/Admin/Backup">Datensicherung einrichten</a></div>
+}
 
 <div class="tiles">
     <div class="tile"><div class="label">Domains</div><div class="value">@Model.Domains</div></div>

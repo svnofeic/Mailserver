@@ -36,6 +36,7 @@ mailadmin user admin sven@feicht.me on
 | **Warteschlange** | noch nicht zugestellte ausgehende Mails, sofort erneut versuchen, einzelne entfernen |
 | **Verlauf** | alles, was der Server getan hat: Prüfung und Zustellung eingehender Mails, Versand durch Benutzer, Zustellung nach außen (inkl. Fehler), Rückmeldungen der Benutzer, fehlgeschlagene Anmeldungen (SMTP, IMAP, Web). Filter nach Zeitraum, Bereich, Ergebnis, Adresse/Betreff, IP und Score; Detailansicht aller Schritte einer Mail; **CSV-Export** |
 | **Spam-Statistik** | Score-Verteilung, Häufigkeit jedes Tests in normalen Mails, Spam, Fehlalarmen und übersehenem Spam, Regel-Treffer, häufigste Spam-Absender und abgelehnte IPs, Optimierungshinweise |
+| **Datensicherung** | nächtliche Sicherung einrichten (Zielordner, auch Netzwerkfreigabe mit Anmeldung, Uhrzeit, Aufbewahrung), „Jetzt sichern“, Verlauf und vorhandene Sicherungen – siehe [datensicherung.md](datensicherung.md) |
 | **Einstellungen** | Spamfilter (Schwellen, DMARC, SPF, vertrauenswürdige Netze, Blacklists), Greylisting, Verlauf (Aufbewahrung, Betreffzeilen), **Virenschutz** (Scanner, blockierte Dateitypen, Umgang mit Makro-Dokumenten und Scanner-Ausfall, Knopf „EICAR-Testdatei scannen“), **Versandlimits**, Login-Sperren, Zustellung inkl. Relay-Server. **Gilt nach wenigen Sekunden ohne Neustart.** |
 
 Einstellungen aus der Weboberfläche werden in `data\settings.json` gespeichert und haben Vorrang vor `appsettings.json`.

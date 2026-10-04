@@ -59,6 +59,19 @@ public sealed class SettingsStore(DataPaths paths)
         }
     }
 
+    /// <summary>Stores the backup settings (Mailserver:Backup).</summary>
+    public void SaveBackup(BackupOptions backup)
+    {
+        lock (_lock)
+        {
+            var root = Load();
+            var section = root["Mailserver"] as JsonObject ?? new JsonObject();
+            root["Mailserver"] = section;
+            section["Backup"] = JsonSerializer.SerializeToNode(backup, Json);
+            Write(root);
+        }
+    }
+
     private void Write(JsonObject root)
     {
         var temp = paths.SettingsFile + ".tmp";
