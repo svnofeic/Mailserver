@@ -17,7 +17,8 @@ public sealed class IndexModel(WebmailStore store, MailActions actions) : MailPa
     public string? Search { get; private set; }
     public bool ShowRecipients => Folder.Name is "Sent" or "Drafts";
 
-    public IActionResult OnGet(string? folder, int page = 0, string? q = null)
+    // "page" is also a route value in Razor Pages (the page path), which would win over the query string; hence the explicit sources.
+    public IActionResult OnGet(string? folder, [FromQuery(Name = "page")] int page = 0, string? q = null)
     {
         if (store.Folder(CurrentAccount.Id, folder) is not { } selected)
         {
@@ -29,10 +30,17 @@ public sealed class IndexModel(WebmailStore store, MailActions actions) : MailPa
         Search = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
         PageNumber = Math.Max(0, page);
         (Items, Total) = store.List(Folder, PageNumber, PageSize, Search);
+        if (Items.Count == 0 && Total > 0)
+        {
+            // Past the end, e.g. after deleting the last mails of the last page.
+            PageNumber = PageCount - 1;
+            (Items, Total) = store.List(Folder, PageNumber, PageSize, Search);
+        }
+
         return Page();
     }
 
-    public IActionResult OnPostBulk(string folder, int page, long[] uids, string op, string? target)
+    public IActionResult OnPostBulk(string folder, [FromForm(Name = "page")] int page, long[] uids, string op, string? target)
     {
         if (store.Folder(CurrentAccount.Id, folder) is not { } source)
         {

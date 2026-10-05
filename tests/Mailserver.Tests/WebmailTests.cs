@@ -95,6 +95,33 @@ public sealed class WebmailTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Pages_through_a_long_folder_to_the_oldest_mail()
+    {
+        var start = new DateTimeOffset(2024, 1, 1, 8, 0, 0, TimeSpan.Zero);
+        for (var i = 0; i < 120; i++)
+        {
+            await _server.HostMailboxes.AppendAsync(_server.User("alice"), Encoding.ASCII.GetBytes($"Subject: Nummer {i:000}\r\n\r\nText"),
+                internalDate: start.AddDays(i));
+        }
+
+        await _web.GetAsync("/Mail?folder=INBOX");
+        Assert.Contains("Seite 1 von 3", _web.LastPage);
+        Assert.Contains("Nummer 119", _web.LastPage);
+
+        await _web.GetAsync("/Mail?folder=INBOX&page=1");
+        Assert.Contains("Seite 2 von 3", _web.LastPage);
+        Assert.Contains("Nummer 069", _web.LastPage);
+
+        await _web.GetAsync("/Mail?folder=INBOX&page=2");
+        Assert.Contains("Seite 3 von 3", _web.LastPage);
+        Assert.Contains("Nummer 000", _web.LastPage);
+        Assert.DoesNotContain("Ältere", _web.LastPage);
+
+        await _web.GetAsync("/Mail?folder=INBOX&page=7");
+        Assert.Contains("Seite 3 von 3", _web.LastPage);
+    }
+
+    [Fact]
     public async Task Lists_reads_and_marks_message_as_seen()
     {
         await DeliverAsync(HtmlMessage("Angebot März"));
