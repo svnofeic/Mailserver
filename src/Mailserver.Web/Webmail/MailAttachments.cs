@@ -44,6 +44,15 @@ public static class MailAttachments
         return buffer.ToArray();
     }
 
+    /// <summary>Whether the browser may show the attachment itself: PDFs (by type or name; many mailers send octet-stream).</summary>
+    public static bool CanView(MailAttachment attachment) =>
+        attachment.Entity is MimePart &&
+        (attachment.ContentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase) ||
+         attachment.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The content really is a PDF ("%PDF-" within the first KB), whatever the sender declared.</summary>
+    public static bool IsPdf(ReadOnlySpan<byte> content) => content[..Math.Min(content.Length, 1024)].IndexOf("%PDF-"u8) >= 0;
+
     /// <summary>File names come from the sender: strip paths and characters that are invalid on Windows.</summary>
     public static string SafeName(string? name, string fallback)
     {

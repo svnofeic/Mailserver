@@ -15,7 +15,7 @@ public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailAc
     public bool ShowImages { get; private set; }
     public bool HasRemoteContent { get; private set; }
     public string? SpamScore { get; private set; }
-    public List<(string Name, string Type, long Size)> Attachments { get; } = [];
+    public List<(string Name, string Type, long Size, bool Viewable)> Attachments { get; } = [];
 
     public IActionResult OnGet(string folder, long uid, int images = 0)
     {
@@ -32,7 +32,7 @@ public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailAc
         SpamScore = Mail.Headers["X-Spam-Score"];
         foreach (var attachment in MailAttachments.List(Mail))
         {
-            Attachments.Add((attachment.Name, attachment.ContentType, attachment.Size));
+            Attachments.Add((attachment.Name, attachment.ContentType, attachment.Size, MailAttachments.CanView(attachment)));
         }
 
         if (!stored.HasFlag(MessageFlags.Seen))

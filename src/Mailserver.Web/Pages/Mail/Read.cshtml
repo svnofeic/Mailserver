@@ -58,10 +58,22 @@
             <div class="table-wrap"><table><tbody>
                 @for (var i = 0; i < Model.Attachments.Count; i++)
                 {
+                    var link = $"/Mail/Attachment?folder={f}&uid={uid}&index={i}";
                     <tr>
-                        <td>📎 <a href="/Mail/Attachment?folder=@f&uid=@uid&index=@i">@Model.Attachments[i].Name</a></td>
+                        @if (Model.Attachments[i].Viewable)
+                        {
+                            <td>📎 <a href="@(link)&amp;view=1" target="_blank" rel="noopener" title="Im Browser anzeigen">@Model.Attachments[i].Name</a></td>
+                        }
+                        else
+                        {
+                            <td>📎 <a href="@link">@Model.Attachments[i].Name</a></td>
+                        }
                         <td class="small muted">@Model.Attachments[i].Type</td>
                         <td class="num small muted">@Format.Size(Model.Attachments[i].Size)</td>
+                        <td class="num small">
+                            @if (Model.Attachments[i].Viewable) { <a href="@(link)&amp;view=1" target="_blank" rel="noopener">Anzeigen</a><text> · </text> }
+                            <a href="@link">Herunterladen</a>
+                        </td>
                     </tr>
                 }
             </tbody></table></div>

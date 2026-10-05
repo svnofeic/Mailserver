@@ -200,6 +200,41 @@ public sealed class WebmailTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Pdf_attachment_can_be_viewed_in_the_browser_before_downloading()
+    {
+        await DeliverAsync(HtmlMessage("Mit PDF"));
+        var uid = _server.Inbox("alice").Single().Uid;
+
+        await _web.GetAsync($"/Mail/Read?folder=INBOX&uid={uid}");
+        Assert.Contains($"index=0&amp;view=1", _web.LastPage);
+        Assert.Contains("Herunterladen", _web.LastPage);
+
+        var shown = await _web.GetAsync($"/Mail/Attachment?folder=INBOX&uid={uid}&index=0&view=1");
+        Assert.Equal("application/pdf", shown.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("inline", shown.Content.Headers.ContentDisposition!.DispositionType);
+        Assert.Equal("angebot.pdf", shown.Content.Headers.ContentDisposition.FileName);
+        Assert.DoesNotContain("script-src", string.Join(" ", shown.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal(Pdf, await _web.GetBytesAsync($"/Mail/Attachment?folder=INBOX&uid={uid}&index=0&view=1"));
+    }
+
+    [Fact]
+    public async Task Disguised_html_attachment_is_never_shown_in_the_browser()
+    {
+        var builder = new BodyBuilder { TextBody = "Rechnung anbei" };
+        builder.Attachments.Add("rechnung.pdf", Encoding.ASCII.GetBytes("<html><script>alert(document.cookie)</script></html>"),
+            new ContentType("application", "pdf"));
+        var message = new MimeMessage { Subject = "Falsches PDF", Body = builder.ToMessageBody() };
+        message.From.Add(MailboxAddress.Parse("evil@remote.test"));
+        message.To.Add(MailboxAddress.Parse("alice@example.test"));
+        await DeliverAsync(message);
+        var uid = _server.Inbox("alice").Single().Uid;
+
+        var response = await _web.GetAsync($"/Mail/Attachment?folder=INBOX&uid={uid}&index=0&view=1");
+        Assert.Equal("application/octet-stream", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition!.DispositionType);
+    }
+
+    [Fact]
     public async Task Users_cannot_read_other_mailboxes()
     {
         await DeliverAsync(HtmlMessage("Privat"));
