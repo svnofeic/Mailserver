@@ -25,13 +25,13 @@
 <aside class="sidebar">
     <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Menü öffnen" />
     <div class="sidebar-top">
-        <a class="brand" href="/Mail"><span class="logo">@Icons.Get("mail")</span><span>Mailserver<small>@Context.Request.Host.Host</small></span></a>
+        <a class="brand" href="/"><span class="logo">@Icons.Get("mail")</span><span>Mailserver<small>@Context.Request.Host.Host</small></span></a>
         <label for="nav-toggle" class="burger" title="Menü"></label>
     </div>
     <div class="menu">
         <nav aria-label="Hauptmenü">
-            <a class="@Active("/Mail")" href="/Mail">@Icons.Get("inbox") Mail</a>
             <a class="@Active("/", exact: true)" href="/">@Icons.Get("grid") Übersicht</a>
+            <a class="@Active("/Mail")" href="/Mail">@Icons.Get("inbox") Mail</a>
             <a class="@Active("/Rules")" href="/Rules">@Icons.Get("filter") Regeln</a>
             <a class="@Active("/Spam")" href="/Spam">@Icons.Get("shield") Spam-Verlauf</a>
             <a class="@Active("/Account/Away")" href="/Account/Away">@Icons.Get("plane") Abwesenheit</a>
