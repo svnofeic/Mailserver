@@ -167,6 +167,7 @@ public sealed class CloudBackupTests : IAsyncLifetime
         // pCloud answers "Please provide 'code'" (1022) instead of a challenge token.
         var first = await PCloudStore.LoginAsync(_options.Backup, "code@pcloud.test", FakePCloud.Password, null, null, CancellationToken.None);
         Assert.True(first.NeedsCode);
+        Assert.True(first.CodeByEmail);
         Assert.Null(first.TwoFactorToken);
 
         var wrong = await Assert.ThrowsAsync<BackupException>(() =>
@@ -256,8 +257,7 @@ public sealed class CloudBackupWebTests : IAsyncLifetime
     {
         await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",
             Form(BackupOptions.PCloudTarget, ("email", "2fa@pcloud.test"), ("password", FakePCloud.Password)));
-        Assert.Contains("Zwei-Faktor", _web.LastPage);
-        Assert.Contains("Code (Zwei-Faktor)", _web.LastPage);
+        Assert.Contains("Code aus der Authenticator-App", _web.LastPage);
 
         await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",
             Form(BackupOptions.PCloudTarget, ("email", "2fa@pcloud.test"), ("password", ""), ("code", "123456")));
@@ -280,7 +280,8 @@ public sealed class CloudBackupWebTests : IAsyncLifetime
     {
         await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",
             Form(BackupOptions.PCloudTarget, ("email", "code@pcloud.test"), ("password", FakePCloud.Password)));
-        Assert.Contains("Code (Zwei-Faktor)", _web.LastPage);
+        Assert.Contains("Bestätigungscode aus der E-Mail", _web.LastPage);
+        Assert.Contains("per E-Mail an code@pcloud.test", _web.LastPage);
 
         // The password is not typed again; the server kept it in memory for this step.
         await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",

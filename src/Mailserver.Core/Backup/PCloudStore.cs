@@ -160,7 +160,11 @@ public sealed class PCloudStore : IBackupStore
 
     // ---- Login ----
 
-    public sealed record LoginResult(PCloudToken? Token, bool NeedsCode, string? TwoFactorToken);
+    /// <param name="CodeByEmail">
+    /// True when pCloud only answered "Please provide 'code'" (1022), as it does for a login from a new device or place
+    /// without two-factor authentication: the confirmation code then comes by e-mail. False: code from the authenticator app.
+    /// </param>
+    public sealed record LoginResult(PCloudToken? Token, bool NeedsCode, string? TwoFactorToken, bool CodeByEmail = false);
 
     /// <summary>
     /// Logs in with e-mail address and password. With two-factor authentication the first call returns
@@ -194,7 +198,7 @@ public sealed class PCloudStore : IBackupStore
             json = await PostAsync(http, $"{api}/login", parameters, cancellationToken);
             if (((int?)json["result"] is TwoFactorRequired or CodeMissing) && !hasCode) // the caller asks for the code and calls again
             {
-                return new LoginResult(null, true, (string?)json["token"]);
+                return new LoginResult(null, true, (string?)json["token"], (int?)json["result"] == CodeMissing);
             }
         }
 

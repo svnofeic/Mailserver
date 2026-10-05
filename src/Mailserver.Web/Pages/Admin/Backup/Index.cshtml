@@ -148,7 +148,7 @@
                 <label>Passwort<input name="password" type="password" autocomplete="new-password" /></label>
                 @if (Model.Cloud.PendingPCloudEmail is not null)
                 {
-                    <label>Code (Zwei-Faktor)<input name="code" autocomplete="one-time-code" style="width: 120px" /></label>
+                    <label>@(Model.Cloud.PendingPCloudCodeByEmail ? "Bestätigungscode aus der E-Mail" : "Code aus der Authenticator-App")<input name="code" autocomplete="one-time-code" style="width: 140px" /></label>
                 }
             </div>
             <div class="row" style="margin-top: 10px">

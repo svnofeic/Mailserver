@@ -19,6 +19,9 @@ public sealed class CloudConnector(CloudTokens tokens, ILogger<CloudConnector> l
     /// <summary>pCloud asked for the two-factor code: e-mail address of the pending login.</summary>
     public string? PendingPCloudEmail => _pendingPCloud?.Email;
 
+    /// <summary>The pending code is a confirmation code pCloud sent by e-mail (not one from an authenticator app).</summary>
+    public bool PendingPCloudCodeByEmail { get; private set; }
+
     // Token of the first login step (may be empty) and the password, kept in memory only until the code was entered.
     private (string Email, string Password, string? Token)? _pendingPCloud;
 
@@ -99,6 +102,7 @@ public sealed class CloudConnector(CloudTokens tokens, ILogger<CloudConnector> l
         if (result.NeedsCode)
         {
             _pendingPCloud = (email.Trim(), password, result.TwoFactorToken);
+            PendingPCloudCodeByEmail = result.CodeByEmail;
             return false;
         }
 

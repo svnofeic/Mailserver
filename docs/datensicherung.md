@@ -47,8 +47,11 @@ Gelöschte Sicherungen landen im OneDrive-Papierkorb und zählen dort bis zu 30 
 ### pCloud einrichten
 
 *Verwaltung → Datensicherung* → „pCloud“ wählen, die Region des Kontos (Europa oder USA – steht in den
-pCloud-Kontoeinstellungen) auswählen, E-Mail-Adresse und Passwort eingeben und **„Mit pCloud verbinden“**. Ist die
-Zwei-Faktor-Anmeldung eingeschaltet, fragt die Seite danach den Code ab. Der Server speichert nicht das Passwort, sondern
+pCloud-Kontoeinstellungen) auswählen, E-Mail-Adresse und Passwort eingeben und **„Mit pCloud verbinden“**. Danach fragt
+die Seite meist nach einem Code: Weil sich der Server zum ersten Mal von einem neuen Gerät und Ort (Rechenzentrum)
+anmeldet, schickt pCloud einen **Bestätigungscode per E-Mail** an die Kontoadresse (ggf. im Spam-Ordner nachsehen).
+Ist die Zwei-Faktor-Anmeldung eingeschaltet, ist es stattdessen der Code aus der Authenticator-App. Das Passwort muss im
+zweiten Schritt nicht noch einmal eingegeben werden. Der Server speichert nicht das Passwort, sondern
 ein Zugangstoken, das bis zu zwei Jahre gilt (solange es mindestens alle zwei Monate benutzt wird – die nächtliche
 Sicherung tut das). Läuft es ab, schlägt die Sicherung fehl, die Admins bekommen eine Mail, und man verbindet einfach neu.
 

@@ -740,7 +740,9 @@ async Task<int> ConnectCloudAsync(string[] a)
     var result = await Mailserver.Core.Backup.PCloudStore.LoginAsync(pcloud, email, password, null, null, CancellationToken.None);
     if (result.NeedsCode)
     {
-        Console.Write("Code der Zwei-Faktor-Anmeldung: ");
+        Console.Write(result.CodeByEmail
+            ? $"pCloud hat einen Bestätigungscode per E-Mail an {email} geschickt (ggf. im Spam-Ordner nachsehen). Code: "
+            : "Code aus der Authenticator-App (Zwei-Faktor-Anmeldung): ");
         result = await Mailserver.Core.Backup.PCloudStore.LoginAsync(pcloud, email, password, Console.ReadLine(), result.TwoFactorToken, CancellationToken.None);
     }
 

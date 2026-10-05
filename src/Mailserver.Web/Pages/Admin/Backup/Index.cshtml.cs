@@ -70,7 +70,10 @@ public sealed class IndexModel(IOptions<MailserverOptions> options, BackupManage
             }
             else
             {
-                ErrorMessage = "pCloud verlangt den Code der Zwei-Faktor-Anmeldung: bitte Code eingeben und noch einmal „Mit pCloud verbinden“.";
+                ErrorMessage = cloud.PendingPCloudCodeByEmail
+                    ? "pCloud verlangt einen Bestätigungscode, weil sich der Server zum ersten Mal anmeldet. pCloud schickt ihn per E-Mail an " +
+                      $"{email.Trim()} (ggf. im Spam-Ordner nachsehen): Code eingeben und noch einmal „Mit pCloud verbinden“."
+                    : "pCloud verlangt den Code der Zwei-Faktor-Anmeldung aus der Authenticator-App: Code eingeben und noch einmal „Mit pCloud verbinden“.";
             }
         }
         catch (Exception ex) when (ex is BackupException or HttpRequestException)
