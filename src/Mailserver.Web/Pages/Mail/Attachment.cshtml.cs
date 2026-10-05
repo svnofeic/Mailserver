@@ -4,8 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Mailserver.Web.Pages.Mail;
 
 /// <summary>
-/// Downloads an attachment or the raw message. Only a genuine PDF may be shown by the browser (<paramref name="view"/>), in its own
-/// PDF viewer; everything else is always a download, so an attached HTML or SVG file is never executed in the context of this site.
+/// Downloads an attachment or the raw message. Only a genuine PDF or picture may be shown by the browser (<paramref name="view"/>); everything else is always a download, so an attached HTML or SVG file is never executed in the context of this site.
 /// </summary>
 public sealed class AttachmentModel(WebmailStore store) : MailPageModel
 {
@@ -31,7 +30,7 @@ public sealed class AttachmentModel(WebmailStore store) : MailPageModel
 
         var attachment = attachments[index];
         var content = MailAttachments.Content(attachment);
-        if (view == 1 && MailAttachments.CanView(attachment) && MailAttachments.IsPdf(content))
+        if (view == 1 && MailAttachments.CanView(attachment) && MailAttachments.ViewType(content) is { } type)
         {
             var disposition = new Microsoft.Net.Http.Headers.ContentDispositionHeaderValue("inline");
             disposition.SetHttpFileName(attachment.Name);
@@ -39,7 +38,7 @@ public sealed class AttachmentModel(WebmailStore store) : MailPageModel
             // The page-wide policy (default-src 'none') would stop the browser's PDF viewer; scripts and forms stay forbidden.
             Response.Headers.ContentSecurityPolicy = "default-src 'none'; object-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'self'";
             Response.Headers.XFrameOptions = "SAMEORIGIN";
-            return File(content, "application/pdf");
+            return File(content, type);
         }
 
         return File(content, "application/octet-stream", attachment.Name);

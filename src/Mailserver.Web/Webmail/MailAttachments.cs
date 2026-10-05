@@ -44,14 +44,32 @@ public static class MailAttachments
         return buffer.ToArray();
     }
 
-    /// <summary>Whether the browser may show the attachment itself: PDFs (by type or name; many mailers send octet-stream).</summary>
+    // Formats the browser may show itself, by declared type and by file name (many mailers send application/octet-stream).
+    // No SVG: it can contain scripts.
+    private static readonly Dictionary<string, string> Viewable = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".pdf"] = "application/pdf", [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".png"] = "image/png",
+        [".gif"] = "image/gif", [".webp"] = "image/webp",
+    };
+
+    /// <summary>Whether the browser may show the attachment itself (PDF or picture) instead of only downloading it.</summary>
     public static bool CanView(MailAttachment attachment) =>
         attachment.Entity is MimePart &&
-        (attachment.ContentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase) ||
-         attachment.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
+        (Viewable.ContainsValue(attachment.ContentType.ToLowerInvariant()) || Viewable.ContainsKey(Path.GetExtension(attachment.Name)));
 
-    /// <summary>The content really is a PDF ("%PDF-" within the first KB), whatever the sender declared.</summary>
-    public static bool IsPdf(ReadOnlySpan<byte> content) => content[..Math.Min(content.Length, 1024)].IndexOf("%PDF-"u8) >= 0;
+    /// <summary>
+    /// The type the content really has, recognised by its first bytes – whatever the sender declared – or null if it is none of
+    /// the viewable formats.
+    /// </summary>
+    public static string? ViewType(ReadOnlySpan<byte> content) => content switch
+    {
+        _ when content[..Math.Min(content.Length, 1024)].IndexOf("%PDF-"u8) >= 0 => "application/pdf",
+        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+        [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => "image/png",
+        [(byte)'G', (byte)'I', (byte)'F', (byte)'8', ..] => "image/gif",
+        [(byte)'R', (byte)'I', (byte)'F', (byte)'F', _, _, _, _, (byte)'W', (byte)'E', (byte)'B', (byte)'P', ..] => "image/webp",
+        _ => null,
+    };
 
     /// <summary>File names come from the sender: strip paths and characters that are invalid on Windows.</summary>
     public static string SafeName(string? name, string fallback)

@@ -218,6 +218,33 @@ public sealed class WebmailTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Picture_attachment_is_shown_but_svg_is_only_downloaded()
+    {
+        byte[] jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0, 16, (byte)'J', (byte)'F', (byte)'I', (byte)'F', 0, 1, 2, 3];
+        var builder = new BodyBuilder { TextBody = "Fotos" };
+        builder.Attachments.Add("urlaub.jpg", jpeg, new ContentType("application", "octet-stream"));
+        builder.Attachments.Add("logo.svg", Encoding.ASCII.GetBytes("<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"),
+            new ContentType("image", "svg+xml"));
+        var message = new MimeMessage { Subject = "Fotos", Body = builder.ToMessageBody() };
+        message.From.Add(MailboxAddress.Parse("freund@remote.test"));
+        message.To.Add(MailboxAddress.Parse("alice@example.test"));
+        await DeliverAsync(message);
+        var uid = _server.Inbox("alice").Single().Uid;
+
+        await _web.GetAsync($"/Mail/Read?folder=INBOX&uid={uid}");
+        Assert.Contains("index=0&amp;view=1", _web.LastPage);
+        Assert.DoesNotContain("index=1&amp;view=1", _web.LastPage);
+
+        var photo = await _web.GetAsync($"/Mail/Attachment?folder=INBOX&uid={uid}&index=0&view=1");
+        Assert.Equal("image/jpeg", photo.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("inline", photo.Content.Headers.ContentDisposition!.DispositionType);
+
+        var svg = await _web.GetAsync($"/Mail/Attachment?folder=INBOX&uid={uid}&index=1&view=1");
+        Assert.Equal("application/octet-stream", svg.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("attachment", svg.Content.Headers.ContentDisposition!.DispositionType);
+    }
+
+    [Fact]
     public async Task Disguised_html_attachment_is_never_shown_in_the_browser()
     {
         var builder = new BodyBuilder { TextBody = "Rechnung anbei" };
