@@ -152,7 +152,7 @@ public sealed class PushNotificationTests : IAsyncLifetime
         var (headers, body) = Assert.Single(_push.Received);
         Assert.Equal("aes128gcm", headers.ContentEncoding.ToString());
         Assert.Equal("86400", headers["TTL"].ToString());
-        Assert.Equal("inbox", headers["Topic"].ToString());
+        Assert.False(headers.ContainsKey("Topic")); // Apple refuses it
         Assert.StartsWith("vapid t=", headers.Authorization.ToString());
 
         using var json = System.Text.Json.JsonDocument.Parse(_browser.Decrypt(body));

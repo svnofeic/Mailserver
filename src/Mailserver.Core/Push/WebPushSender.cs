@@ -28,10 +28,10 @@ public sealed class WebPushSender(VapidKeys keys, HttpClient? client = null)
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
             request.Content.Headers.ContentEncoding.Add("aes128gcm");
             request.Headers.TryAddWithoutValidation("Authorization", keys.Authorization(endpoint, subject));
-            // Kept a day if the device is offline; a newer message with the same topic replaces an undelivered older one.
+            // Kept a day if the device is offline. No "Topic" header: Apple refuses it (BadWebPushTopic); the notification tag
+            // on the device already makes a newer message replace the older one.
             request.Headers.Add("TTL", "86400");
             request.Headers.Add("Urgency", "normal");
-            request.Headers.Add("Topic", "inbox");
 
             using var response = await _http.SendAsync(request, cancellationToken);
             if (response.IsSuccessStatusCode)
