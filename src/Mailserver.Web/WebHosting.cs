@@ -249,6 +249,11 @@ public static class WebHosting
             context.Response.Headers.CacheControl = "public, max-age=604800";
             return Results.Text(Resource("app.js"), "text/javascript; charset=utf-8");
         }).AllowAnonymous();
+        app.MapGet("/assets/push.js", (HttpContext context) =>
+        {
+            context.Response.Headers.CacheControl = "public, max-age=604800";
+            return Results.Text(Resource("push.js"), "text/javascript; charset=utf-8");
+        }).AllowAnonymous();
         app.MapGet("/offline", () => Results.Content(Resource("offline.html").Replace("__VERSION__", version), "text/html; charset=utf-8")).AllowAnonymous();
         app.MapGet("/assets/icons/{name}", (HttpContext context, string name) => Icon(context, name)).AllowAnonymous();
         app.MapGet("/apple-touch-icon.png", (HttpContext context) => Icon(context, "apple-touch-icon.png")).AllowAnonymous();

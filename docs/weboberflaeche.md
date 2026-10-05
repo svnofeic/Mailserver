@@ -32,6 +32,24 @@ nicht erreichbar ist.
 - Zwischengespeichert werden nur die Design-Dateien und die Offline-Seite – keine Mails. Nach dem Abmelden bleibt auf
   dem Gerät nichts Persönliches zurück.
 
+### Push-Benachrichtigungen
+
+Unter **Benachrichtigungen** → **Auf diesem Gerät einschalten** meldet sich das Gerät für Benachrichtigungen über neue
+Mails an – auch wenn Browser bzw. App gerade geschlossen sind. Die Benachrichtigung zeigt Absender und Betreff; ein Tipp
+darauf öffnet die Mail.
+
+- Benachrichtigt wird nur über Mails, die ungelesen im **Posteingang** landen – nicht über Spam und nicht über Mails,
+  die eine Regel in einen anderen Ordner verschiebt oder als gelesen markiert.
+- **iPhone/iPad:** erst die App zum Home-Bildschirm hinzufügen (siehe oben, ab iOS 16.4), dann in der App einschalten.
+  Im normalen Safari-Tab bietet Apple keine Benachrichtigungen an.
+- Jedes Gerät wird einzeln eingeschaltet und erscheint in der Geräteliste; dort lässt es sich wieder entfernen.
+  **Test senden** schickt eine Probe an alle eingeschalteten Geräte.
+- Die Benachrichtigungen laufen über den Push-Dienst des Browser-Herstellers (Google, Apple, Mozilla, Microsoft).
+  Der Inhalt ist Ende-zu-Ende verschlüsselt (RFC 8291) – der Push-Dienst sieht weder Absender noch Betreff.
+  Der Server braucht dafür ausgehende HTTPS-Verbindungen (Port 443).
+- Auch hier ist ein **gültiges Zertifikat** Voraussetzung. Der Server-Schlüssel (VAPID) liegt in `data\push` und wird
+  mitgesichert; geht er verloren, müssen die Geräte einmal neu eingeschaltet werden.
+
 ## Für Benutzer
 
 | Seite | Inhalt |
@@ -41,6 +59,7 @@ nicht erreichbar ist.
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
 | **Abwesenheit** | Automatische **Weiterleitung** an bis zu 10 Adressen (wahlweise mit oder ohne Kopie im Postfach) und **Abwesenheitsnotiz** mit Zeitraum, Betreff und Text. Solange etwas davon aktiv ist, erinnert ein Hinweis auf jeder Seite daran. |
+| **Benachrichtigungen** | Push-Benachrichtigungen bei neuer Mail pro Gerät ein- und ausschalten, Test senden (siehe oben) |
 | **Passwort** | Passwort ändern (gilt auch für IMAP/SMTP). Alle anderen angemeldeten Browser werden abgemeldet. |
 
 ## Für Administratoren

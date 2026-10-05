@@ -53,6 +53,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SpamFeedback>();
         services.AddSingleton<MailboxSettingsStore>();
         services.AddSingleton<AutoResponder>();
+        services.AddSingleton<Mailserver.Core.Push.VapidKeys>();
+        services.AddSingleton<Mailserver.Core.Push.PushSubscriptionStore>();
+        services.AddSingleton(sp => new Mailserver.Core.Push.WebPushSender(sp.GetRequiredService<Mailserver.Core.Push.VapidKeys>()));
+        services.AddSingleton<Mailserver.Core.Push.PushNotifier>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AdminNotifier>();
         services.AddSingleton<SendingLimiter>();
@@ -76,6 +80,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<SmtpHostedService>();
         services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());
         services.AddHostedService<BackupService>();
+        services.AddHostedService<PushService>();
         return services;
     }
 }

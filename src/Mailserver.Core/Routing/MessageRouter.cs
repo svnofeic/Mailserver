@@ -20,7 +20,8 @@ public sealed class MessageRouter(
     MailboxSettingsStore mailboxSettings,
     AutoResponder autoResponder,
     OutgoingMessagePreparer preparer,
-    ILogger<MessageRouter> logger)
+    ILogger<MessageRouter> logger,
+    Push.PushNotifier? push = null)
 {
     /// <param name="message">The complete message including the Received header added by this server.</param>
     /// <param name="envelopeSender">MAIL FROM; empty for bounces.</param>
@@ -96,6 +97,10 @@ public sealed class MessageRouter(
                     decision.NotSpam && verdict.IsSpam ? "spam verdict overridden by rule" : null);
                 logger.LogInformation("Delivered message to {Account} in {Folder} (uid {Uid}, score {Score:F1}{Rules})", account.Address,
                     decision.Folder, stored.Uid, verdict.Score, decision.MatchedRules.Count > 0 ? ", rules: " + string.Join(", ", decision.MatchedRules) : "");
+                if ((decision.Folder ?? MailboxStore.Inbox) == MailboxStore.Inbox && !decision.Flags.Contains(MessageFlags.Seen))
+                {
+                    push?.NewMail(account, stored.Uid, message);
+                }
             }
 
             if (settings.AutoReply.Enabled && !isJunk)

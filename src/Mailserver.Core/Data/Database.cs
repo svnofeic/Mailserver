@@ -218,6 +218,21 @@ public sealed class Database
             PRIMARY KEY (store_key, path)
         ) WITHOUT ROWID;
         """,
+        """
+        -- Browsers and installed apps that get a push notification for new mail.
+        CREATE TABLE push_subscriptions (
+            id            INTEGER PRIMARY KEY,
+            account_id    INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            endpoint      TEXT NOT NULL UNIQUE,
+            p256dh        TEXT NOT NULL,
+            auth          TEXT NOT NULL,
+            device        TEXT NOT NULL,
+            created_utc   TEXT NOT NULL,
+            last_sent_utc TEXT,
+            failures      INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX ix_push_subscriptions_account ON push_subscriptions (account_id);
+        """,
     ];
 
     private readonly string _connectionString;

@@ -1,0 +1,69 @@
+@page
+@model Mailserver.Web.Pages.Account.NotificationsModel
+@{ ViewData["Title"] = "Benachrichtigungen"; }
+<div class="page-head">
+    <div>
+        <h1>Benachrichtigungen</h1>
+        <p class="subtitle">Eine Meldung auf dem Handy oder Computer, sobald eine Mail im Posteingang ankommt – auch wenn die App geschlossen ist.</p>
+    </div>
+</div>
+
+<section class="panel">
+    <div class="panel-head"><h2><span class="badge-icon">@Icons.Get("bell")</span> Dieses Gerät</h2></div>
+    <p id="push-status" class="muted" style="margin-top: 0">Wird geprüft …</p>
+    <div class="row">
+        <button type="button" id="push-enable" data-key="@Model.PublicKey" hidden>@Icons.Get("bell") Auf diesem Gerät einschalten</button>
+        <button type="button" id="push-disable" class="secondary" hidden>Auf diesem Gerät ausschalten</button>
+    </div>
+    <form method="post" asp-page-handler="Subscribe" id="push-subscribe" hidden>
+        <input type="hidden" name="endpoint" /><input type="hidden" name="p256dh" /><input type="hidden" name="auth" />
+    </form>
+    <form method="post" asp-page-handler="Unsubscribe" id="push-unsubscribe" hidden><input type="hidden" name="endpoint" /></form>
+    <p class="small muted" style="margin-bottom: 0">
+        iPhone und iPad: Benachrichtigungen gibt es nur in der installierten App (Safari → Teilen → „Zum Home-Bildschirm“, ab iOS 16.4) –
+        die App öffnen und hier einschalten. Android, Windows und Mac: in Chrome, Edge, Firefox oder Safari, installiert oder im Browser.
+    </p>
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2><span class="badge-icon cyan">@Icons.Get("users")</span> Eingeschaltete Geräte</h2>
+        @if (Model.Devices.Count > 0)
+        {
+            <form method="post" asp-page-handler="Test"><button type="submit" class="secondary">@Icons.Get("send") Test senden</button></form>
+        }
+    </div>
+    @if (Model.Devices.Count == 0)
+    {
+        <p class="muted" style="margin: 0">Noch keines.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Gerät</th><th>seit</th><th>zuletzt benachrichtigt</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var device in Model.Devices)
+                    {
+                        <tr data-endpoint="@device.Endpoint">
+                            <td>@device.Device <span class="pill good this-device" hidden>dieses Gerät</span>
+                                @if (device.Failures > 0) { <span class="pill warn" title="Der Push-Dienst hat die letzten Nachrichten nicht angenommen.">@device.Failures Fehler</span> }</td>
+                            <td>@Format.Time(device.Created)</td>
+                            <td>@(device.LastSent is { } sent ? Format.Time(sent) : "–")</td>
+                            <td>
+                                <form method="post" asp-page-handler="Remove" class="inline">
+                                    <input type="hidden" name="id" value="@device.Id" />
+                                    <button type="submit" class="secondary">Entfernen</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <p class="small muted" style="margin-bottom: 0">Benachrichtigt wird bei neuer Mail im Posteingang – nicht bei Spam und nicht bei Mails, die eine
+        Regel in einen anderen Ordner verschiebt. Absender und Betreff werden verschlüsselt über den Push-Dienst des Browsers (Google, Apple,
+        Mozilla oder Microsoft) übertragen; nur das Gerät kann sie lesen.</p>
+</section>
+<script src="/assets/push.js?v=@Uri.EscapeDataString(Mailserver.Core.BuildInfo.Version)" defer></script>

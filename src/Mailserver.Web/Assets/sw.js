@@ -14,6 +14,34 @@ self.addEventListener('activate', event => {
         .then(() => self.clients.claim()));
 });
 
+// Push notification for new mail. The browser has already decrypted the message.
+self.addEventListener('push', event => {
+    let data = {};
+    try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'Neue Mail', body: event.data?.text() }; }
+    const work = [self.registration.showNotification(data.title || 'Neue Mail', {
+        body: data.body || '',
+        icon: '/assets/icons/icon-192.png',
+        badge: '/assets/icons/icon-192.png',
+        tag: data.tag || 'inbox',
+        renotify: true,
+        data: { url: data.url || '/Mail' },
+    })];
+    if (typeof data.unread === 'number' && 'setAppBadge' in self.navigator) {
+        work.push((data.unread > 0 ? self.navigator.setAppBadge(data.unread) : self.navigator.clearAppBadge()).catch(() => { }));
+    }
+    event.waitUntil(Promise.all(work));
+});
+
+// Tapping the notification opens the mail – in an open window of the app if there is one.
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const url = new URL(event.notification.data?.url || '/Mail', self.location.origin).href;
+    event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {
+        const open = windows.find(w => new URL(w.url).origin === self.location.origin);
+        return open ? open.navigate(url).then(w => (w || open).focus()) : self.clients.openWindow(url);
+    }));
+});
+
 self.addEventListener('fetch', event => {
     const request = event.request;
     const url = new URL(request.url);

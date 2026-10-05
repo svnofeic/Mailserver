@@ -37,7 +37,7 @@ public sealed class BackupManager(
     public const string SnapshotsFolder = "snapshots";
     public const string MailFolder = "mail";
     public const string ManifestFile = "manifest.json";
-    private static readonly string[] ConfigFolders = ["dkim", "acme", "queue"];
+    private static readonly string[] ConfigFolders = ["dkim", "acme", "queue", "push"];
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly BackupStores _stores = stores ?? new BackupStores(paths, new CloudTokens(paths));
