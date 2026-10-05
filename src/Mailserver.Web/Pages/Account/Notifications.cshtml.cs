@@ -38,20 +38,42 @@ public sealed class NotificationsModel(PushSubscriptionStore subscriptions, Vapi
         return RedirectToPage();
     }
 
-    public IActionResult OnPostTest()
+    public async Task<IActionResult> OnPostTestAsync()
     {
-        if (subscriptions.ForAccount(CurrentAccount.Id).Count == 0)
+        var results = await notifier.TestAsync(CurrentAccount, HttpContext.RequestAborted);
+        if (results.Count == 0)
         {
             ErrorMessage = "Noch kein Gerät eingeschaltet.";
         }
+        else if (results.All(r => r.Outcome == PushOutcome.Sent))
+        {
+            Message = "Testbenachrichtigung vom Push-Dienst angenommen – sie sollte in wenigen Sekunden erscheinen.";
+        }
         else
         {
-            notifier.Test(CurrentAccount);
-            Message = "Testbenachrichtigung an alle Geräte geschickt – sie sollte in wenigen Sekunden erscheinen.";
+            ErrorMessage = string.Join(" · ", results.Select(r => r.Outcome switch
+            {
+                PushOutcome.Sent => $"{r.Device.Device}: angenommen",
+                PushOutcome.Gone => $"{r.Device.Device}: abgemeldet und entfernt – bitte auf dem Gerät neu einschalten",
+                _ => $"{r.Device.Device}: {r.Detail}{Hint(r.Detail)}",
+            }));
         }
 
         return RedirectToPage();
     }
+
+    /// <summary>What a push service error usually means, in plain words.</summary>
+    public static string Hint(string? detail) => detail switch
+    {
+        null => "",
+        _ when detail.Contains("nicht erreichbar") => " (der Server kommt nicht ins Internet – ausgehende Verbindungen auf Port 443 in der Firewall erlauben)",
+        _ when detail.Contains(" 401 ") || detail.Contains(" 403 ") => " (der Push-Dienst lehnt die Anmeldung des Servers ab – Uhrzeit des Servers prüfen; "
+            + "hilft das nicht, das Gerät entfernen und neu einschalten)",
+        _ when detail.Contains(" 400 ") => " (der Push-Dienst hält die Nachricht für ungültig)",
+        _ when detail.Contains(" 413 ") => " (Nachricht zu groß)",
+        _ when detail.Contains(" 429 ") => " (zu viele Nachrichten – später erneut versuchen)",
+        _ => "",
+    };
 
     /// <summary>"Chrome auf Android", "Safari auf iPhone" … from the user agent, so devices can be told apart.</summary>
     public static string DeviceName(string userAgent)

@@ -47,7 +47,8 @@
                     {
                         <tr data-endpoint="@device.Endpoint">
                             <td>@device.Device <span class="pill good this-device" hidden>dieses Gerät</span>
-                                @if (device.Failures > 0) { <span class="pill warn" title="Der Push-Dienst hat die letzten Nachrichten nicht angenommen.">@device.Failures Fehler</span> }</td>
+                                @if (device.Failures > 0) { <span class="pill warn" title="Der Push-Dienst hat die letzten Nachrichten nicht angenommen.">@device.Failures Fehler</span> }
+                                @if (device.LastError is not null) { <div class="small muted" style="overflow-wrap: anywhere">Letzter Fehler: @device.LastError@Mailserver.Web.Pages.Account.NotificationsModel.Hint(device.LastError)</div> }</td>
                             <td>@Format.Time(device.Created)</td>
                             <td>@(device.LastSent is { } sent ? Format.Time(sent) : "–")</td>
                             <td>

@@ -45,16 +45,25 @@ public sealed class PushNotifier(
             $"/Mail/Read?folder=INBOX&uid={uid}", Unread(account.Id));
     }
 
-    /// <summary>A test message to every device of the mailbox.</summary>
-    public void Test(Account account) =>
-        Enqueue(account.Id, "Mailserver", "Benachrichtigungen funktionieren auf diesem Gerät.", "/Account/Notifications", Unread(account.Id));
+    /// <summary>Sends a test message to every device of the mailbox right away and reports how each push service answered.</summary>
+    public async Task<IReadOnlyList<(PushSubscription Device, PushOutcome Outcome, string? Detail)>> TestAsync(Account account,
+        CancellationToken cancellationToken = default) =>
+        await SendAsync(new Job(account.Id, Json("Mailserver", "Benachrichtigungen funktionieren auf diesem Gerät.", "/Account/Notifications",
+            Unread(account.Id))), cancellationToken);
 
     /// <summary>Sends queued notices until the service stops.</summary>
     public async Task RunAsync(CancellationToken stoppingToken)
     {
         await foreach (var job in _queue.Reader.ReadAllAsync(stoppingToken))
         {
-            await SendAsync(job, stoppingToken);
+            try
+            {
+                await SendAsync(job, stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Push notification for account {Account} failed", job.AccountId);
+            }
         }
     }
 
@@ -67,21 +76,28 @@ public sealed class PushNotifier(
         }
     }
 
-    private async Task SendAsync(Job job, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<(PushSubscription Device, PushOutcome Outcome, string? Detail)>> SendAsync(Job job, CancellationToken cancellationToken)
     {
+        var results = new List<(PushSubscription, PushOutcome, string?)>();
         foreach (var subscription in subscriptions.ForAccount(job.AccountId))
         {
             var (outcome, detail) = await sender.SendAsync(subscription, job.Json, $"https://{options.Value.Hostname}", cancellationToken);
-            subscriptions.Record(subscription.Id, outcome == PushOutcome.Sent, outcome == PushOutcome.Gone);
+            subscriptions.Record(subscription.Id, outcome, detail);
+            results.Add((subscription, outcome, detail));
             if (outcome != PushOutcome.Sent)
             {
-                logger.LogInformation("Push to {Device} of account {Account}: {Outcome} {Detail}", subscription.Device, job.AccountId, outcome, detail);
+                logger.LogWarning("Push to {Device} of account {Account}: {Outcome} {Detail}", subscription.Device, job.AccountId, outcome, detail);
             }
         }
+
+        return results;
     }
 
     private void Enqueue(long accountId, string title, string body, string url, long unread) =>
-        _queue.Writer.TryWrite(new Job(accountId, JsonSerializer.Serialize(new { title, body, url, unread, tag = "inbox" })));
+        _queue.Writer.TryWrite(new Job(accountId, Json(title, body, url, unread)));
+
+    private static string Json(string title, string body, string url, long unread) =>
+        JsonSerializer.Serialize(new { title, body, url, unread, tag = "inbox" });
 
     private long Unread(long accountId) =>
         mailboxes.GetFolder(accountId, MailboxStore.Inbox) is { } inbox ? mailboxes.GetStatus(inbox.Id).Unseen : 0;

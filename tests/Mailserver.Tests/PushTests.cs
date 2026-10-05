@@ -216,8 +216,19 @@ public sealed class PushNotificationTests : IAsyncLifetime
         var device = Assert.Single(Store.ForAccount(_server.User("alice").Id));
 
         await web.PostAsync("/Account/Notifications", "/Account/Notifications?handler=Test");
-        await TestServer.WaitUntilAsync(() => !_push.Received.IsEmpty, "test push");
+        Assert.Contains("vom Push-Dienst angenommen", web.LastPage);
         Assert.Contains("funktionieren", _browser.Decrypt(_push.Received.Single().Body));
+
+        // A refusal is shown right away with the push service's answer, and stays visible at the device.
+        _push.Status = 403;
+        await web.PostAsync("/Account/Notifications", "/Account/Notifications?handler=Test");
+        Assert.Contains("antwortet 403", web.LastPage);
+        Assert.Contains("Uhrzeit des Servers", web.LastPage);
+        Assert.Contains("Letzter Fehler", web.LastPage);
+        Assert.Equal(1, Store.ForAccount(_server.User("alice").Id).Single().Failures);
+        _push.Status = 201;
+        await web.PostAsync("/Account/Notifications", "/Account/Notifications?handler=Test");
+        Assert.DoesNotContain("Letzter Fehler", web.LastPage);
 
         await web.PostAsync("/Account/Notifications", "/Account/Notifications?handler=Remove", ("id", device.Id.ToString()));
         Assert.Empty(Store.ForAccount(_server.User("alice").Id));

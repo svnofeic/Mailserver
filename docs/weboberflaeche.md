@@ -49,6 +49,9 @@ darauf öffnet die Mail.
   Der Server braucht dafür ausgehende HTTPS-Verbindungen (Port 443).
 - Auch hier ist ein **gültiges Zertifikat** Voraussetzung. Der Server-Schlüssel (VAPID) liegt in `data\push` und wird
   mitgesichert; geht er verloren, müssen die Geräte einmal neu eingeschaltet werden.
+- **Test senden** wartet auf die Antwort der Push-Dienste und zeigt sie sofort an; der letzte Fehler steht außerdem beim
+  Gerät. Häufige Ursachen: *nicht erreichbar* → ausgehende Verbindungen (Port 443) in der Firewall erlauben;
+  *antwortet 401/403* → Uhrzeit des Servers prüfen, sonst das Gerät entfernen und neu einschalten.
 
 ## Für Benutzer
 

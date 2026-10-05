@@ -4,11 +4,11 @@ namespace Mailserver.Core.Push;
 
 /// <summary>A browser or installed app that receives push messages for a mailbox.</summary>
 public sealed record PushSubscription(long Id, long AccountId, string Endpoint, string P256dh, string Auth, string Device,
-    DateTimeOffset Created, DateTimeOffset? LastSent, int Failures);
+    DateTimeOffset Created, DateTimeOffset? LastSent, int Failures, string? LastError = null);
 
 public sealed class PushSubscriptionStore(Database database, TimeProvider timeProvider)
 {
-    private const string Columns = "id, account_id, endpoint, p256dh, auth, device, created_utc, last_sent_utc, failures";
+    private const string Columns = "id, account_id, endpoint, p256dh, auth, device, created_utc, last_sent_utc, failures, last_error";
 
     /// <summary>Adds a device or updates it (same endpoint = same browser).</summary>
     public PushSubscription Save(long accountId, string endpoint, string p256dh, string auth, string device)
@@ -29,7 +29,7 @@ public sealed class PushSubscriptionStore(Database database, TimeProvider timePr
             """
             INSERT INTO push_subscriptions (account_id, endpoint, p256dh, auth, device, created_utc, failures)
             VALUES ($account, $endpoint, $p256dh, $auth, $device, $now, 0)
-            ON CONFLICT (endpoint) DO UPDATE SET account_id = $account, p256dh = $p256dh, auth = $auth, device = $device, failures = 0
+            ON CONFLICT (endpoint) DO UPDATE SET account_id = $account, p256dh = $p256dh, auth = $auth, device = $device, failures = 0, last_error = NULL
             """,
             ("$account", accountId), ("$endpoint", endpoint), ("$p256dh", p256dh), ("$auth", auth), ("$device", device),
             ("$now", timeProvider.GetUtcNow().ToDbTime()));
@@ -56,25 +56,27 @@ public sealed class PushSubscriptionStore(Database database, TimeProvider timePr
     }
 
     /// <summary>Records the outcome of a delivery; a subscription that keeps failing is dropped.</summary>
-    public void Record(long id, bool success, bool gone)
+    public void Record(long id, PushOutcome outcome, string? detail = null)
     {
         using var connection = database.Open();
-        if (gone)
+        if (outcome == PushOutcome.Gone)
         {
             connection.Execute("DELETE FROM push_subscriptions WHERE id = $id", ("$id", id));
         }
-        else if (success)
+        else if (outcome == PushOutcome.Sent)
         {
-            connection.Execute("UPDATE push_subscriptions SET last_sent_utc = $now, failures = 0 WHERE id = $id",
+            connection.Execute("UPDATE push_subscriptions SET last_sent_utc = $now, failures = 0, last_error = NULL WHERE id = $id",
                 ("$now", timeProvider.GetUtcNow().ToDbTime()), ("$id", id));
         }
         else
         {
-            connection.Execute("UPDATE push_subscriptions SET failures = failures + 1 WHERE id = $id", ("$id", id));
+            connection.Execute("UPDATE push_subscriptions SET failures = failures + 1, last_error = $error WHERE id = $id",
+                ("$error", detail), ("$id", id));
             connection.Execute("DELETE FROM push_subscriptions WHERE id = $id AND failures >= 20", ("$id", id));
         }
     }
 
     private static PushSubscription Map(Microsoft.Data.Sqlite.SqliteDataReader r) => new(r.GetInt64(0), r.GetInt64(1), r.GetString(2), r.GetString(3),
-        r.GetString(4), r.GetString(5), r.GetDbTime(6), r.IsDBNull(7) ? null : r.GetDbTime(7), r.GetInt32(8));
+        r.GetString(4), r.GetString(5), r.GetDbTime(6), r.IsDBNull(7) ? null : r.GetDbTime(7), r.GetInt32(8),
+        r.IsDBNull(9) ? null : r.GetString(9));
 }

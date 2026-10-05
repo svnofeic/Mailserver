@@ -233,6 +233,9 @@ public sealed class Database
         );
         CREATE INDEX ix_push_subscriptions_account ON push_subscriptions (account_id);
         """,
+        """
+        ALTER TABLE push_subscriptions ADD COLUMN last_error TEXT;
+        """,
     ];
 
     private readonly string _connectionString;

@@ -37,7 +37,13 @@
             }
             const key = enable.dataset.key.replace(/-/g, '+').replace(/_/g, '/');
             const raw = Uri8(atob(key + '='.repeat((4 - key.length % 4) % 4)));
-            const subscription = current ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
+            // An existing subscription made for another server key (e.g. after reinstalling) would be refused by the push service.
+            let subscription = current;
+            if (subscription && !SameKey(subscription.options?.applicationServerKey, raw)) {
+                await subscription.unsubscribe().catch(() => { });
+                subscription = null;
+            }
+            subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
             const json = subscription.toJSON();
             const form = document.getElementById('push-subscribe');
             form.endpoint.value = json.endpoint;
@@ -57,6 +63,12 @@
         await current.unsubscribe().catch(() => { });
         form.submit();
     });
+
+    function SameKey(buffer, expected) {
+        if (!buffer) return false;
+        const actual = new Uint8Array(buffer);
+        return actual.length === expected.length && actual.every((b, i) => b === expected[i]);
+    }
 
     function Uri8(text) {
         const bytes = new Uint8Array(text.length);
