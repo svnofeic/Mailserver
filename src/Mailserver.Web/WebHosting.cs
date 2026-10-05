@@ -83,6 +83,7 @@ public static class WebHosting
             cookie.Events.OnValidatePrincipal = ValidatePrincipalAsync;
         });
         services.AddSingleton<Webmail.WebmailStore>();
+        services.AddSingleton<Webmail.InlineImages>();
         services.AddSingleton<Webmail.WebmailSender>();
         services.AddSingleton<Webmail.MailActions>();
         services.AddSingleton<Webmail.FolderManager>();
@@ -254,6 +255,8 @@ public static class WebHosting
             context.Response.Headers.CacheControl = "public, max-age=604800";
             return Results.Text(Resource("push.js"), "text/javascript; charset=utf-8");
         }).AllowAnonymous();
+        app.MapGet(Webmail.InlineImages.Path, (HttpContext context, Webmail.InlineImages images, long m, string? c, string? e, string? s) =>
+            images.ServeAsync(context, m, c, e, s)).AllowAnonymous();
         app.MapGet("/offline", () => Results.Content(Resource("offline.html").Replace("__VERSION__", version), "text/html; charset=utf-8")).AllowAnonymous();
         app.MapGet("/assets/icons/{name}", (HttpContext context, string name) => Icon(context, name)).AllowAnonymous();
         app.MapGet("/apple-touch-icon.png", (HttpContext context) => Icon(context, "apple-touch-icon.png")).AllowAnonymous();

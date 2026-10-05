@@ -95,6 +95,35 @@ public sealed class WebmailTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Embedded_images_are_linked_not_copied_into_the_body()
+    {
+        var picture = Enumerable.Range(0, 50_000).Select(i => (byte)i).ToArray();
+        var image = new MimePart("image", "png") { ContentId = "logo@test", Content = new MimeContent(new MemoryStream(picture)) };
+        var builder = new BodyBuilder { HtmlBody = string.Concat(Enumerable.Repeat("<p><img src=\"cid:logo@test\"></p>", 20)) };
+        builder.LinkedResources.Add(image);
+        var message = new MimeMessage { Subject = "Bilder", Body = builder.ToMessageBody() };
+        using var raw = new MemoryStream();
+        message.WriteTo(raw);
+        var stored = await _server.HostMailboxes.AppendAsync(_server.User("alice"), raw.ToArray());
+
+        var response = await _web.GetAsync($"/Mail/Body?folder=INBOX&uid={stored.Uid}");
+        Assert.True(_web.LastPage.Length < 10_000, $"body is {_web.LastPage.Length} characters");
+        Assert.DoesNotContain("data:image", _web.LastPage);
+        Assert.Contains("/Mail/Inline", string.Join(" ", response.Headers.GetValues("Content-Security-Policy")));
+        var link = System.Net.WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Match(_web.LastPage, "src=\"(/Mail/Inline[^\"]+)\"").Groups[1].Value);
+        Assert.NotEmpty(link);
+
+        // The sandboxed frame sends no cookies: the signed link alone must be enough – and nothing else.
+        using var anonymous = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true })
+            { BaseAddress = new Uri($"https://127.0.0.1:{_server.WebPort}") };
+        var served = await anonymous.GetAsync(link);
+        Assert.Equal("image/png", served.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(picture, await served.Content.ReadAsByteArrayAsync());
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await anonymous.GetAsync(link.Replace("&s=", "&s=0"))).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await anonymous.GetAsync(link.Replace($"m={stored.Id}", $"m={stored.Id + 1}"))).StatusCode);
+    }
+
+    [Fact]
     public async Task Pages_through_a_long_folder_to_the_oldest_mail()
     {
         var start = new DateTimeOffset(2024, 1, 1, 8, 0, 0, TimeSpan.Zero);
@@ -148,13 +177,13 @@ public sealed class WebmailTests : IAsyncLifetime
         var body = await _web.GetAsync($"/Mail/Body?folder=INBOX&uid={uid}");
         var csp = body.Headers.GetValues("Content-Security-Policy").Single();
         Assert.Contains("sandbox", csp);
-        Assert.Contains("img-src data:;", csp);
+        Assert.Matches(@"img-src data: https://127\.0\.0\.1:\d+/Mail/Inline;", csp); // only own embedded images, nothing from outside
         Assert.Equal("SAMEORIGIN", body.Headers.GetValues("X-Frame-Options").Single());
         Assert.DoesNotContain("<script", _web.LastPage);
         Assert.Contains("Hallo <b>Alice</b>", _web.LastPage);
 
         var withImages = await _web.GetAsync($"/Mail/Body?folder=INBOX&uid={uid}&images=1");
-        Assert.Contains("img-src data: https: http:", withImages.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Matches(@"img-src data: \S+/Mail/Inline https: http:", withImages.Headers.GetValues("Content-Security-Policy").Single());
     }
 
     [Fact]

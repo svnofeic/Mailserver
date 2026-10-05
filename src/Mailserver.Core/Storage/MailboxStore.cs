@@ -320,6 +320,30 @@ public sealed class MailboxStore(Database database, DataPaths paths)
             ("$folder", folderId));
     }
 
+    public StoredMessage? GetMessage(long folderId, long uid)
+    {
+        using var connection = database.Open();
+        return connection.Query($"SELECT {MessageColumns} FROM messages WHERE folder_id = $folder AND uid = $uid", ReadMessage,
+            ("$folder", folderId), ("$uid", uid)).SingleOrDefault();
+    }
+
+    public StoredMessage? GetMessageById(long id)
+    {
+        using var connection = database.Open();
+        return connection.Query($"SELECT {MessageColumns} FROM messages WHERE id = $id", ReadMessage, ("$id", id)).SingleOrDefault();
+    }
+
+    /// <summary>One page of a folder, newest first (webmail), and the number of messages in the folder.</summary>
+    public (IReadOnlyList<StoredMessage> Messages, int Total) ListMessagesNewestFirst(long folderId, int offset, int count)
+    {
+        using var connection = database.Open();
+        var total = Convert.ToInt32(connection.Scalar("SELECT COUNT(*) FROM messages WHERE folder_id = $folder", ("$folder", folderId)));
+        var messages = connection.Query(
+            $"SELECT {MessageColumns} FROM messages WHERE folder_id = $folder ORDER BY internal_date_utc DESC, uid DESC LIMIT $count OFFSET $offset",
+            ReadMessage, ("$folder", folderId), ("$count", count), ("$offset", offset));
+        return (messages, total);
+    }
+
     public Stream OpenMessage(StoredMessage message) =>
         new FileStream(GetMessagePath(message), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 81920, useAsync: true);
 

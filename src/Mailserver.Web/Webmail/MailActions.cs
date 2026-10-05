@@ -53,7 +53,7 @@ public sealed class MailActions(MailboxStore mailboxes, SpamFeedback feedback)
             return new(null, "Ungültiger Zielordner.");
         }
 
-        var messages = mailboxes.ListMessages(source.Id).Where(m => uids.Contains(m.Uid)).ToList();
+        var messages = uids.Distinct().Select(uid => mailboxes.GetMessage(source.Id, uid)).OfType<StoredMessage>().ToList();
         feedback.Record(account, source, messages, target);
         mailboxes.Move(source.Id, uids, target.Id);
         return new(message);

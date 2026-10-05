@@ -236,6 +236,10 @@ public sealed class Database
         """
         ALTER TABLE push_subscriptions ADD COLUMN last_error TEXT;
         """,
+        // Webmail lists a folder newest first, one page at a time.
+        """
+        CREATE INDEX ix_messages_folder_date ON messages (folder_id, internal_date_utc, uid);
+        """,
     ];
 
     private readonly string _connectionString;

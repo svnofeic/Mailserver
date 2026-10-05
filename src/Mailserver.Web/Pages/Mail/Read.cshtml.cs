@@ -28,7 +28,7 @@ public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailAc
         Stored = stored;
         Mail = store.Load(stored);
         ShowImages = images == 1;
-        HasRemoteContent = MailRenderer.Render(Mail).HasRemoteContent;
+        HasRemoteContent = MailRenderer.HasRemoteContent(Mail);
         SpamScore = Mail.Headers["X-Spam-Score"];
         foreach (var attachment in MailAttachments.List(Mail))
         {

@@ -35,21 +35,23 @@ public sealed class WebmailStore(MailboxStore mailboxes)
     public Folder? Folder(long accountId, string? name) =>
         mailboxes.GetFolder(accountId, string.IsNullOrEmpty(name) ? MailboxStore.Inbox : name);
 
-    public StoredMessage? Message(Folder folder, long uid) => mailboxes.ListMessages(folder.Id).FirstOrDefault(m => m.Uid == uid);
+    public StoredMessage? Message(Folder folder, long uid) => mailboxes.GetMessage(folder.Id, uid);
 
     /// <summary>Newest first, optionally filtered by sender, recipient or subject.</summary>
     public (IReadOnlyList<MessageListItem> Items, int Total) List(Folder folder, int page, int pageSize, string? search)
     {
-        var all = mailboxes.ListMessages(folder.Id).OrderByDescending(m => m.InternalDate).ThenByDescending(m => m.Uid).ToList();
         IEnumerable<MessageListItem> items;
         int total;
         if (string.IsNullOrWhiteSpace(search))
         {
-            total = all.Count;
-            items = all.Skip(page * pageSize).Take(pageSize).Select(m => new MessageListItem(m, Summary(m)));
+            // Only the shown page is read from the index, so long folders cost no more than short ones.
+            var (messages, count) = mailboxes.ListMessagesNewestFirst(folder.Id, page * pageSize, pageSize);
+            total = count;
+            items = messages.Select(m => new MessageListItem(m, Summary(m)));
         }
         else
         {
+            var all = mailboxes.ListMessages(folder.Id).OrderByDescending(m => m.InternalDate).ThenByDescending(m => m.Uid).ToList();
             var term = search.Trim();
             var matches = all.Select(m => new MessageListItem(m, Summary(m)))
                 .Where(i => i.Summary.Subject.Contains(term, StringComparison.OrdinalIgnoreCase) ||

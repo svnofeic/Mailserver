@@ -10,7 +10,7 @@ public sealed record RenderedBody(string Html, bool HasRemoteContent);
 
 /// <summary>
 /// Turns a message body into a self-contained, sanitized HTML document for the webmail viewer. Scripts, event handlers, forms and
-/// frames are removed; embedded images (cid:) are inlined as data: URLs; remote images stay blocked by the page's Content-Security-Policy
+/// frames are removed; embedded images (cid:) are linked or inlined; remote images stay blocked by the page's Content-Security-Policy
 /// until the user allows them.
 /// </summary>
 public static partial class MailRenderer
@@ -18,17 +18,14 @@ public static partial class MailRenderer
     private const long MaxInlineImageBytes = 3 * 1024 * 1024;
     private const long MaxInlineImagesTotal = 15 * 1024 * 1024;
 
-    private static readonly HashSet<string> InlineImageTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp",
-    };
-
-    public static RenderedBody Render(MimeMessage message)
+    /// <param name="imageLinks">Content-ID → URL of the embedded images (see <see cref="Webmail.InlineImages"/>); without it they are
+    /// copied in as data: URLs.</param>
+    public static RenderedBody Render(MimeMessage message, IReadOnlyDictionary<string, string>? imageLinks = null)
     {
         string body;
         if (message.HtmlBody is { } html)
         {
-            body = Sanitize(html, InlineImages(message));
+            body = Sanitize(html, imageLinks ?? InlineImages(message));
         }
         else
         {
@@ -44,6 +41,9 @@ public static partial class MailRenderer
             .ToString();
         return new RenderedBody(document, RemoteContent().IsMatch(body));
     }
+
+    /// <summary>Whether the body loads images or other content from the internet – checked on the raw HTML, without rendering it.</summary>
+    public static bool HasRemoteContent(MimeMessage message) => message.HtmlBody is { } html && RemoteContent().IsMatch(html);
 
     /// <summary>Plain text of the body for quoting in replies and forwards.</summary>
     public static string PlainText(MimeMessage message)
@@ -128,7 +128,7 @@ public static partial class MailRenderer
         long total = 0;
         foreach (var part in message.BodyParts.OfType<MimePart>())
         {
-            if (part.ContentId is not { Length: > 0 } id || !InlineImageTypes.Contains(part.ContentType.MimeType) || part.Content is null)
+            if (part.ContentId is not { Length: > 0 } id || !Webmail.InlineImages.Types.Contains(part.ContentType.MimeType) || part.Content is null)
             {
                 continue;
             }
