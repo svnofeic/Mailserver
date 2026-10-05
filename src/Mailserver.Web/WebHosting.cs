@@ -126,7 +126,7 @@ public static class WebHosting
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";
             headers["Content-Security-Policy"] =
-                "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+                "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; connect-src 'self'; frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
             // Pages with forms get no-cache headers from the antiforgery system; everything else is marked here.
             context.Response.OnStarting(() =>
             {
@@ -182,6 +182,8 @@ public static class WebHosting
             return Results.Text(Stylesheet.Value, "text/css; charset=utf-8");
         }).AllowAnonymous();
 
+        MapProgressiveWebApp(app);
+
         // Light or dark design, remembered in a cookie (works without JavaScript).
         app.MapGet("/theme", (HttpContext context, string? mode, string? returnUrl) =>
         {
@@ -194,6 +196,85 @@ public static class WebHosting
         }).AllowAnonymous();
         return app;
     }
+
+    /// <summary>
+    /// Installable web app: manifest, icons, service worker (offline page, cached design files) and the script that registers
+    /// it. All without login, as browsers fetch them in the background.
+    /// </summary>
+    private static void MapProgressiveWebApp(WebApplication app)
+    {
+        var version = Uri.EscapeDataString(Mailserver.Core.BuildInfo.Version);
+        app.MapGet("/manifest.webmanifest", (HttpContext context, Microsoft.Extensions.Options.IOptions<MailserverOptions> options) =>
+        {
+            var icons = new object[]
+            {
+                new { src = "/assets/icons/icon-192.png", sizes = "192x192", type = "image/png", purpose = "any" },
+                new { src = "/assets/icons/icon-512.png", sizes = "512x512", type = "image/png", purpose = "any" },
+                new { src = "/assets/icons/maskable-512.png", sizes = "512x512", type = "image/png", purpose = "maskable" },
+            };
+            var manifest = new Dictionary<string, object>
+            {
+                ["id"] = "/",
+                ["name"] = $"Mailserver {options.Value.Hostname}",
+                ["short_name"] = "Mail",
+                ["description"] = "Webmail und Verwaltung des Mailservers",
+                ["lang"] = "de",
+                ["start_url"] = "/Mail",
+                ["scope"] = "/",
+                ["display"] = "standalone",
+                ["background_color"] = "#070b1d",
+                ["theme_color"] = "#0b1030",
+                ["icons"] = icons,
+                ["shortcuts"] = new object[]
+                {
+                    new { name = "Neue Mail", url = "/Mail/Compose", icons = new[] { icons[0] } },
+                    new { name = "Übersicht", url = "/", icons = new[] { icons[0] } },
+                    new { name = "Server-Übersicht", url = "/Admin", icons = new[] { icons[0] } },
+                },
+                // Lets the installed app open mailto: links (the browser asks the user once).
+                ["protocol_handlers"] = new object[] { new { protocol = "mailto", url = "/Mail/Compose?mailto=%s" } },
+            };
+            context.Response.Headers.CacheControl = "public, max-age=3600";
+            return Results.Json(manifest, contentType: "application/manifest+json; charset=utf-8");
+        }).AllowAnonymous();
+
+        app.MapGet("/sw.js", (HttpContext context) =>
+        {
+            // Always checked for a new version; a new release replaces the cached design files.
+            context.Response.Headers.CacheControl = "no-cache";
+            return Results.Text(Resource("sw.js").Replace("__VERSION__", version), "text/javascript; charset=utf-8");
+        }).AllowAnonymous();
+        app.MapGet("/assets/app.js", (HttpContext context) =>
+        {
+            context.Response.Headers.CacheControl = "public, max-age=604800";
+            return Results.Text(Resource("app.js"), "text/javascript; charset=utf-8");
+        }).AllowAnonymous();
+        app.MapGet("/offline", () => Results.Content(Resource("offline.html").Replace("__VERSION__", version), "text/html; charset=utf-8")).AllowAnonymous();
+        app.MapGet("/assets/icons/{name}", (HttpContext context, string name) => Icon(context, name)).AllowAnonymous();
+        app.MapGet("/apple-touch-icon.png", (HttpContext context) => Icon(context, "apple-touch-icon.png")).AllowAnonymous();
+    }
+
+    private static IResult Icon(HttpContext context, string name)
+    {
+        using var stream = typeof(WebHosting).Assembly.GetManifestResourceStream("icons/" + name);
+        if (stream is null)
+        {
+            return Results.NotFound();
+        }
+
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        context.Response.Headers.CacheControl = "public, max-age=604800";
+        return Results.File(buffer.ToArray(), "image/png");
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Resources = new();
+
+    private static string Resource(string name) => Resources.GetOrAdd(name, key =>
+    {
+        using var stream = typeof(WebHosting).Assembly.GetManifestResourceStream(key)!;
+        return new StreamReader(stream).ReadToEnd();
+    });
 
     public const string ThemeCookie = "theme";
 

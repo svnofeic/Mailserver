@@ -12,6 +12,26 @@ Browser gemerkt). Die Admin-Übersicht zeigt Kennzahlen mit Trend gegenüber der
 häufigsten Spam-Absender und abgelehnten Adressen sowie den Systemzustand (Zertifikat, Sicherung, Virenschutz,
 Warteschlange). Alle Diagramme werden auf dem Server gezeichnet – kein JavaScript, keine externen Dienste.
 
+## Als App installieren
+
+Webmail und Verwaltung lassen sich als App installieren (Progressive Web App) – mit eigenem Symbol, ohne Adressleiste,
+mit der Zahl ungelesener Mails am App-Symbol (Android, Windows, macOS) und einer Seite „Keine Verbindung“, wenn der Server
+nicht erreichbar ist.
+
+| Gerät | So geht's |
+|---|---|
+| Android (Chrome) | Weboberfläche öffnen → Menü ⋮ → **App installieren** |
+| iPhone / iPad (Safari) | Weboberfläche öffnen → Teilen-Symbol → **Zum Home-Bildschirm** |
+| Windows / macOS (Edge, Chrome) | Symbol **App installieren** rechts in der Adressleiste |
+
+- Voraussetzung ist ein **gültiges Zertifikat** für den Hostnamen (z. B. Let's Encrypt unter Verwaltung → Zertifikat);
+  mit einem selbst ausgestellten Zertifikat bieten die Browser die Installation nicht an.
+- Gedrückt halten auf dem App-Symbol zeigt Verknüpfungen: Neue Mail, Übersicht, Server-Übersicht.
+- Unter Windows, macOS und Android kann die App als Mailprogramm für **mailto:-Links** eingetragen werden; der Browser
+  fragt beim ersten Mal nach. Empfänger, Cc, Betreff und Text aus dem Link stehen dann schon in „Neue Mail“.
+- Zwischengespeichert werden nur die Design-Dateien und die Offline-Seite – keine Mails. Nach dem Abmelden bleibt auf
+  dem Gerät nichts Persönliches zurück.
+
 ## Für Benutzer
 
 | Seite | Inhalt |

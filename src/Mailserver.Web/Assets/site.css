@@ -144,7 +144,8 @@ a:hover { color: var(--accent-2); }
     .shell.signed-in .menu { flex: 1; justify-content: space-between; }
 }
 @media (max-width: 900px) {
-    .sidebar { position: sticky; top: 0; z-index: 10; border-right: 0; border-bottom: 1px solid var(--border); }
+    /* Installed app on a phone: keep clear of the notch and the status bar. */
+    .sidebar { position: sticky; top: 0; z-index: 10; border-right: 0; border-bottom: 1px solid var(--border); padding-top: env(safe-area-inset-top); }
     .sidebar-top { padding: 0 14px; }
     .brand { padding: 10px 0; font-size: 16px; }
     .brand .logo { width: 32px; height: 32px; }
@@ -153,7 +154,7 @@ a:hover { color: var(--accent-2); }
     .nav-toggle:checked ~ .menu { display: flex; }
 }
 
-main { max-width: 1320px; margin: 0 auto; padding: 26px 28px 56px; }
+main { max-width: 1320px; margin: 0 auto; padding: 26px max(28px, env(safe-area-inset-right)) calc(56px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
 h1 { font-size: 26px; margin: 4px 0 18px; letter-spacing: -.02em; font-weight: 700; }
 h2 { font-size: 17px; margin: 30px 0 12px; letter-spacing: -.01em; font-weight: 650; }
 h3 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
@@ -417,7 +418,7 @@ iframe.mailbody { width: 100%; height: 70vh; border: 1px solid var(--border); bo
 .editor-area p { margin: 0 0 .6em; }
 
 @media (max-width: 760px) {
-    main { padding: 18px 14px 44px; }
+    main { padding: 18px max(14px, env(safe-area-inset-right)) calc(44px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
     h1 { font-size: 22px; }
     .mail { grid-template-columns: 1fr; }
     .folders { display: none; }

@@ -7,6 +7,10 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\editor.js" LogicalName="editor.js" />
     <EmbeddedResource Include="Assets\site.css" LogicalName="site.css" />
+    <EmbeddedResource Include="Assets\app.js" LogicalName="app.js" />
+    <EmbeddedResource Include="Assets\sw.js" LogicalName="sw.js" />
+    <EmbeddedResource Include="Assets\offline.html" LogicalName="offline.html" />
+    <EmbeddedResource Include="Assets\icons\*.png" LogicalName="icons/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

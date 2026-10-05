@@ -79,6 +79,88 @@ public sealed class DesignTests : IAsyncLifetime
     }
 }
 
+/// <summary>Installable web app: manifest, icons, service worker, offline page, mailto links.</summary>
+public sealed class ProgressiveWebAppTests : IAsyncLifetime
+{
+    private TestServer _server = null!;
+    private WebClient _web = null!;
+
+    public async Task InitializeAsync()
+    {
+        _server = await TestServer.StartAsync();
+        _web = new WebClient(_server.WebPort);
+    }
+
+    public async Task DisposeAsync()
+    {
+        _web.Dispose();
+        await _server.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Manifest_icons_service_worker_and_offline_page_need_no_login()
+    {
+        var manifest = await _web.GetAsync("/manifest.webmanifest");
+        Assert.Equal(HttpStatusCode.OK, manifest.StatusCode);
+        Assert.Equal("application/manifest+json", manifest.Content.Headers.ContentType!.MediaType);
+        using var json = System.Text.Json.JsonDocument.Parse(_web.LastPage);
+        var root = json.RootElement;
+        Assert.Equal("standalone", root.GetProperty("display").GetString());
+        Assert.Equal("Mailserver mail.example.test", root.GetProperty("name").GetString());
+        Assert.Contains(root.GetProperty("icons").EnumerateArray(), i => i.GetProperty("purpose").GetString() == "maskable");
+        Assert.Equal("/Mail/Compose?mailto=%s", root.GetProperty("protocol_handlers")[0].GetProperty("url").GetString());
+
+        foreach (var icon in root.GetProperty("icons").EnumerateArray().Select(i => i.GetProperty("src").GetString()!).Append("/apple-touch-icon.png"))
+        {
+            var response = await _web.GetAsync(icon);
+            Assert.Equal("image/png", response.Content.Headers.ContentType!.MediaType);
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], bytes[..4]);
+        }
+
+        var worker = await _web.GetAsync("/sw.js");
+        Assert.Equal("text/javascript", worker.Content.Headers.ContentType!.MediaType);
+        Assert.DoesNotContain("__VERSION__", _web.LastPage);
+        Assert.Contains("caches.match('/offline')", _web.LastPage);
+
+        Assert.Equal(HttpStatusCode.OK, (await _web.GetAsync("/assets/app.js")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _web.GetAsync("/offline")).StatusCode);
+        Assert.Contains("Keine Verbindung", _web.LastPage);
+        Assert.Contains("/assets/site.css?v=", _web.LastPage);
+    }
+
+    [Fact]
+    public async Task Pages_link_the_manifest_and_report_unread_mails_for_the_app_icon()
+    {
+        var csp = (await _web.GetAsync("/Login")).Headers.GetValues("Content-Security-Policy").Single();
+        Assert.Contains("manifest-src 'self'", csp);
+        Assert.Contains("worker-src 'self'", csp);
+        Assert.Contains("connect-src 'self'", csp); // the service worker fetches its files under the same policy
+        Assert.Contains("rel=\"manifest\"", _web.LastPage);
+        Assert.Contains("/assets/app.js?v=", _web.LastPage);
+
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"), "Subject: Neu\r\n\r\nHallo\r\n"u8.ToArray());
+        await _web.LoginAsync("alice@example.test", TestServer.Password);
+        await _web.GetAsync("/");
+        Assert.Contains("data-unread=\"1\"", _web.LastPage);
+    }
+
+    [Fact]
+    public async Task Mailto_links_open_a_prefilled_new_mail()
+    {
+        await _web.LoginAsync("alice@example.test", TestServer.Password);
+
+        await _web.GetAsync("/Mail/Compose?mailto=" + Uri.EscapeDataString(
+            "mailto:anna@example.com,bob@example.com?cc=chef%40example.com&subject=Angebot%20M%C3%A4rz&body=Hallo%20Anna%2C%0Aanbei"));
+
+        var page = WebUtility.HtmlDecode(_web.LastPage);
+        Assert.Contains("value=\"anna@example.com, bob@example.com\"", page);
+        Assert.Contains("value=\"chef@example.com\"", page);
+        Assert.Contains("value=\"Angebot März\"", page);
+        Assert.Contains("Hallo Anna,\nanbei</textarea>", page);
+    }
+}
+
 public sealed class DailyTrafficTests : IDisposable
 {
     private readonly TestData _data = new();

@@ -54,9 +54,40 @@ public sealed class ComposeModel(
         _ => "Neue Mail",
     };
 
-    public IActionResult OnGet(string? mode, string? folder, long? uid, string? to)
+    /// <summary>
+    /// Fills the form from a mailto: link (RFC 6068), e.g. when the installed web app is the mail program of the device:
+    /// mailto:anna@example.com,bob@example.com?cc=…&amp;subject=…&amp;body=…
+    /// </summary>
+    private void ApplyMailto(string link)
+    {
+        var text = link.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ? link[7..] : link;
+        var question = text.IndexOf('?');
+        var addresses = Uri.UnescapeDataString(question < 0 ? text : text[..question]);
+        var fields = (question < 0 ? "" : text[(question + 1)..]).Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .GroupBy(pair => pair[0].ToLowerInvariant(), pair => pair.Length > 1 ? Uri.UnescapeDataString(pair[1].Replace('+', ' ')) : "")
+            .ToDictionary(g => g.Key, g => string.Join(", ", g));
+        if (fields.TryGetValue("to", out var more))
+        {
+            addresses = string.Join(", ", new[] { addresses, more }.Where(a => a.Length > 0));
+        }
+
+        static string List(string value) => string.Join(", ", value.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        Form.To = addresses.Length > 0 ? List(addresses) : Form.To;
+        Form.Cc = fields.TryGetValue("cc", out var cc) ? List(cc) : null;
+        Form.Bcc = fields.TryGetValue("bcc", out var bcc) ? List(bcc) : null;
+        Form.Subject = fields.GetValueOrDefault("subject");
+        Form.Body = fields.GetValueOrDefault("body");
+    }
+
+    public IActionResult OnGet(string? mode, string? folder, long? uid, string? to, string? mailto)
     {
         Form = new ComposeForm { Mode = mode, OriginalFolder = folder, OriginalUid = uid, From = CurrentAddress.ToString(), To = to };
+        if (mailto is not null)
+        {
+            ApplyMailto(mailto);
+        }
+
         if (mode is "reply" or "replyall" or "forward" or "draft")
         {
             if (Original() is not { } original)
