@@ -16,8 +16,11 @@ public sealed class CloudConnector(CloudTokens tokens, ILogger<CloudConnector> l
     /// <summary>Result of the last OneDrive sign-in that was waited for: error text, or null.</summary>
     public string? OneDriveError { get; private set; }
 
-    /// <summary>pCloud asked for the two-factor code; the token of the first login step.</summary>
-    public (string Email, string Token)? PendingPCloudCode { get; private set; }
+    /// <summary>pCloud asked for the two-factor code: e-mail address of the pending login.</summary>
+    public string? PendingPCloudEmail => _pendingPCloud?.Email;
+
+    // Token of the first login step (may be empty) and the password, kept in memory only until the code was entered.
+    private (string Email, string Password, string? Token)? _pendingPCloud;
 
     public bool IsConnected(string provider) => provider == OneDriveStore.Provider
         ? tokens.Load<OneDriveToken>(provider) is not null
@@ -76,17 +79,31 @@ public sealed class CloudConnector(CloudTokens tokens, ILogger<CloudConnector> l
     /// <summary>Logs in to pCloud. Returns false if the two-factor code is needed (then call again with it).</summary>
     public async Task<bool> ConnectPCloudAsync(BackupOptions settings, string email, string password, string? code, CancellationToken cancellationToken)
     {
-        var pending = PendingPCloudCode;
-        var result = await PCloudStore.LoginAsync(settings, email, password, code,
-            pending is { } p && p.Email.Equals(email.Trim(), StringComparison.OrdinalIgnoreCase) ? p.Token : null, cancellationToken);
+        var pending = _pendingPCloud is { } p && p.Email.Equals(email.Trim(), StringComparison.OrdinalIgnoreCase) ? p : ((string, string, string?)?)null;
+        if (string.IsNullOrEmpty(password) && pending is { } earlier)
+        {
+            password = earlier.Item2; // second step: only the code was entered
+        }
+
+        PCloudStore.LoginResult result;
+        try
+        {
+            result = await PCloudStore.LoginAsync(settings, email, password, code, pending?.Item3, cancellationToken);
+        }
+        catch (BackupException)
+        {
+            _pendingPCloud = null;
+            throw;
+        }
+
         if (result.NeedsCode)
         {
-            PendingPCloudCode = (email.Trim(), result.TwoFactorToken ?? "");
+            _pendingPCloud = (email.Trim(), password, result.TwoFactorToken);
             return false;
         }
 
         tokens.Save(PCloudStore.Provider, result.Token!);
-        PendingPCloudCode = null;
+        _pendingPCloud = null;
         return true;
     }
 
@@ -103,7 +120,7 @@ public sealed class CloudConnector(CloudTokens tokens, ILogger<CloudConnector> l
             }
             else
             {
-                PendingPCloudCode = null;
+                _pendingPCloud = null;
             }
         }
     }

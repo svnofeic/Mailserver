@@ -162,6 +162,22 @@ public sealed class CloudBackupTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PCloud_login_where_the_code_goes_along_with_the_password()
+    {
+        // pCloud answers "Please provide 'code'" (1022) instead of a challenge token.
+        var first = await PCloudStore.LoginAsync(_options.Backup, "code@pcloud.test", FakePCloud.Password, null, null, CancellationToken.None);
+        Assert.True(first.NeedsCode);
+        Assert.Null(first.TwoFactorToken);
+
+        var wrong = await Assert.ThrowsAsync<BackupException>(() =>
+            PCloudStore.LoginAsync(_options.Backup, "code@pcloud.test", FakePCloud.Password, "000000", null, CancellationToken.None));
+        Assert.Contains("Code ist falsch", wrong.Message);
+
+        var second = await PCloudStore.LoginAsync(_options.Backup, "code@pcloud.test", FakePCloud.Password, "123456", null, CancellationToken.None);
+        Assert.Equal(FakePCloud.Auth, second.Token!.Auth);
+    }
+
+    [Fact]
     public async Task A_new_or_emptied_target_gets_all_mails_again()
     {
         await ConnectPCloudAsync();
@@ -257,6 +273,19 @@ public sealed class CloudBackupWebTests : IAsyncLifetime
         await _web.GetAsync("/Admin/Backup");
         Assert.Contains("verbunden mit 2fa@pcloud.test, 9 GB frei", _web.LastPage);
         Assert.Contains(backups.LastSuccess()!.Snapshot!, _web.LastPage);
+    }
+
+    [Fact]
+    public async Task Admin_enters_only_the_code_in_the_second_step()
+    {
+        await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",
+            Form(BackupOptions.PCloudTarget, ("email", "code@pcloud.test"), ("password", FakePCloud.Password)));
+        Assert.Contains("Code (Zwei-Faktor)", _web.LastPage);
+
+        // The password is not typed again; the server kept it in memory for this step.
+        await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",
+            Form(BackupOptions.PCloudTarget, ("email", "code@pcloud.test"), ("password", ""), ("code", "123456")));
+        Assert.Contains("Mit pCloud verbunden (code@pcloud.test)", _web.LastPage);
     }
 
     [Fact]

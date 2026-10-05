@@ -301,11 +301,16 @@ public sealed class FakePCloud : FakeCloud
             }
         }
 
-        if (method is "userinfo" && parameters.ContainsKey("username"))
+        if (method is "login" && parameters.ContainsKey("username"))
         {
+            var user = parameters["username"];
+            var code = parameters.GetValueOrDefault("code");
             await JsonAsync(context, parameters["password"] != Password ? new { result = 2000, error = "Log in failed." }
-                : parameters["username"].StartsWith("2fa", StringComparison.Ordinal) ? new { result = 2297, error = "2FA required.", token = "tfa-token" }
-                : (object)new { result = 0, auth = Auth, email = parameters["username"] });
+                // two variants of accounts with two-factor authentication: challenge token, or the code along with the password
+                : user.StartsWith("2fa", StringComparison.Ordinal) ? new { result = 2297, error = "2FA required.", token = "tfa-token" }
+                : user.StartsWith("code", StringComparison.Ordinal) && code is null ? new { result = 1022, error = "Please provide 'code'." }
+                : user.StartsWith("code", StringComparison.Ordinal) && code != "123456" ? new { result = 2012, error = "Invalid code." }
+                : (object)new { result = 0, auth = Auth, email = user });
             return;
         }
 

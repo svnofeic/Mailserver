@@ -19,6 +19,9 @@ public sealed class PCloudStore : IBackupStore
     private const int FolderMissing = 2005;
     private const int FileMissing = 2009;
     private const int TwoFactorRequired = 2297;
+    private const int CodeMissing = 1022;
+    private const int CodeInvalid = 2012;
+    private const int CodeExpired = 2064;
 
     private readonly PCloudToken _token;
     private readonly HttpClient _http = CloudHttp.CreateClient();
@@ -168,21 +171,28 @@ public sealed class PCloudStore : IBackupStore
     {
         var api = ApiUrl(settings);
         using var http = CloudHttp.CreateClient();
+        var hasCode = !string.IsNullOrWhiteSpace(code);
         JsonNode json;
-        if (twoFactorToken is not null && !string.IsNullOrWhiteSpace(code))
+        if (!string.IsNullOrEmpty(twoFactorToken) && hasCode)
         {
-            json = await PostAsync(http, $"{api}/tfa_login", WithLifetime(new()
+            // Second step after "two-factor authentication required": the challenge token plus the code from the app.
+            json = await PostAsync(http, $"{api}/tfa_login", Device(new()
             {
-                ["token"] = twoFactorToken, ["code"] = code.Trim(), ["trustdevice"] = "1", ["getauth"] = "1",
+                ["token"] = twoFactorToken, ["code"] = code!.Trim(), ["trustdevice"] = "1",
             }), cancellationToken);
         }
         else
         {
-            json = await PostAsync(http, $"{api}/userinfo", WithLifetime(new()
+            // "login" (as in pCloud's own SDK) answers accounts with two-factor authentication with a challenge token;
+            // some answer "Please provide 'code'" instead, then the code goes along with the password.
+            var parameters = Device(new() { ["username"] = email.Trim(), ["password"] = password });
+            if (hasCode)
             {
-                ["getauth"] = "1", ["logout"] = "1", ["username"] = email.Trim(), ["password"] = password, ["device"] = "Mailserver-Sicherung",
-            }), cancellationToken);
-            if ((int?)json["result"] == TwoFactorRequired)
+                parameters["code"] = code!.Trim();
+            }
+
+            json = await PostAsync(http, $"{api}/login", parameters, cancellationToken);
+            if (((int?)json["result"] is TwoFactorRequired or CodeMissing) && !hasCode) // the caller asks for the code and calls again
             {
                 return new LoginResult(null, true, (string?)json["token"]);
             }
@@ -196,9 +206,22 @@ public sealed class PCloudStore : IBackupStore
             case LoginFailed:
                 throw new BackupException(
                     "pCloud: Anmeldung fehlgeschlagen. Stimmen E-Mail-Adresse und Passwort – und die Region (Konten aus Europa liegen auf „EU“)?");
+            case CodeInvalid or CodeExpired or TwoFactorRequired or CodeMissing:
+                throw new BackupException("pCloud: Der Code ist falsch oder abgelaufen – bitte noch einmal mit Passwort und neuem Code verbinden.");
             default:
-                throw new BackupException($"pCloud: Anmeldung fehlgeschlagen ({(string?)json["error"] ?? json.ToJsonString()}).");
+                throw new BackupException($"pCloud: Anmeldung fehlgeschlagen ({(int?)json["result"]}: {(string?)json["error"] ?? json.ToJsonString()}).");
         }
+    }
+
+    /// <summary>Parameters every login call gets: an auth token in the answer, its lifetime and a device name.</summary>
+    private static Dictionary<string, string> Device(Dictionary<string, string> parameters)
+    {
+        parameters["getauth"] = "1";
+        parameters["logout"] = "1";
+        parameters["device"] = $"Mailserver-Sicherung ({Environment.MachineName})";
+        parameters["deviceid"] = $"Mailserver-Sicherung ({Environment.MachineName})";
+        parameters["os"] = OperatingSystem.IsWindows() ? "5" : "7";
+        return WithLifetime(parameters);
     }
 
     /// <summary>Longest token lifetime pCloud allows: 2 years, or 62 days without use (the backup uses it every night).</summary>

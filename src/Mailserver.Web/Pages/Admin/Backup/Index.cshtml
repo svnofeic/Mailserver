@@ -144,9 +144,9 @@
         else
         {
             <div class="row" style="margin-top: 10px">
-                <label>E-Mail-Adresse<input name="email" type="email" autocomplete="off" value="@Model.Cloud.PendingPCloudCode?.Email" /></label>
+                <label>E-Mail-Adresse<input name="email" type="email" autocomplete="off" value="@Model.Cloud.PendingPCloudEmail" /></label>
                 <label>Passwort<input name="password" type="password" autocomplete="new-password" /></label>
-                @if (Model.Cloud.PendingPCloudCode is not null)
+                @if (Model.Cloud.PendingPCloudEmail is not null)
                 {
                     <label>Code (Zwei-Faktor)<input name="code" autocomplete="one-time-code" style="width: 120px" /></label>
                 }

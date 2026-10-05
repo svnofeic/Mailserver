@@ -56,7 +56,7 @@ public sealed class IndexModel(IOptions<MailserverOptions> options, BackupManage
     {
         var backup = Form.ToOptions(Current) with { Target = BackupOptions.PCloudTarget };
         settings.SaveBackup(backup);
-        if (string.IsNullOrWhiteSpace(email) || (string.IsNullOrEmpty(password) && cloud.PendingPCloudCode is null))
+        if (string.IsNullOrWhiteSpace(email) || (string.IsNullOrEmpty(password) && cloud.PendingPCloudEmail is null))
         {
             ErrorMessage = "Bitte E-Mail-Adresse und Passwort des pCloud-Kontos eingeben.";
             return RedirectToPage();
