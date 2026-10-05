@@ -4,12 +4,13 @@
     @foreach (var (folder, status) in Model.Folders)
     {
         <a class="@(folder.Name == Model.Current ? "active" : "")" href="/Mail?folder=@Uri.EscapeDataString(folder.Name)"
-           style="padding-left: @(10 + 14 * Mailserver.Web.Webmail.FolderDisplay.Depth(folder.Name))px">
-            <span>@Mailserver.Web.Webmail.FolderDisplay.Leaf(folder.Name)</span>
+           style="padding-left: @(11 + 16 * Mailserver.Web.Webmail.FolderDisplay.Depth(folder.Name))px">
+            @Icons.Folder(folder.Name)
+            <span class="name">@Mailserver.Web.Webmail.FolderDisplay.Leaf(folder.Name)</span>
             @if (status.Unseen > 0 && folder.Name is not ("Sent" or "Drafts" or "Trash")) { <span class="count">@status.Unseen</span> }
         </a>
     }
-    <a class="small muted" href="/Mail/Folders" style="margin-top: 4px">Ordner verwalten …</a>
+    <a class="manage" href="/Mail/Folders">@Icons.Get("settings") Ordner verwalten</a>
 </nav>
 <form method="get" action="/Mail" class="folder-select card" style="padding: 8px">
     <select name="folder" aria-label="Ordner" style="width: 100%">

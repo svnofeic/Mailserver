@@ -27,7 +27,7 @@
     </div>
     <p class="small muted">Höchstens @Format.Size(Model.MaxAttachmentBytes) insgesamt. Bei einem Fehler müssen Anhänge erneut ausgewählt werden.</p>
     <div class="toolbar">
-        <button type="submit" asp-page-handler="Send">Senden</button>
+        <button type="submit" asp-page-handler="Send">@Icons.Get("send") Senden</button>
         <button type="submit" asp-page-handler="Draft" class="secondary">Als Entwurf speichern</button>
         <a class="button secondary" href="/Mail">Verwerfen</a>
     </div>

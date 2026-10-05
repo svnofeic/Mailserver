@@ -1,36 +1,89 @@
 @page
 @model Mailserver.Web.Pages.IndexModel
-@{ ViewData["Title"] = "Übersicht"; }
-<h1>Übersicht</h1>
+@{
+    ViewData["Title"] = "Übersicht";
+    var inbox = Model.Folders.FirstOrDefault(f => f.Folder.Name == "INBOX").Status;
+    var quota = Model.CurrentAccount.QuotaBytes;
+    var percent = quota > 0 ? (int)Math.Min(100, 100 * Model.Usage / quota) : 0;
+}
+<div class="page-head">
+    <div>
+        <h1>Übersicht</h1>
+        <p class="subtitle">Willkommen zurück, @Model.CurrentAddress – das ist in Ihrem Postfach los.</p>
+    </div>
+    <div class="actions">
+        <a class="button" href="/Mail/Compose">@Icons.Get("pencil") Neue Mail</a>
+        <a class="chip" href="/Mail">@Icons.Get("inbox") Posteingang</a>
+    </div>
+</div>
 
 <div class="tiles">
-    <div class="tile"><div class="label">Belegter Speicher</div><div class="value">@Format.Size(Model.Usage)</div>
-        <div class="small muted">@(Model.CurrentAccount.QuotaBytes > 0 ? $"von {Format.Size(Model.CurrentAccount.QuotaBytes)}" : "kein Limit")</div></div>
-    <div class="tile"><div class="label">Nachrichten gesamt</div><div class="value">@Model.Folders.Sum(f => f.Status.Messages)</div></div>
-    <div class="tile"><div class="label">Ungelesen im Posteingang</div><div class="value">@(Model.Folders.FirstOrDefault(f => f.Folder.Name == "INBOX").Status?.Unseen ?? 0)</div></div>
-    <div class="tile"><div class="label">Spam (7 Tage)</div><div class="value">@Model.SpamThisWeek</div></div>
-</div>
-
-<h2>Ordner</h2>
-<div class="table-wrap">
-    <table>
-        <thead><tr><th>Ordner</th><th class="num">Nachrichten</th><th class="num">Ungelesen</th></tr></thead>
-        <tbody>
-        @foreach (var (folder, status) in Model.Folders)
+    <div class="tile">
+        <div class="label"><span class="badge-icon">@Icons.Get("inbox")</span> Ungelesen im Posteingang</div>
+        <div class="value">@(inbox?.Unseen ?? 0)</div>
+        <div class="small muted">von @(inbox?.Messages ?? 0) Nachrichten</div>
+    </div>
+    <div class="tile">
+        <div class="label"><span class="badge-icon cyan">@Icons.Get("mail")</span> Nachrichten gesamt</div>
+        <div class="value">@Model.Folders.Sum(f => f.Status.Messages)</div>
+        <div class="small muted">in @Model.Folders.Count Ordnern</div>
+    </div>
+    <div class="tile">
+        <div class="label"><span class="badge-icon rose">@Icons.Get("shield-alert")</span> Spam abgefangen</div>
+        <div class="value">@Model.SpamThisWeek</div>
+        <div class="small muted">in den letzten 7 Tagen</div>
+    </div>
+    <div class="tile">
+        <div class="label"><span class="badge-icon green">@Icons.Get("drive")</span> Belegter Speicher</div>
+        <div class="value">@Format.Size(Model.Usage)</div>
+        @if (quota > 0)
         {
-            <tr><td>@Format.FolderName(folder.Name)</td><td class="num">@status.Messages</td><td class="num">@status.Unseen</td></tr>
+            <div class="bars" style="grid-template-columns: 1fr max-content; margin-top: 4px">
+                <div class="track"><div class="fill@(percent == 0 ? " zero" : "")" style="width: @percent%"></div></div>
+                <span class="small muted">@percent % von @Format.Size(quota)</span>
+            </div>
         }
-        </tbody>
-    </table>
+        else
+        {
+            <div class="small muted">kein Limit</div>
+        }
+    </div>
 </div>
 
-<h2>Zuletzt eingegangen</h2>
-<partial name="_DeliveryTable" model="Model.Recent" />
-<p><a href="/Spam">Gesamten Verlauf anzeigen</a> · <a href="/Rules">Regeln verwalten</a></p>
-
-<h2>Mailprogramm einrichten</h2>
-<div class="card small">
-    Posteingang (IMAP): <strong>@Model.Hostname</strong>, Port 993, SSL/TLS ·
-    Postausgang (SMTP): <strong>@Model.Hostname</strong>, Port 587, STARTTLS ·
-    Benutzername: <strong>@Model.CurrentAddress</strong>
+<div class="dash" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr))">
+        <section class="panel">
+            <div class="panel-head">
+                <h2><span class="badge-icon cyan">@Icons.Get("folder")</span> Ordner</h2>
+                <a class="link" href="/Mail/Folders">Verwalten</a>
+            </div>
+            <nav class="folders" style="box-shadow: none; border: 0; padding: 0; background: none; backdrop-filter: none">
+                @foreach (var (folder, status) in Model.Folders)
+                {
+                    <a href="/Mail?folder=@Uri.EscapeDataString(folder.Name)">
+                        @Icons.Folder(folder.Name)
+                        <span class="name">@Format.FolderName(folder.Name)</span>
+                        <span class="small muted">@status.Messages</span>
+                        @if (status.Unseen > 0) { <span class="count">@status.Unseen</span> }
+                    </a>
+                }
+            </nav>
+        </section>
+        <section class="panel">
+            <div class="panel-head"><h2><span class="badge-icon green">@Icons.Get("settings")</span> Mailprogramm einrichten</h2></div>
+            <dl class="headers">
+                <dt>Posteingang</dt><dd><strong>@Model.Hostname</strong> · IMAP · Port 993 · SSL/TLS</dd>
+                <dt>Postausgang</dt><dd><strong>@Model.Hostname</strong> · SMTP · Port 587 · STARTTLS</dd>
+                <dt>Benutzername</dt><dd><strong>@Model.CurrentAddress</strong></dd>
+            </dl>
+            <p class="small muted" style="margin-bottom: 0">Regeln und Filter: <a href="/Rules">Regeln verwalten</a></p>
+        </section>
 </div>
+
+<section class="panel">
+    <div class="panel-head">
+        <h2><span class="badge-icon">@Icons.Get("activity")</span> Zuletzt eingegangen</h2>
+        <a class="link" href="/Spam">Gesamter Verlauf</a>
+    </div>
+    <partial name="_DeliveryTable" model="Model.Recent" />
+</section>
+

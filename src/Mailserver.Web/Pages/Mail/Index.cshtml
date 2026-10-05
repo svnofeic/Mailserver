@@ -3,15 +3,16 @@
 @{ ViewData["Title"] = Mailserver.Web.Webmail.FolderDisplay.Leaf(Model.Folder.Name); }
 <div class="mail">
     <aside>
-        <p><a class="button" href="/Mail/Compose" style="width: 100%; text-align: center">Neue Mail</a></p>
+        <a class="button" href="/Mail/Compose">@Icons.Get("pencil") Neue Mail</a>
         <partial name="_Folders" model="(Model.Folders, Model.Folder.Name)" />
     </aside>
     <section>
         <div class="toolbar">
             <h1 style="margin: 0" class="grow">@Mailserver.Web.Webmail.FolderDisplay.Path(Model.Folder.Name)</h1>
-            <form method="get" action="/Mail" class="row">
+            <form method="get" action="/Mail" class="search">
                 <input type="hidden" name="folder" value="@Model.Folder.Name" />
-                <input name="q" value="@Model.Search" placeholder="Absender, Empfänger, Betreff" aria-label="Suche" />
+                @Icons.Get("search")
+                <input name="q" value="@Model.Search" placeholder="Absender, Empfänger, Betreff suchen" aria-label="Suche" />
                 <button type="submit" class="secondary">Suchen</button>
             </form>
         </div>
@@ -31,7 +32,7 @@
                 {
                     <button type="submit" name="op" value="spam" class="secondary">Spam</button>
                 }
-                <button type="submit" name="op" value="delete" class="secondary">@(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
+                <button type="submit" name="op" value="delete" class="secondary">@Icons.Get("trash") @(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
                 <select name="target" aria-label="Zielordner">
                     @foreach (var (folder, _) in Model.Folders.Where(f => f.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
                 </select>
@@ -53,13 +54,14 @@
                         {
                             <tr class="@(item.Seen ? "" : "unread")">
                                 <td class="sel"><input type="checkbox" name="uids" value="@item.Message.Uid" aria-label="Auswählen" /></td>
-                                <td class="from small">@(Model.ShowRecipients ? item.Summary.To : item.Summary.From)</td>
+                                @{ var person = Model.ShowRecipients ? item.Summary.To : item.Summary.From; }
+                                <td class="from"><span class="sender"><span class="avatar @Avatars.Class(person)">@Avatars.Initials(person)</span><span>@person</span></span></td>
                                 <td class="subject">
                                     <a href="/Mail/Read?folder=@Uri.EscapeDataString(Model.Folder.Name)&uid=@item.Message.Uid">
-                                        @if (item.Flagged) { <span class="mark" title="markiert">★</span> }
-                                        @if (item.Answered) { <span class="muted" title="beantwortet">↩</span> }
-                                        @item.Summary.Subject
-                                        @if (item.Summary.HasAttachments) { <span class="muted" title="Anhang">📎</span> }
+                                        @if (item.Flagged) { <span class="mark" title="markiert">@Icons.Get("star", "star")</span> }
+                                        @if (item.Answered) { <span title="beantwortet">@Icons.Get("reply")</span> }
+                                        <span class="text">@item.Summary.Subject</span>
+                                        @if (item.Summary.HasAttachments) { <span title="Anhang">@Icons.Get("paperclip")</span> }
                                     </a>
                                 </td>
                                 <td class="date small muted">@Format.Time(item.Message.InternalDate)</td>

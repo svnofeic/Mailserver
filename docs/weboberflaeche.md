@@ -6,6 +6,12 @@ Server). Sie läuft im selben Windows-Dienst, braucht keine weitere Software und
 **Adresse:** `https://<hostname>:9443` (z. B. `https://mail.feicht.me:9443`). Port 443 ist auf Windows-Servern meist durch IIS
 belegt, 8443 und 8880 durch Plesk; der Port lässt sich unter `Mailserver:Web:HttpsPort` ändern. Anmelden mit E-Mail-Adresse und Postfach-Passwort.
 
+**Design:** dunkel mit Glas-Effekt als Standard; unten in der Seitenleiste lässt sich auf **Hell** umschalten (wird pro
+Browser gemerkt). Die Admin-Übersicht zeigt Kennzahlen mit Trend gegenüber der Vorwoche, Verläufe über 14 Tage
+(Mailverkehr, Spam, abgelehnte Verbindungen, Fehl-Logins), die Verteilung des Eingangs, die letzte Aktivität, die
+häufigsten Spam-Absender und abgelehnten Adressen sowie den Systemzustand (Zertifikat, Sicherung, Virenschutz,
+Warteschlange). Alle Diagramme werden auf dem Server gezeichnet – kein JavaScript, keine externen Dienste.
+
 ## Für Benutzer
 
 | Seite | Inhalt |

@@ -1,7 +1,8 @@
 @page
 @model Mailserver.Web.Pages.LoginModel
 @{ ViewData["Title"] = "Anmelden"; }
-<div class="login card">
+<div class="login">
+    <div class="brand"><span class="logo">@Icons.Get("mail")</span><span>Mailserver<small>@HttpContext.Request.Host.Host</small></span></div>
     <h1>Anmelden</h1>
     @if (Model.Error is not null)
     {

@@ -126,7 +126,7 @@ public static class WebHosting
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";
             headers["Content-Security-Policy"] =
-                "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+                "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
             // Pages with forms get no-cache headers from the antiforgery system; everything else is marked here.
             context.Response.OnStarting(() =>
             {
@@ -175,8 +175,36 @@ public static class WebHosting
             context.Response.Headers.CacheControl = "public, max-age=3600";
             return Results.Text(EditorScript.Value, "text/javascript; charset=utf-8");
         }).AllowAnonymous();
+        app.MapGet("/assets/site.css", (HttpContext context) =>
+        {
+            // The URL carries the version, so a new release is fetched right away.
+            context.Response.Headers.CacheControl = "public, max-age=604800";
+            return Results.Text(Stylesheet.Value, "text/css; charset=utf-8");
+        }).AllowAnonymous();
+
+        // Light or dark design, remembered in a cookie (works without JavaScript).
+        app.MapGet("/theme", (HttpContext context, string? mode, string? returnUrl) =>
+        {
+            context.Response.Cookies.Append(ThemeCookie, mode == "light" ? "light" : "dark", new CookieOptions
+            {
+                Expires = DateTimeOffset.UtcNow.AddYears(1), HttpOnly = true, Secure = context.Request.IsHttps, SameSite = SameSiteMode.Lax, IsEssential = true,
+            });
+            var target = returnUrl is { Length: > 0 } && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//") && !returnUrl.StartsWith("/\\") ? returnUrl : "/";
+            return Results.Redirect(target);
+        }).AllowAnonymous();
         return app;
     }
+
+    public const string ThemeCookie = "theme";
+
+    /// <summary>"light" or "dark" (the default).</summary>
+    public static string Theme(HttpContext context) => context.Request.Cookies[ThemeCookie] == "light" ? "light" : "dark";
+
+    private static readonly Lazy<string> Stylesheet = new(() =>
+    {
+        using var stream = typeof(WebHosting).Assembly.GetManifestResourceStream("site.css")!;
+        return new StreamReader(stream).ReadToEnd();
+    });
 
     private static readonly Lazy<string> EditorScript = new(() =>
     {

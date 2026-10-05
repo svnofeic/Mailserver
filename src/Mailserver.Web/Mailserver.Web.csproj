@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\editor.js" LogicalName="editor.js" />
+    <EmbeddedResource Include="Assets\site.css" LogicalName="site.css" />
   </ItemGroup>
 
   <ItemGroup>

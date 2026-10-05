@@ -74,6 +74,9 @@ public sealed record SpamLogEntry
     public string? Detail { get; init; }
 }
 
+/// <summary>Counts of one day: received (incl. spam), spam, rejected (connection, sender, content), sent, failed, failed logins.</summary>
+public sealed record DailyTraffic(DateOnly Day, int Received, int Spam, int Rejected, int Sent, int Failed, int LoginFailures);
+
 public sealed record SpamLogQuery(
     DateTimeOffset? Since = null,
     string? Stage = null,
@@ -142,6 +145,50 @@ public sealed class SpamLog(Database database, IOptions<MailserverOptions> optio
             Recipient = user,
             Detail = protocol,
         });
+
+    /// <summary>
+    /// Mail traffic per local calendar day for the last <paramref name="days"/> days (today included), oldest first. Counted in
+    /// the database per hour, so this stays fast with a large log.
+    /// </summary>
+    public IReadOnlyList<DailyTraffic> Daily(int days)
+    {
+        var today = DateOnly.FromDateTime(timeProvider.GetLocalNow().DateTime);
+        var first = today.AddDays(1 - days);
+        var since = new DateTimeOffset(first.ToDateTime(TimeOnly.MinValue), timeProvider.GetLocalNow().Offset).AddHours(-14);
+        var result = Enumerable.Range(0, days).ToDictionary(i => first.AddDays(i), _ => new int[6]);
+        using var connection = database.Open();
+        var rows = connection.Query(
+            "SELECT substr(time_utc, 1, 13), stage, action, COUNT(*) FROM spam_log WHERE time_utc >= $since GROUP BY 1, 2, 3",
+            r => (Hour: r.GetString(0), Stage: r.GetString(1), Action: r.GetString(2), Count: r.GetInt32(3)), ("$since", since.ToDbTime()));
+        foreach (var row in rows)
+        {
+            var utc = DateTime.SpecifyKind(DateTime.ParseExact(row.Hour, "yyyy-MM-dd'T'HH", System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc);
+            var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utc, timeProvider.LocalTimeZone));
+            if (!result.TryGetValue(day, out var counts))
+            {
+                continue;
+            }
+
+            var index = (row.Stage, row.Action) switch
+            {
+                (SpamLogStage.Data, SpamLogAction.Accepted) => 0,
+                (SpamLogStage.Data, SpamLogAction.Spam) => 1,
+                (SpamLogStage.Connect or SpamLogStage.Sender or SpamLogStage.Data, SpamLogAction.Rejected) => 2,
+                (SpamLogStage.Outbound, SpamLogAction.Sent) => 3,
+                (SpamLogStage.Outbound, SpamLogAction.Failed) => 4,
+                (SpamLogStage.Auth, _) => 5,
+                _ => -1,
+            };
+            if (index >= 0)
+            {
+                counts[index] += row.Count;
+            }
+        }
+
+        return result.OrderBy(d => d.Key)
+            .Select(d => new DailyTraffic(d.Key, d.Value[0] + d.Value[1], d.Value[1], d.Value[2], d.Value[3], d.Value[4], d.Value[5]))
+            .ToList();
+    }
 
     public IReadOnlyList<SpamLogEntry> Query(SpamLogQuery query)
     {

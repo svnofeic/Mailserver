@@ -3,7 +3,7 @@
 @{ ViewData["Title"] = Model.Subject; var f = Uri.EscapeDataString(Model.Folder.Name); var uid = Model.Stored.Uid; }
 <div class="mail">
     <aside>
-        <p><a class="button" href="/Mail/Compose" style="width: 100%; text-align: center">Neue Mail</a></p>
+        <a class="button" href="/Mail/Compose">@Icons.Get("pencil") Neue Mail</a>
         <partial name="_Folders" model="(Model.Folders, Model.Folder.Name)" />
     </aside>
     <section>
@@ -15,12 +15,12 @@
             }
             else
             {
-                <a class="button" href="/Mail/Compose?mode=reply&folder=@f&uid=@uid">Antworten</a>
+                <a class="button" href="/Mail/Compose?mode=reply&folder=@f&uid=@uid">@Icons.Get("reply") Antworten</a>
                 <a class="button secondary" href="/Mail/Compose?mode=replyall&folder=@f&uid=@uid">Allen antworten</a>
-                <a class="button secondary" href="/Mail/Compose?mode=forward&folder=@f&uid=@uid">Weiterleiten</a>
+                <a class="button secondary" href="/Mail/Compose?mode=forward&folder=@f&uid=@uid">@Icons.Get("forward") Weiterleiten</a>
             }
             <form method="post" asp-page="/Mail/Read" asp-page-handler="Action" asp-route-folder="@Model.Folder.Name" asp-route-uid="@uid" class="row">
-                <button type="submit" name="op" value="delete" class="secondary">@(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
+                <button type="submit" name="op" value="delete" class="secondary">@Icons.Get("trash") @(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
                 @if (Model.Folder.Name == "Junk") { <button type="submit" name="op" value="notspam" class="secondary">Kein Spam</button> }
                 else { <button type="submit" name="op" value="spam" class="secondary">Spam</button> }
                 <button type="submit" name="op" value="unread" class="secondary">Ungelesen</button>

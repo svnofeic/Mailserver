@@ -3,7 +3,7 @@
 @{ ViewData["Title"] = "Ordner verwalten"; }
 <div class="mail">
     <aside>
-        <p><a class="button" href="/Mail/Compose" style="width: 100%; text-align: center">Neue Mail</a></p>
+        <a class="button" href="/Mail/Compose">@Icons.Get("pencil") Neue Mail</a>
         <partial name="_Folders" model="(Model.Folders, string.Empty)" />
     </aside>
     <section>

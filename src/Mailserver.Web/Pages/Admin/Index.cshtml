@@ -1,7 +1,58 @@
 @page
 @model Mailserver.Web.Pages.Admin.IndexModel
-@{ ViewData["Title"] = "Admin"; }
-<h1>Admin-Übersicht</h1>
+@using Mailserver.Web.Pages.Admin
+@{
+    ViewData["Title"] = "Admin";
+    var labels = Model.DayLabels;
+    var received = Model.Daily.Select(d => d.Received).ToList();
+    var spam = Model.Daily.Select(d => d.Spam).ToList();
+    var sent = Model.Daily.Select(d => d.Sent).ToList();
+    var rejected = Model.Daily.Select(d => d.Rejected).ToList();
+    var logins = Model.Daily.Select(d => d.LoginFailures).ToList();
+    var delivered = Model.Stats.DeliveredInbox + Model.Stats.DeliveredOther;
+    var blockedTotal = Model.Stats.RejectedConnections + Model.Stats.RejectedSenders + Model.Stats.RejectedMessages;
+
+    void KpiTiles(IReadOnlyList<IndexModel.Kpi> kpis)
+    {
+        <div class="kpis">
+            @foreach (var kpi in kpis)
+            {
+                <div class="kpi">
+                    <div class="label" title="@kpi.Label">@kpi.Label</div>
+                    <div class="value">@Charts.Compact(kpi.Value)</div>
+                    <div class="foot">
+                        @if (kpi.Change is { } change)
+                        {
+                            var up = change >= 0.5;
+                            var down = change <= -0.5;
+                            var css = up ? (kpi.UpIsGood ? "up" : "up bad-up") : down ? (kpi.UpIsGood ? "down" : "down good-down") : "flat";
+                            <span class="trend @css" title="letzte 7 Tage gegenüber den 7 Tagen davor">
+                                @Icons.Get(down ? "trend-down" : "trend-up")@(change > 0 ? "+" : "")@change.ToString("0")%
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="trend flat">24 h</span>
+                        }
+                        @Charts.Sparkline(kpi.Daily, kpi.Color)
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+<div class="page-head">
+    <div>
+        <h1>Admin-Übersicht</h1>
+        <p class="subtitle">So läuft Ihr Mailserver – Kennzahlen der letzten 24 Stunden, Verläufe über 14 Tage.</p>
+    </div>
+    <div class="actions">
+        <span class="chip">@Icons.Get("calendar") @Model.Daily.First().Day.ToString("dd.MM.") – @Model.Daily.Last().Day.ToString("dd.MM.yyyy")</span>
+        <a class="chip" href="/Admin/Diagnose">@Icons.Get("pulse") Diagnose</a>
+        <a class="chip" href="/Admin/Log">@Icons.Get("eye") Verlauf</a>
+    </div>
+</div>
 
 @if (Model.CertificateWarning is not null)
 {
@@ -12,25 +63,132 @@
     <div class="notice warn">@Model.BackupWarning <a href="/Admin/Backup">Datensicherung einrichten</a></div>
 }
 
-<div class="tiles">
-    <div class="tile"><div class="label">Domains</div><div class="value">@Model.Domains</div></div>
-    <div class="tile"><div class="label">Postfächer</div><div class="value">@Model.Mailboxes</div></div>
-    <div class="tile"><div class="label">Aliase</div><div class="value">@Model.Aliases</div></div>
-    <div class="tile"><div class="label">Warteschlange</div><div class="value">@Model.QueueCount</div>
-        @if (Model.OldestQueued is { } oldest) { <div class="small muted">älteste: @Format.Time(oldest)</div> }</div>
+<div class="dash">
+    <section class="panel">
+        <div class="panel-head">
+            <h2><span class="badge-icon">@Icons.Get("inbox")</span> Eingang</h2>
+            <a class="link" href="/Admin/Log/Stats">Statistik</a>
+        </div>
+        @{ KpiTiles(Model.Inbound); }
+        <div class="subpanel">
+            <div class="subpanel-head">
+                <span>Mailverkehr</span>
+                <span class="legend"><span class="s1"><i></i>Eingegangen</span><span class="s4"><i></i>Spam</span></span>
+            </div>
+            @Charts.Area(labels, new Charts.Series("Eingegangen", received, 1), new Charts.Series("Spam", spam, 4))
+        </div>
+        <div class="subpanel">
+            <div class="subpanel-head"><span>Top-Spam-Absender (7 Tage)</span></div>
+            @if (Model.TopSpamDomains.Count == 0)
+            {
+                <p class="small muted" style="margin: 0">Kein Spam in den letzten 7 Tagen.</p>
+            }
+            else
+            {
+                var top = Model.TopSpamDomains.Max(t => t.Count);
+                <div class="toplist">
+                    @foreach (var (domain, count) in Model.TopSpamDomains)
+                    {
+                        <div class="item"><span class="name">@domain</span><span class="count">@count</span>
+                            <span class="track"><span class="fill" style="display: block; width: @(100 * count / top)%"></span></span></div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2><span class="badge-icon cyan">@Icons.Get("send")</span> Zustellung</h2>
+            <a class="link" href="/Admin/Queue">Warteschlange</a>
+        </div>
+        @{ KpiTiles(Model.Outbound); }
+        <div class="subpanel">
+            <div class="subpanel-head"><span>Eingang nach Ergebnis (24 h)</span></div>
+            <div class="donut-wrap">
+                @Charts.Donut([("Posteingang", delivered, 2), ("Spam-Ordner", Model.Stats.DeliveredJunk, 5), ("abgelehnt", blockedTotal, 4),
+                    ("zurückgestellt", Model.Stats.GreylistDeferrals, 3)], Charts.Compact(delivered + Model.Stats.DeliveredJunk + blockedTotal + Model.Stats.GreylistDeferrals), "gesamt")
+                <div class="donut-legend">
+                    <div class="s2"><i></i><span>Posteingang</span><b>@delivered</b></div>
+                    <div class="s5"><i></i><span>Spam-Ordner</span><b>@Model.Stats.DeliveredJunk</b></div>
+                    <div class="s4"><i></i><span>abgelehnt</span><b>@blockedTotal</b></div>
+                    <div class="s3"><i></i><span>Greylisting</span><b>@Model.Stats.GreylistDeferrals</b></div>
+                </div>
+            </div>
+        </div>
+        <div class="subpanel">
+            <div class="subpanel-head"><span>Letzte Aktivität</span><a class="small" href="/Admin/Log">Alle</a></div>
+            @if (Model.Activity.Count == 0)
+            {
+                <p class="small muted" style="margin: 0">Noch nichts los heute.</p>
+            }
+            <ul class="activity">
+                @foreach (var entry in Model.Activity)
+                {
+                    var (icon, tone, text) = IndexModel.Describe(entry);
+                    <li>
+                        <span class="ico @tone">@Icons.Get(icon)</span>
+                        <a class="what" href="/Admin/Log/Session?id=@Uri.EscapeDataString(entry.Session ?? "")" title="@text">@text</a>
+                        <span class="when">@IndexModel.Ago(entry.Time)</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <h2><span class="badge-icon rose">@Icons.Get("shield")</span> Sicherheit</h2>
+            <a class="link" href="/Admin/IpBlocks">IP-Sperren</a>
+        </div>
+        @{ KpiTiles(Model.Security); }
+        <div class="subpanel">
+            <div class="subpanel-head">
+                <span>Abwehr</span>
+                <span class="legend"><span class="s3"><i></i>Abgelehnt</span><span class="s4"><i></i>Fehl-Logins</span></span>
+            </div>
+            @Charts.Area(labels, new Charts.Series("Abgelehnt", rejected, 3), new Charts.Series("Fehl-Logins", logins, 4))
+        </div>
+        <div class="subpanel">
+            <div class="subpanel-head"><span>Meist abgelehnte Adressen (7 Tage)</span></div>
+            @if (Model.TopRejectedIps.Count == 0)
+            {
+                <p class="small muted" style="margin: 0">Keine abgelehnten Verbindungen.</p>
+            }
+            else
+            {
+                var top = Model.TopRejectedIps.Max(t => t.Count);
+                <div class="toplist">
+                    @foreach (var (ip, count) in Model.TopRejectedIps)
+                    {
+                        <div class="item"><a class="name mono" href="/Admin/Log?ip=@Uri.EscapeDataString(ip)&amp;since=7d">@ip</a><span class="count">@count</span>
+                            <span class="track"><span class="fill" style="display: block; width: @(100 * count / top)%"></span></span></div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
 </div>
 
-<h2>Letzte 24 Stunden</h2>
-<div class="tiles">
-    <div class="tile"><div class="label">Eingegangen</div><div class="value">@Model.Stats.Messages</div></div>
-    <div class="tile"><div class="label">davon Spam</div><div class="value">@Model.Stats.Spam</div></div>
-    <div class="tile"><div class="label">Abgelehnt</div><div class="value">@(Model.Stats.RejectedConnections + Model.Stats.RejectedSenders + Model.Stats.RejectedMessages)</div></div>
-    <div class="tile"><div class="label">Greylisting</div><div class="value">@Model.Stats.GreylistDeferrals</div></div>
-    <div class="tile"><div class="label">Versendet</div><div class="value">@Model.Sent</div></div>
-    <div class="tile"><div class="label">Zustellfehler</div><div class="value">@Model.OutboundFailed</div></div>
-    <div class="tile"><div class="label">Fehl-Logins</div><div class="value">@Model.LoginFailures</div></div>
-</div>
-<p><a href="/Admin/Log">Verlauf</a> · <a href="/Admin/Log/Stats">Spam-Statistik</a></p>
+<section class="panel strip">
+    <div class="cell"><span class="label">@Icons.Get("globe") Domains</span><span class="value">@Model.Domains</span><a class="small" href="/Admin/Domains">verwalten</a></div>
+    <div class="cell"><span class="label">@Icons.Get("users") Postfächer</span><span class="value">@Model.Mailboxes</span><a class="small" href="/Admin/Mailboxes">verwalten</a></div>
+    <div class="cell"><span class="label">@Icons.Get("at") Aliase</span><span class="value">@Model.Aliases</span><a class="small" href="/Admin/Aliases">verwalten</a></div>
+    <div class="cell"><span class="label">@Icons.Get("drive") Speicher belegt</span><span class="value">@Format.Size(Model.TotalUsage)</span><span class="small muted">alle Postfächer</span></div>
+    <div class="cell">
+        <div class="health">
+            @Charts.Ring(Model.HealthPercent, Model.HealthPercent == 100 ? 6 : Model.HealthPercent >= 50 ? 5 : 4, $"{Model.HealthPercent}%")
+            <ul>
+                @foreach (var item in Model.Health)
+                {
+                    <li class="@item.State">@Icons.Get(item.State == "ok" ? "check-circle" : item.State == "warn" ? "alert" : "x-circle")
+                        @if (item.Link is not null) { <a href="@item.Link">@item.Label</a> } else { @item.Label }
+                        <span class="muted">@item.Detail</span></li>
+                }
+            </ul>
+        </div>
+    </div>
+</section>
 
 @if (Model.Hints.Count > 0)
 {
@@ -48,7 +206,6 @@
         <tr><th>IMAP</th><td>Port @Model.Options.Imap.Port (STARTTLS) / @Model.Options.Imap.TlsPort (TLS)</td></tr>
         <tr><th>Weboberfläche</th><td>Port @Model.Options.Web.HttpsPort (HTTPS)</td></tr>
         <tr><th>Datenverzeichnis</th><td class="mono">@Model.DataDirectory</td></tr>
-        <tr><th>Speicher belegt</th><td>@Format.Size(Model.TotalUsage)</td></tr>
         </tbody>
     </table>
 </div>
