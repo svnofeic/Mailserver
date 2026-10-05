@@ -98,7 +98,8 @@ public sealed class WebmailTests : IAsyncLifetime
     public async Task Embedded_images_are_linked_not_copied_into_the_body()
     {
         var picture = Enumerable.Range(0, 50_000).Select(i => (byte)i).ToArray();
-        var image = new MimePart("image", "png") { ContentId = "logo@test", Content = new MimeContent(new MemoryStream(picture)) };
+        var image = new MimePart("image", "png")
+            { ContentId = "logo@test", ContentTransferEncoding = ContentEncoding.Base64, Content = new MimeContent(new MemoryStream(picture)) };
         var builder = new BodyBuilder { HtmlBody = string.Concat(Enumerable.Repeat("<p><img src=\"cid:logo@test\"></p>", 20)) };
         builder.LinkedResources.Add(image);
         var message = new MimeMessage { Subject = "Bilder", Body = builder.ToMessageBody() };
