@@ -340,10 +340,31 @@ public sealed class ServerDiagnostics(
 
         // SPF: evaluated like a receiving server would, for a mail from this server.
         var ipv4 = serverIps.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork) ?? serverIps.FirstOrDefault();
-        var spfRecord = (await dns.GetTxtAsync(domain.Name, cancellationToken)).Records.FirstOrDefault(t => t.StartsWith("v=spf1", StringComparison.OrdinalIgnoreCase));
-        if (spfRecord is null)
+        var spfTxt = await dns.GetTxtAsync(domain.Name, cancellationToken);
+        var spfRecords = spfTxt.Records.Where(IsSpf).ToList();
+        var spfRecord = spfRecords.FirstOrDefault();
+        // Looks like SPF but is not read as such by receiving servers – mostly quotes or spaces typed into the DNS panel.
+        var malformed = spfTxt.Records.FirstOrDefault(t => !IsSpf(t) && t.Contains("v=spf1", StringComparison.OrdinalIgnoreCase));
+        if (spfRecord is null && spfTxt.Status == DnsStatus.Error)
         {
-            checks.Add(new(group, "SPF", CheckStatus.Error, "kein SPF-Eintrag", $"TXT-Eintrag {domain.Name}: v=spf1 mx -all"));
+            checks.Add(new(group, "SPF", CheckStatus.Warning, "DNS-Abfrage fehlgeschlagen", "Später erneut prüfen."));
+        }
+        else if (spfRecord is null && malformed is not null)
+        {
+            checks.Add(new(group, "SPF", CheckStatus.Error, $"ungültig: {malformed}",
+                "Der TXT-Eintrag muss genau mit v=spf1 beginnen – ohne Anführungszeichen oder Leerzeichen davor (viele DNS-Oberflächen setzen die " +
+                "Anführungszeichen selbst). Empfangende Server ignorieren den Eintrag sonst."));
+        }
+        else if (spfRecord is null)
+        {
+            checks.Add(new(group, "SPF", CheckStatus.Error, "kein SPF-Eintrag",
+                $"TXT-Eintrag {domain.Name}: v=spf1 mx -all. Gerade eingetragen? Je nach TTL dauert es bis zu einigen Stunden, bis er überall sichtbar ist; " +
+                "liegt die Zone bei mehreren Anbietern (z. B. Plesk und Domain-Anbieter), zählt nur der, auf den die Nameserver der Domain zeigen."));
+        }
+        else if (spfRecords.Count > 1)
+        {
+            checks.Add(new(group, "SPF", CheckStatus.Error, string.Join(" | ", spfRecords),
+                "Mehrere SPF-Einträge – das ist ungültig (PermError), empfangende Server werten dann gar keinen aus. Zu einem Eintrag zusammenfassen."));
         }
         else if (options.Value.Delivery.SmartHost is { Host.Length: > 0 } smartHost)
         {
@@ -469,4 +490,8 @@ public sealed class ServerDiagnostics(
             return null;
         }
     }
+
+    /// <summary>A TXT record is an SPF record only if it starts with exactly "v=spf1" followed by a space or nothing (RFC 7208 4.5).</summary>
+    private static bool IsSpf(string record) =>
+        record.StartsWith("v=spf1", StringComparison.OrdinalIgnoreCase) && (record.Length == 6 || record[6] == ' ');
 }

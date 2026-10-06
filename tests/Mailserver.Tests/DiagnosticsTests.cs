@@ -50,6 +50,31 @@ public sealed class DiagnosticsTests : IAsyncLifetime
         Assert.Equal(CheckStatus.Error, Find(checks, "Port 25 nach außen").Status);
     }
 
+    [Theory]
+    [InlineData("\"v=spf1 mx a -all\"", "ungültig", "ohne Anführungszeichen")]
+    [InlineData(" v=spf1 mx -all", "ungültig", "genau mit v=spf1 beginnen")]
+    public async Task Spf_record_with_quotes_or_spaces_is_explained(string record, string detail, string hint)
+    {
+        _dns.Txt["example.test"] = ["google-site-verification=abc", record];
+
+        var spf = Find(await Diagnostics.RunAsync(), "SPF");
+
+        Assert.Equal(CheckStatus.Error, spf.Status);
+        Assert.Contains(detail, spf.Detail);
+        Assert.Contains(hint, spf.Hint);
+    }
+
+    [Fact]
+    public async Task Two_spf_records_are_an_error()
+    {
+        _dns.Txt["example.test"] = [$"v=spf1 ip4:{Ip} -all", "v=spf1 mx -all"];
+
+        var spf = Find(await Diagnostics.RunAsync(), "SPF");
+
+        Assert.Equal(CheckStatus.Error, spf.Status);
+        Assert.Contains("Mehrere SPF-Einträge", spf.Hint);
+    }
+
     [Fact]
     public async Task Finds_typical_mistakes()
     {

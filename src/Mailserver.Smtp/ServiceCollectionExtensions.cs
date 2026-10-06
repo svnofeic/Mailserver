@@ -73,7 +73,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RemoteDeliveryClient>();
         services.AddSingleton<DeliveryService>();
         services.AddAntiSpam();
-        services.AddSingleton<Mailserver.AntiSpam.Diagnostics.ServerDiagnostics>();
+        // The diagnosis asks DNS afresh each time: a record just changed must show up now, not when the cached one expires.
+        services.AddSingleton(sp => ActivatorUtilities.CreateInstance<Mailserver.AntiSpam.Diagnostics.ServerDiagnostics>(sp,
+            sp.GetRequiredService<Mailserver.AntiSpam.Dns.IDnsResolver>() is Mailserver.AntiSpam.Dns.DnsClientResolver
+                ? new Mailserver.AntiSpam.Dns.DnsClientResolver(new LookupClient(new LookupClientOptions { UseCache = false, Timeout = TimeSpan.FromSeconds(10) }))
+                : sp.GetRequiredService<Mailserver.AntiSpam.Dns.IDnsResolver>()));
 
         // Before SMTP/IMAP: on a fresh installation the first certificate is requested before their TLS ports start.
         services.AddHostedService<AcmeRenewalService>();
