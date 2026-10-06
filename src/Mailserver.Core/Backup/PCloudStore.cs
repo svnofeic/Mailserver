@@ -83,6 +83,18 @@ public sealed class PCloudStore : IBackupStore
 
     public async Task UploadAsync(string localFile, string path, CancellationToken cancellationToken)
     {
+        try
+        {
+            await UploadFileAsync(localFile, path, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new HttpRequestException($"Hochladen von {path} ({BackupManager.Format(new FileInfo(localFile).Length)}): {ex.Message}", ex);
+        }
+    }
+
+    private async Task UploadFileAsync(string localFile, string path, CancellationToken cancellationToken)
+    {
         var full = Full(path);
         var folder = full[..full.LastIndexOf('/')];
         await EnsureFolderAsync(folder, cancellationToken);
@@ -101,7 +113,7 @@ public sealed class PCloudStore : IBackupStore
             var file = new StreamContent(File.OpenRead(localFile));
             file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             content.Add(file, "file", name); // the name of the part is the file name in pCloud; an existing file is replaced
-            return new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+            return Upload(new HttpRequestMessage(HttpMethod.Post, url) { Content = content });
         }, cancellationToken);
         Check(await ReadAsync(response, cancellationToken), $"Hochladen von {path}");
     }
@@ -124,10 +136,10 @@ public sealed class PCloudStore : IBackupStore
                 }
 
                 var url = $"{_token.ApiUrl}/upload_write?auth={Uri.EscapeDataString(_token.Auth)}&uploadid={uploadId}&uploadoffset={offset}";
-                using var response = await CloudHttp.SendAsync(_http, () => new HttpRequestMessage(HttpMethod.Put, url)
+                using var response = await CloudHttp.SendAsync(_http, () => Upload(new HttpRequestMessage(HttpMethod.Put, url)
                 {
                     Content = new ByteArrayContent(buffer, 0, length),
-                }, cancellationToken);
+                }), cancellationToken);
                 Check(await ReadAsync(response, cancellationToken), $"Hochladen von {path}");
                 offset += length;
             }
@@ -294,6 +306,17 @@ public sealed class PCloudStore : IBackupStore
     }
 
     // ---- internals ----
+
+    /// <summary>
+    /// Asks before sending the data ("Expect: 100-continue"). If pCloud refuses an upload, it answers right away and closes the
+    /// connection; without asking first, the client is still sending and only sees "connection closed by the remote host"
+    /// instead of pCloud's reason.
+    /// </summary>
+    private static HttpRequestMessage Upload(HttpRequestMessage request)
+    {
+        request.Headers.ExpectContinue = true;
+        return request;
+    }
 
     private string Full(string path) => path.Length == 0 ? _folder : $"{_folder}/{path.Trim('/')}";
 

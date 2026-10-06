@@ -272,6 +272,15 @@ public sealed class FakePCloud : FakeCloud
     /// <summary>A single upload larger than this is cut off, as the real service did with a large database.</summary>
     public long MaxSingleUpload { get; set; } = long.MaxValue;
 
+    /// <summary>
+    /// Uploads larger than this are refused at once with an error and the connection is closed without reading the data –
+    /// what pCloud apparently does with uploads it does not accept.
+    /// </summary>
+    public long RefuseUploadsLargerThan { get; set; } = long.MaxValue;
+
+    /// <summary>Uploads larger than this always break off (the connection is reset).</summary>
+    public long CutUploadsLargerThan { get; set; } = long.MaxValue;
+
     /// <summary>The next upload_write requests that break off midway (the client must send the piece again).</summary>
     public int BrokenWrites;
 
@@ -297,6 +306,20 @@ public sealed class FakePCloud : FakeCloud
         }
 
         var parameters = new Dictionary<string, string>(context.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString()));
+        if (method is "uploadfile" or "upload_write" && context.Request.ContentLength > RefuseUploadsLargerThan)
+        {
+            context.Response.ContentType = "application/json";
+            context.Response.Headers.Connection = "close";
+            await context.Response.WriteAsync("{\"result\": 5000, \"error\": \"Upload refused for this test.\"}");
+            return; // "Connection: close": the connection ends after the answer, the data is never read
+        }
+
+        if (method is "uploadfile" or "upload_write" && context.Request.ContentLength > CutUploadsLargerThan)
+        {
+            context.Abort();
+            return;
+        }
+
         if (method == "uploadfile" && context.Request.ContentLength > MaxSingleUpload)
         {
             context.Abort();

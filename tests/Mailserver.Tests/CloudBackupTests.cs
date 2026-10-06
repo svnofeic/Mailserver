@@ -162,6 +162,25 @@ public sealed class CloudBackupTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PCloud_refusing_an_upload_shows_its_reason_and_the_file()
+    {
+        await ConnectPCloudAsync();
+        _pCloud.RefuseUploadsLargerThan = 512 * 1024;
+        await AppendAsync("Großer Anhang", 3 * 1024 * 1024);
+
+        var run = await _backups.RunAsync();
+        Assert.False(run.Success);
+        Assert.Matches(@"Hochladen von mail/\S+\.eml fehlgeschlagen \(5000: Upload refused", run.Message); // pCloud's reason, not "connection closed"
+
+        // If the connection breaks off for good, the message names the file and its size.
+        _pCloud.RefuseUploadsLargerThan = long.MaxValue;
+        _pCloud.CutUploadsLargerThan = 512 * 1024;
+        run = await _backups.RunAsync();
+        Assert.False(run.Success);
+        Assert.Matches(@"Verbindungsfehler: Hochladen von mail/\S+\.eml \(3 MB\)", run.Message);
+    }
+
+    [Fact]
     public async Task PCloud_login_with_two_factor_code()
     {
         var first = await PCloudStore.LoginAsync(_options.Backup, "2fa@pcloud.test", FakePCloud.Password, null, null, CancellationToken.None);
