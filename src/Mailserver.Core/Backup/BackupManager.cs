@@ -350,7 +350,7 @@ public sealed class BackupManager(
 
         var upload = source.Where(f => !index.TryGetValue(f.Key, out var known) || known.Size != f.Value).ToList();
         await Parallel.ForEachAsync(upload,
-            new ParallelOptions { MaxDegreeOfParallelism = store is FolderBackupStore ? 1 : 4, CancellationToken = cancellationToken },
+            new ParallelOptions { MaxDegreeOfParallelism = store switch { FolderBackupStore => 1, PCloudStore => 2, _ => 4 }, CancellationToken = cancellationToken },
             async (file, token) =>
             {
                 try
@@ -479,4 +479,4 @@ public sealed class BackupManager(
     }
 }
 
-public sealed class BackupException(string message) : Exception(message);
+public class BackupException(string message) : Exception(message);

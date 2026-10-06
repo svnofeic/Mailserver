@@ -86,7 +86,11 @@ public sealed class PCloudStore : IBackupStore
     {
         try
         {
-            await UploadFileAsync(localFile, path, cancellationToken);
+            await WhileBusyAsync(async () =>
+            {
+                await UploadFileAsync(localFile, path, cancellationToken);
+                return true;
+            }, cancellationToken);
         }
         catch (HttpRequestException ex)
         {
@@ -451,7 +455,33 @@ public sealed class PCloudStore : IBackupStore
     }
 
     /// <summary>Calls an API method; returns null if the result is one of <paramref name="missing"/>.</summary>
-    private async Task<JsonNode?> CallAsync(string method, Dictionary<string, string> parameters, CancellationToken cancellationToken, params int[] missing)
+    private Task<JsonNode?> CallAsync(string method, Dictionary<string, string> parameters, CancellationToken cancellationToken, params int[] missing) =>
+        WhileBusyAsync(() => CallOnceAsync(method, parameters, missing, cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Repeats <paramref name="action"/> while pCloud reports a temporary problem on its side (5000–5999, e.g. "5002: Internal
+    /// error, no servers available. Try again later.") – these come as a normal answer, not as an HTTP error.
+    /// </summary>
+    private static async Task<T> WhileBusyAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
+    {
+        var delay = TimeSpan.FromSeconds(1);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (BusyException) when (attempt < 8)
+            {
+                await Task.Delay(delay, cancellationToken);
+                delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 60));
+            }
+        }
+    }
+
+    private sealed class BusyException(string message) : BackupException(message);
+
+    private async Task<JsonNode?> CallOnceAsync(string method, Dictionary<string, string> parameters, int[] missing, CancellationToken cancellationToken)
     {
         parameters["auth"] = _token.Auth;
         var json = await PostAsync(_http, $"{_token.ApiUrl}/{method}", parameters, cancellationToken);
@@ -493,6 +523,11 @@ public sealed class PCloudStore : IBackupStore
         if (result == 0)
         {
             return;
+        }
+
+        if (result is >= 5000 and < 6000)
+        {
+            throw new BusyException($"pCloud: {action} fehlgeschlagen ({result}: {(string?)json["error"]}) – pCloud ist gerade überlastet.");
         }
 
         throw new BackupException(result switch

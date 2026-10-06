@@ -162,6 +162,19 @@ public sealed class CloudBackupTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PCloud_overloaded_for_a_moment_is_waited_for()
+    {
+        await ConnectPCloudAsync();
+        await AppendAsync("Eins");
+        await AppendAsync("Zwei");
+        _pCloud.BusyUploads = 3; // "5002: Internal error, no servers available. Try again later."
+
+        var run = await _backups.RunAsync();
+        Assert.True(run.Success, run.Message);
+        Assert.Equal(2, _pCloud.FilesBelow("Mailserver-Sicherung/mail").Count());
+    }
+
+    [Fact]
     public async Task PCloud_refusing_an_upload_shows_its_reason_and_the_file()
     {
         await ConnectPCloudAsync();
@@ -170,7 +183,7 @@ public sealed class CloudBackupTests : IAsyncLifetime
 
         var run = await _backups.RunAsync();
         Assert.False(run.Success);
-        Assert.Matches(@"Hochladen von mail/\S+\.eml fehlgeschlagen \(5000: Upload refused", run.Message); // pCloud's reason, not "connection closed"
+        Assert.Matches(@"Hochladen von mail/\S+\.eml fehlgeschlagen \(2003: Upload refused", run.Message); // pCloud's reason, not "connection closed"
 
         // If the connection breaks off for good, the message names the file and its size.
         _pCloud.RefuseUploadsLargerThan = long.MaxValue;

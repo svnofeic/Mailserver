@@ -286,6 +286,9 @@ public sealed class FakePCloud : FakeCloud
 
     public int Writes;
 
+    /// <summary>The next uploads are answered with "5002: no servers available" (pCloud overloaded for a moment).</summary>
+    public int BusyUploads;
+
     private readonly ConcurrentDictionary<long, MemoryStream> _uploads = new();
     private long _nextUpload;
 
@@ -310,7 +313,7 @@ public sealed class FakePCloud : FakeCloud
         {
             context.Response.ContentType = "application/json";
             context.Response.Headers.Connection = "close";
-            await context.Response.WriteAsync("{\"result\": 5000, \"error\": \"Upload refused for this test.\"}");
+            await context.Response.WriteAsync("{\"result\": 2003, \"error\": \"Upload refused for this test.\"}");
             return; // "Connection: close": the connection ends after the answer, the data is never read
         }
 
@@ -323,6 +326,12 @@ public sealed class FakePCloud : FakeCloud
         if (method == "uploadfile" && context.Request.ContentLength > MaxSingleUpload)
         {
             context.Abort();
+            return;
+        }
+
+        if (method == "uploadfile" && Interlocked.Decrement(ref BusyUploads) >= 0)
+        {
+            await JsonAsync(context, new { result = 5002, error = "Internal error, no servers available. Try again later." });
             return;
         }
 
