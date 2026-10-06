@@ -109,14 +109,37 @@ public sealed class PCloudStore : IBackupStore
 
         var url = $"{_token.ApiUrl}/uploadfile?auth={Uri.EscapeDataString(_token.Auth)}&path={Uri.EscapeDataString(folder)}&nopartial=1";
         using var response = await CloudHttp.SendAsync(_http, () =>
+            Upload(new HttpRequestMessage(HttpMethod.Post, url) { Content = FilePart(new StreamContent(File.OpenRead(localFile)), name) }),
+            cancellationToken);
+        CheckStored(await ReadAsync(response, cancellationToken), path);
+    }
+
+    /// <summary>
+    /// The file as multipart/form-data the way browsers and curl send it. .NET's own form puts the boundary in quotes and the
+    /// field names not (plus a filename*= parameter); pCloud then finds no file in the upload, answers "ok" for small files
+    /// without storing anything and breaks off the connection for larger ones.
+    /// </summary>
+    private static MultipartFormDataContent FilePart(HttpContent file, string name)
+    {
+        var boundary = "----MailserverBackup" + Guid.NewGuid().ToString("N");
+        var content = new MultipartFormDataContent(boundary);
+        content.Headers.Remove("Content-Type");
+        content.Headers.TryAddWithoutValidation("Content-Type", $"multipart/form-data; boundary={boundary}");
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        // the file name of the part is the file name in pCloud; an existing file is replaced
+        file.Headers.TryAddWithoutValidation("Content-Disposition", $"form-data; name=\"file\"; filename=\"{name.Replace("\"", "")}\"");
+        content.Add(file);
+        return content;
+    }
+
+    /// <summary>An upload counts only if pCloud reports the stored file – "ok" without one means it did not find the file.</summary>
+    private static void CheckStored(JsonNode json, string path)
+    {
+        Check(json, $"Hochladen von {path}");
+        if (json["metadata"] is not JsonArray { Count: > 0 })
         {
-            var content = new MultipartFormDataContent();
-            var file = new StreamContent(File.OpenRead(localFile));
-            file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            content.Add(file, "file", name); // the name of the part is the file name in pCloud; an existing file is replaced
-            return Upload(new HttpRequestMessage(HttpMethod.Post, url) { Content = content });
-        }, cancellationToken);
-        Check(await ReadAsync(response, cancellationToken), $"Hochladen von {path}");
+            throw new BackupException($"pCloud hat {path} nicht gespeichert (keine Datei im Upload erkannt).");
+        }
     }
 
     private async Task UploadInPiecesAsync(string localFile, string folder, string name, string path, CancellationToken cancellationToken)
@@ -248,8 +271,9 @@ public sealed class PCloudStore : IBackupStore
                 {
                     var json = await send(freshClient ?? _http, data, $"test-{size}-{results.Count}.bin");
                     var result = (int?)json["result"] ?? -1;
-                    results.Add(new ProbeResult(name, size, result == 0, started.Elapsed,
-                        result == 0 ? null : $"{result}: {(string?)json["error"]}"));
+                    var stored = result == 0 && json["metadata"] is JsonArray { Count: > 0 } or JsonObject;
+                    results.Add(new ProbeResult(name, size, stored, started.Elapsed,
+                        stored ? null : result == 0 ? "pCloud meldet ok, hat aber keine Datei gespeichert" : $"{result}: {(string?)json["error"]}"));
                 }
                 catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or BackupException)
                 {
@@ -274,11 +298,7 @@ public sealed class PCloudStore : IBackupStore
     private HttpRequestMessage Multipart(string folder, byte[] data, string name)
     {
         var url = $"{_token.ApiUrl}/uploadfile?auth={Uri.EscapeDataString(_token.Auth)}&path={Uri.EscapeDataString(folder)}&nopartial=1";
-        var content = new MultipartFormDataContent();
-        var file = new ByteArrayContent(data);
-        file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        content.Add(file, "file", name);
-        return new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+        return new HttpRequestMessage(HttpMethod.Post, url) { Content = FilePart(new ByteArrayContent(data), name) };
     }
 
     private async Task<JsonNode> WriteOnceAsync(HttpClient http, string folder, byte[] data, string name, CancellationToken cancellationToken)

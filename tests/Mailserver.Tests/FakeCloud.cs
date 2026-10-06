@@ -326,6 +326,13 @@ public sealed class FakePCloud : FakeCloud
             return;
         }
 
+        if (method == "uploadfile" && context.Request.ContentType?.Contains("boundary=\"", StringComparison.Ordinal) == true)
+        {
+            // pCloud's parser does not understand a quoted boundary: it finds no file, answers "ok" and stores nothing.
+            await JsonAsync(context, new { result = 0, metadata = Array.Empty<object>(), fileids = Array.Empty<long>() });
+            return;
+        }
+
         if (method == "upload_write")
         {
             await WriteAsync(context, parameters);
@@ -419,7 +426,7 @@ public sealed class FakePCloud : FakeCloud
 
                 Files[$"{path}/{parameters["name"]}"] = upload.ToArray();
                 Interlocked.Increment(ref Uploads);
-                await JsonAsync(context, new { result = 0 });
+                await JsonAsync(context, new { result = 0, metadata = new { name = parameters["name"], size = upload.Length, isfolder = false } });
                 return;
             case "upload_delete":
                 _uploads.TryRemove(long.Parse(parameters["uploadid"]), out _);
@@ -479,15 +486,17 @@ public sealed class FakePCloud : FakeCloud
             return;
         }
 
+        var stored = new List<object>();
         foreach (var file in files)
         {
             using var buffer = new MemoryStream();
             await file.CopyToAsync(buffer);
             Files[$"{folder}/{file.FileName}"] = buffer.ToArray();
             Interlocked.Increment(ref Uploads);
+            stored.Add(new { name = file.FileName, size = buffer.Length, isfolder = false });
         }
 
-        await JsonAsync(context, new { result = 0 });
+        await JsonAsync(context, new { result = 0, metadata = stored });
     }
 
     private object Listing(string folder, bool recursive, bool noFiles) => new { name = folder, isfolder = true, contents = Contents(folder, recursive, noFiles) };
