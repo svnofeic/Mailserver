@@ -139,7 +139,27 @@
             <div class="row" style="margin-top: 10px">
                 <span class="pill good">verbunden mit @Model.Cloud.Account(PCloudStore.Provider)</span>
                 <button type="submit" asp-page-handler="Disconnect" name="provider" value="@PCloudStore.Provider" class="secondary">Trennen</button>
+                <button type="submit" asp-page-handler="TestPCloud" class="secondary" title="Schickt Testdateien von 1 KB bis 2 MB auf verschiedenen Wegen zu pCloud und löscht sie wieder">Verbindung testen</button>
             </div>
+            @if (Model.Probe.Count > 0)
+            {
+                <div class="table-wrap" style="margin-top: 10px">
+                    <table>
+                        <thead><tr><th>Weg</th><th class="num">Größe</th><th>Ergebnis</th></tr></thead>
+                        <tbody>
+                            @foreach (var probe in Model.Probe)
+                            {
+                                <tr>
+                                    <td class="small">@probe.Variant</td>
+                                    <td class="num small">@BackupManager.Format(probe.Size)</td>
+                                    <td class="small">@if (probe.Success) { <span class="pill good">ok</span> <span class="muted">@probe.Duration.TotalSeconds.ToString("0.0") s</span> }
+                                        else { <span class="pill bad">fehlgeschlagen</span> <span class="muted" style="overflow-wrap: anywhere">@probe.Detail</span> }</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         }
         else
         {

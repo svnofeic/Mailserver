@@ -320,6 +320,21 @@ public sealed class CloudBackupWebTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Connection_test_shows_where_uploads_break_off()
+    {
+        await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",
+            Form(BackupOptions.PCloudTarget, ("email", "sven@pcloud.test"), ("password", FakePCloud.Password)));
+        _pCloud.CutUploadsLargerThan = 100 * 1024;
+
+        await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=TestPCloud", Form(BackupOptions.PCloudTarget));
+        Assert.Contains("Verbindungstest abgeschlossen", _web.LastPage);
+        Assert.Contains("uploadfile, neue Verbindung", _web.LastPage);
+        Assert.Contains("ok", _web.LastPage);
+        Assert.Contains("fehlgeschlagen", _web.LastPage);
+        Assert.Empty(_pCloud.FilesBelow("Sicherung/verbindungstest")); // test files removed again
+    }
+
+    [Fact]
     public async Task Admin_enters_only_the_code_in_the_second_step()
     {
         await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=ConnectPCloud",

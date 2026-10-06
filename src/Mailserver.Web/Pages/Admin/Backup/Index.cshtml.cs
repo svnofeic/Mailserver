@@ -84,6 +84,31 @@ public sealed class IndexModel(IOptions<MailserverOptions> options, BackupManage
         return RedirectToPage();
     }
 
+    /// <summary>Results of the last connection test (kept for the page shown after the redirect).</summary>
+    public IReadOnlyList<PCloudStore.ProbeResult> Probe => _probe ??=
+        TempData[nameof(Probe)] is string json ? System.Text.Json.JsonSerializer.Deserialize<List<PCloudStore.ProbeResult>>(json) ?? [] : [];
+
+    private IReadOnlyList<PCloudStore.ProbeResult>? _probe;
+
+    public async Task<IActionResult> OnPostTestPCloudAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var store = backups.Stores.Open(Current with { Target = BackupOptions.PCloudTarget });
+            var results = await ((PCloudStore)store).ProbeAsync(cancellationToken);
+            TempData[nameof(Probe)] = System.Text.Json.JsonSerializer.Serialize(results);
+            Message = results.All(r => r.Success)
+                ? "Verbindungstest: alle Übertragungen sind angekommen."
+                : "Verbindungstest abgeschlossen – das Ergebnis steht unten bei pCloud.";
+        }
+        catch (Exception ex) when (ex is BackupException or HttpRequestException or OperationCanceledException)
+        {
+            ErrorMessage = $"Verbindungstest nicht möglich: {ex.Message}";
+        }
+
+        return RedirectToPage();
+    }
+
     public IActionResult OnPostDisconnect(string provider)
     {
         if (provider is OneDriveStore.Provider or PCloudStore.Provider)

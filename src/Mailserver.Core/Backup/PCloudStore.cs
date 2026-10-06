@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 
 namespace Mailserver.Core.Backup;
@@ -215,6 +216,93 @@ public sealed class PCloudStore : IBackupStore
             {
                 _createdFolders.TryRemove(key, out _);
             }
+        }
+    }
+
+    public sealed record ProbeResult(string Variant, int Size, bool Success, TimeSpan Duration, string? Detail);
+
+    /// <summary>
+    /// Connection test for the settings page: uploads test files of growing size in different ways, each only once (no retries),
+    /// and removes them again – to find out where uploads break off.
+    /// </summary>
+    public async Task<IReadOnlyList<ProbeResult>> ProbeAsync(CancellationToken cancellationToken)
+    {
+        var folder = Full("verbindungstest");
+        await EnsureFolderAsync(folder, cancellationToken);
+        var results = new List<ProbeResult>();
+        var variants = new (string Name, Func<HttpClient, byte[], string, Task<JsonNode>> Send, bool FreshConnection)[]
+        {
+            ("uploadfile", (http, data, name) => SendOnceAsync(http, Upload(Multipart(folder, data, name)), cancellationToken), false),
+            ("uploadfile, neue Verbindung", (http, data, name) => SendOnceAsync(http, Upload(Multipart(folder, data, name)), cancellationToken), true),
+            ("uploadfile ohne 100-continue", (http, data, name) => SendOnceAsync(http, Multipart(folder, data, name), cancellationToken), false),
+            ("upload_write", (http, data, name) => WriteOnceAsync(http, folder, data, name, cancellationToken), false),
+        };
+        foreach (var size in new[] { 1024, 32 * 1024, 128 * 1024, 512 * 1024, 2 * 1024 * 1024 })
+        {
+            var data = RandomNumberGenerator.GetBytes(size);
+            foreach (var (name, send, fresh) in variants)
+            {
+                using var freshClient = fresh ? CloudHttp.CreateClient() : null;
+                var started = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    var json = await send(freshClient ?? _http, data, $"test-{size}-{results.Count}.bin");
+                    var result = (int?)json["result"] ?? -1;
+                    results.Add(new ProbeResult(name, size, result == 0, started.Elapsed,
+                        result == 0 ? null : $"{result}: {(string?)json["error"]}"));
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or BackupException)
+                {
+                    var reasons = new List<string>();
+                    for (var e = ex; e is not null; e = e.InnerException)
+                    {
+                        if (!reasons.Contains(e.Message))
+                        {
+                            reasons.Add(e.Message);
+                        }
+                    }
+
+                    results.Add(new ProbeResult(name, size, false, started.Elapsed, string.Join(" → ", reasons)));
+                }
+            }
+        }
+
+        await DeleteAsync("verbindungstest", cancellationToken);
+        return results;
+    }
+
+    private HttpRequestMessage Multipart(string folder, byte[] data, string name)
+    {
+        var url = $"{_token.ApiUrl}/uploadfile?auth={Uri.EscapeDataString(_token.Auth)}&path={Uri.EscapeDataString(folder)}&nopartial=1";
+        var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(data);
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        content.Add(file, "file", name);
+        return new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+    }
+
+    private async Task<JsonNode> WriteOnceAsync(HttpClient http, string folder, byte[] data, string name, CancellationToken cancellationToken)
+    {
+        var created = await CallAsync("upload_create", [], cancellationToken);
+        var uploadId = ((long?)created!["uploadid"])?.ToString(CultureInfo.InvariantCulture);
+        var url = $"{_token.ApiUrl}/upload_write?auth={Uri.EscapeDataString(_token.Auth)}&uploadid={uploadId}&uploadoffset=0";
+        var written = await SendOnceAsync(http, Upload(new HttpRequestMessage(HttpMethod.Put, url) { Content = new ByteArrayContent(data) }), cancellationToken);
+        if ((int?)written["result"] != 0)
+        {
+            return written;
+        }
+
+        return await CallAsync("upload_save", new() { ["uploadid"] = uploadId!, ["path"] = folder, ["name"] = name }, cancellationToken) ?? written;
+    }
+
+    private static async Task<JsonNode> SendOnceAsync(HttpClient http, HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        using (request)
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(60));
+            using var response = await http.SendAsync(request, timeout.Token);
+            return await ReadAsync(response, timeout.Token);
         }
     }
 
