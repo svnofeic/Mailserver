@@ -7,7 +7,11 @@ namespace Mailserver.Core.Configuration;
 /// Writes the settings that can be changed at runtime to data/settings.json. That file is loaded after appsettings.json,
 /// overrides it and is watched for changes.
 /// </summary>
-public sealed class SettingsStore(DataPaths paths)
+/// <param name="configuration">
+/// Reloaded right after writing. The file watcher alone reacts only after a short delay; a page shown in between (e.g. right
+/// after "Speichern") would still show – and on the next save write back – the old values.
+/// </param>
+public sealed class SettingsStore(DataPaths paths, Microsoft.Extensions.Configuration.IConfiguration? configuration = null)
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly Lock _lock = new();
@@ -77,6 +81,7 @@ public sealed class SettingsStore(DataPaths paths)
         var temp = paths.SettingsFile + ".tmp";
         File.WriteAllText(temp, root.ToJsonString(Json));
         File.Move(temp, paths.SettingsFile, overwrite: true);
+        (configuration as Microsoft.Extensions.Configuration.IConfigurationRoot)?.Reload();
     }
 
     private JsonObject Load()

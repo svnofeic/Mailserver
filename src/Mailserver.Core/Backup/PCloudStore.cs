@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text.Json.Nodes;
@@ -18,6 +19,7 @@ public sealed class PCloudStore : IBackupStore
     private const int LoginFailed = 2000;
     private const int FolderMissing = 2005;
     private const int FileMissing = 2009;
+    private const int NotFound = 2055; // "File or folder not found" – what stat actually answers for a missing path
     private const int TwoFactorRequired = 2297;
     private const int CodeMissing = 1022;
     private const int CodeInvalid = 2012;
@@ -36,6 +38,12 @@ public sealed class PCloudStore : IBackupStore
 
     public string Description => $"pCloud ({_token.Account}): {_folder}";
 
+    /// <summary>
+    /// Larger files go up in pieces of this size (upload_create / upload_write / upload_save): one request for a database of
+    /// several hundred MB tends to be cut off on the way, and then everything would start again from the beginning.
+    /// </summary>
+    public int ChunkSize { get; set; } = 8 * 1024 * 1024;
+
     public string Key => $"pcloud:{_token.Account}:{_folder}".ToLowerInvariant();
 
     public static string ApiUrl(BackupOptions settings) =>
@@ -45,13 +53,13 @@ public sealed class PCloudStore : IBackupStore
 
     public async Task<IReadOnlyList<string>> ListFoldersAsync(string folder, CancellationToken cancellationToken)
     {
-        var json = await CallAsync("listfolder", new() { ["path"] = Full(folder), ["nofiles"] = "1" }, cancellationToken, FolderMissing);
+        var json = await CallAsync("listfolder", new() { ["path"] = Full(folder), ["nofiles"] = "1" }, cancellationToken, FolderMissing, NotFound);
         return json is null ? [] : Contents(json["metadata"]).Where(c => (bool?)c["isfolder"] == true).Select(c => (string)c["name"]!).ToList();
     }
 
     public async Task<IReadOnlyList<StoredFile>> ListFilesAsync(string folder, CancellationToken cancellationToken)
     {
-        var json = await CallAsync("listfolder", new() { ["path"] = Full(folder), ["recursive"] = "1" }, cancellationToken, FolderMissing);
+        var json = await CallAsync("listfolder", new() { ["path"] = Full(folder), ["recursive"] = "1" }, cancellationToken, FolderMissing, NotFound);
         var result = new List<StoredFile>();
         void Walk(JsonNode? node, string prefix)
         {
@@ -80,6 +88,12 @@ public sealed class PCloudStore : IBackupStore
         await EnsureFolderAsync(folder, cancellationToken);
 
         var name = full[(full.LastIndexOf('/') + 1)..];
+        if (new FileInfo(localFile).Length > ChunkSize)
+        {
+            await UploadInPiecesAsync(localFile, folder, name, path, cancellationToken);
+            return;
+        }
+
         var url = $"{_token.ApiUrl}/uploadfile?auth={Uri.EscapeDataString(_token.Auth)}&path={Uri.EscapeDataString(folder)}&nopartial=1";
         using var response = await CloudHttp.SendAsync(_http, () =>
         {
@@ -90,6 +104,49 @@ public sealed class PCloudStore : IBackupStore
             return new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
         }, cancellationToken);
         Check(await ReadAsync(response, cancellationToken), $"Hochladen von {path}");
+    }
+
+    private async Task UploadInPiecesAsync(string localFile, string folder, string name, string path, CancellationToken cancellationToken)
+    {
+        var created = await CallAsync("upload_create", [], cancellationToken);
+        var uploadId = ((long?)created!["uploadid"] ?? throw new BackupException("pCloud: upload_create lieferte keine uploadid.")).ToString(CultureInfo.InvariantCulture);
+        try
+        {
+            await using var file = new FileStream(localFile, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            var buffer = new byte[ChunkSize];
+            long offset = 0;
+            while (true)
+            {
+                var length = await file.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
+                if (length == 0)
+                {
+                    break;
+                }
+
+                var url = $"{_token.ApiUrl}/upload_write?auth={Uri.EscapeDataString(_token.Auth)}&uploadid={uploadId}&uploadoffset={offset}";
+                using var response = await CloudHttp.SendAsync(_http, () => new HttpRequestMessage(HttpMethod.Put, url)
+                {
+                    Content = new ByteArrayContent(buffer, 0, length),
+                }, cancellationToken);
+                Check(await ReadAsync(response, cancellationToken), $"Hochladen von {path}");
+                offset += length;
+            }
+
+            await CallAsync("upload_save", new() { ["uploadid"] = uploadId, ["path"] = folder, ["name"] = name }, cancellationToken);
+        }
+        catch
+        {
+            // Unfinished uploads would otherwise occupy space at pCloud for a while.
+            try
+            {
+                await CallAsync("upload_delete", new() { ["uploadid"] = uploadId }, CancellationToken.None);
+            }
+            catch (Exception ex) when (ex is BackupException or HttpRequestException or TaskCanceledException)
+            {
+            }
+
+            throw;
+        }
     }
 
     public async Task DownloadAsync(string path, string localFile, CancellationToken cancellationToken)
@@ -115,7 +172,7 @@ public sealed class PCloudStore : IBackupStore
         var temp = Path.GetTempFileName();
         try
         {
-            if (await CallAsync("stat", new() { ["path"] = Full(path) }, cancellationToken, FileMissing, FolderMissing) is null)
+            if (await CallAsync("stat", new() { ["path"] = Full(path) }, cancellationToken, FileMissing, FolderMissing, NotFound) is null)
             {
                 return null;
             }
@@ -132,14 +189,14 @@ public sealed class PCloudStore : IBackupStore
     public async Task DeleteAsync(string path, CancellationToken cancellationToken)
     {
         var full = Full(path);
-        var stat = await CallAsync("stat", new() { ["path"] = full }, cancellationToken, FileMissing, FolderMissing);
+        var stat = await CallAsync("stat", new() { ["path"] = full }, cancellationToken, FileMissing, FolderMissing, NotFound);
         if (stat is null)
         {
             return;
         }
 
         var folder = (bool?)stat["metadata"]?["isfolder"] == true;
-        await CallAsync(folder ? "deletefolderrecursive" : "deletefile", new() { ["path"] = full }, cancellationToken, FileMissing, FolderMissing);
+        await CallAsync(folder ? "deletefolderrecursive" : "deletefile", new() { ["path"] = full }, cancellationToken, FileMissing, FolderMissing, NotFound);
         if (folder)
         {
             foreach (var key in _createdFolders.Keys.Where(k => k == full || k.StartsWith(full + "/", StringComparison.Ordinal)))

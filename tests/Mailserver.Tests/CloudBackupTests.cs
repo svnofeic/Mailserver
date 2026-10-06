@@ -147,6 +147,21 @@ public sealed class CloudBackupTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PCloud_takes_a_large_file_in_pieces_and_repeats_a_broken_piece()
+    {
+        await ConnectPCloudAsync();
+        _pCloud.MaxSingleUpload = 1024 * 1024; // one big request is cut off, as seen with a large database
+        _pCloud.BrokenWrites = 1;
+        var big = await AppendAsync("Großer Anhang", 9 * 1024 * 1024);
+
+        var run = await _backups.RunAsync();
+        Assert.True(run.Success, run.Message);
+        Assert.Equal(2, _pCloud.Writes); // 8 MB + the rest; the broken piece was sent again
+        Assert.Equal(await File.ReadAllBytesAsync(_data.Mailboxes.GetMessagePath(big)),
+            _pCloud.Files[$"Mailserver-Sicherung/mail/{big.FileName.Replace('\\', '/')}"]);
+    }
+
+    [Fact]
     public async Task PCloud_login_with_two_factor_code()
     {
         var first = await PCloudStore.LoginAsync(_options.Backup, "2fa@pcloud.test", FakePCloud.Password, null, null, CancellationToken.None);
@@ -273,6 +288,16 @@ public sealed class CloudBackupWebTests : IAsyncLifetime
         await _web.GetAsync("/Admin/Backup");
         Assert.Contains("verbunden mit 2fa@pcloud.test, 9 GB frei", _web.LastPage);
         Assert.Contains(backups.LastSuccess()!.Snapshot!, _web.LastPage);
+    }
+
+    [Fact]
+    public async Task Saved_cloud_folder_is_shown_right_away_and_kept()
+    {
+        await _web.PostAsync("/Admin/Backup", "/Admin/Backup?handler=Save",
+            [.. Form(BackupOptions.PCloudTarget).Where(f => f.Item1 != "Form.RemoteFolder"), ("Form.RemoteFolder", "Server/Mail-Backup")]);
+        // The page right after saving must show the new folder, not the one from before (a save from there would restore it).
+        Assert.Contains("value=\"Server/Mail-Backup\"", _web.LastPage);
+        Assert.Equal("Server/Mail-Backup", _server.Services.GetRequiredService<IOptions<MailserverOptions>>().Value.Backup.RemoteFolder);
     }
 
     [Fact]

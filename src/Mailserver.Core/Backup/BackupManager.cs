@@ -96,7 +96,7 @@ public sealed class BackupManager(
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BackupException or SqliteException
                                        or System.ComponentModel.Win32Exception or HttpRequestException or JsonException)
         {
-            message = ex is HttpRequestException ? $"Verbindungsfehler: {ex.Message}" : ex.Message;
+            message = ex is HttpRequestException ? $"Verbindungsfehler: {Reasons(ex)}" : ex.Message;
             if (counters.Files > 0)
             {
                 message += $" ({counters.Files} Dateien wurden schon übertragen und werden beim nächsten Mal nicht erneut übertragen.)";
@@ -461,6 +461,21 @@ public sealed class BackupManager(
             Interlocked.Increment(ref _files);
             Interlocked.Add(ref _bytes, bytes);
         }
+    }
+
+    /// <summary>The message with its causes ("Error while copying content to a stream." alone says nothing about why).</summary>
+    private static string Reasons(Exception ex)
+    {
+        var messages = new List<string>();
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (!messages.Contains(current.Message))
+            {
+                messages.Add(current.Message);
+            }
+        }
+
+        return string.Join(" → ", messages);
     }
 }
 

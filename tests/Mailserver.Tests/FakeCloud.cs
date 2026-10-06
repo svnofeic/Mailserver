@@ -269,6 +269,17 @@ public sealed class FakePCloud : FakeCloud
     public const string Password = "pcloud-passwort";
     public const string Auth = "auth-token-1";
 
+    /// <summary>A single upload larger than this is cut off, as the real service did with a large database.</summary>
+    public long MaxSingleUpload { get; set; } = long.MaxValue;
+
+    /// <summary>The next upload_write requests that break off midway (the client must send the piece again).</summary>
+    public int BrokenWrites;
+
+    public int Writes;
+
+    private readonly ConcurrentDictionary<long, MemoryStream> _uploads = new();
+    private long _nextUpload;
+
     public static async Task<FakePCloud> CreateAsync()
     {
         var cloud = new FakePCloud();
@@ -286,6 +297,18 @@ public sealed class FakePCloud : FakeCloud
         }
 
         var parameters = new Dictionary<string, string>(context.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString()));
+        if (method == "uploadfile" && context.Request.ContentLength > MaxSingleUpload)
+        {
+            context.Abort();
+            return;
+        }
+
+        if (method == "upload_write")
+        {
+            await WriteAsync(context, parameters);
+            return;
+        }
+
         if (context.Request.HasFormContentType)
         {
             var form = await context.Request.ReadFormAsync();
@@ -354,9 +377,30 @@ public sealed class FakePCloud : FakeCloud
                 await JsonAsync(context, new { result = 0, metadata = Listing(path, parameters.ContainsKey("recursive"), parameters.ContainsKey("nofiles")) });
                 return;
             case "stat":
+                // what pCloud really answers for a missing file or folder
                 await JsonAsync(context, Files.ContainsKey(path) ? new { result = 0, metadata = new { isfolder = false } }
                     : Folders.ContainsKey(path) ? new { result = 0, metadata = new { isfolder = true } }
-                    : (object)new { result = 2009, error = "File not found." });
+                    : (object)new { result = 2055, error = "File or folder not found." });
+                return;
+            case "upload_create":
+                var id = Interlocked.Increment(ref _nextUpload);
+                _uploads[id] = new MemoryStream();
+                await JsonAsync(context, new { result = 0, uploadid = id });
+                return;
+            case "upload_save":
+                if (!_uploads.TryRemove(long.Parse(parameters["uploadid"]), out var upload) || !Folders.ContainsKey(path))
+                {
+                    await JsonAsync(context, new { result = 2005, error = "Directory does not exist." });
+                    return;
+                }
+
+                Files[$"{path}/{parameters["name"]}"] = upload.ToArray();
+                Interlocked.Increment(ref Uploads);
+                await JsonAsync(context, new { result = 0 });
+                return;
+            case "upload_delete":
+                _uploads.TryRemove(long.Parse(parameters["uploadid"]), out _);
+                await JsonAsync(context, new { result = 0 });
                 return;
             case "deletefile":
                 await JsonAsync(context, Files.TryRemove(path, out _) ? new { result = 0 } : (object)new { result = 2009, error = "File not found." });
@@ -374,6 +418,33 @@ public sealed class FakePCloud : FakeCloud
                 await JsonAsync(context, new { result = 2001, error = $"Unknown method {method}." });
                 return;
         }
+    }
+
+    private async Task WriteAsync(HttpContext context, Dictionary<string, string> parameters)
+    {
+        if (parameters.GetValueOrDefault("auth") != Auth || !_uploads.TryGetValue(long.Parse(parameters["uploadid"]), out var upload))
+        {
+            await JsonAsync(context, new { result = 1900, error = "Invalid upload id." });
+            return;
+        }
+
+        if (Interlocked.Decrement(ref BrokenWrites) >= 0)
+        {
+            context.Abort();
+            return;
+        }
+
+        using var buffer = new MemoryStream();
+        await context.Request.Body.CopyToAsync(buffer);
+        lock (upload)
+        {
+            upload.Position = long.Parse(parameters["uploadoffset"]);
+            buffer.Position = 0;
+            buffer.CopyTo(upload);
+        }
+
+        Interlocked.Increment(ref Writes);
+        await JsonAsync(context, new { result = 0 });
     }
 
     private async Task UploadAsync(HttpContext context, Dictionary<string, string> parameters, IFormFileCollection files)
