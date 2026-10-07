@@ -156,7 +156,7 @@ Noch nicht enthalten sind CONDSTORE/QRESYNC (schnellere Synchronisation großer 
 | `Mailserver:Security:Sending:*` | Versandlimits: externe Empfänger pro Nachricht/Stunde/Tag (100/300/1000, `0` = ohne Limit); `BlockOnLimit` sperrt das Postfach bei Überschreitung und benachrichtigt die Admins |
 | `Mailserver:Backup:*` | Datensicherung: `Enabled`, `Target` (`Folder`, `OneDrive`, `pCloud`), `Directory`, `RemoteFolder`, `Time` (03:00), `KeepDays` (14), `Username`/`Password` für Netzwerkfreigaben, `OneDriveClientId`, `PCloudRegion` |
 | `Mailserver:Antivirus:*` | Virenschutz: `Scanner` (`Auto` = Microsoft Defender, `ClamAV`, `None`), `BlockedExtensions`, `SuspiciousAttachments` (`Junk`/`Reject`/`Allow`), `OnScanError` (`Accept`/`Defer`), `ScanOutgoing` |
-| `Mailserver:Web:*` | Weboberfläche: `HttpsPort` (9443), `ListenAddresses`, `Enabled`, `SessionTimeout` |
+| `Mailserver:Web:*` | Weboberfläche: `HttpsPort` (9443), `ListenAddresses`, `Enabled`, `SessionTimeout`, `PublicUrl` (Adresse in Links aus Mails, z. B. `https://webmail.feicht.me`; leer = `https://<Hostname>:<HttpsPort>`) |
 | `Mailserver:Spam:*` | Spamfilter: Schwellen für Junk/Löschen, Blacklists, Greylisting, vertrauenswürdige Netze |
 
 ### Verwaltung

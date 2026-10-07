@@ -261,6 +261,23 @@ public sealed class WebAdminTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Admin_sets_and_removes_a_recovery_address()
+    {
+        var recovery = _server.Services.GetRequiredService<Mailserver.Core.Accounts.PasswordRecovery>();
+        await _web.PostAsync("/Admin/Mailboxes/Edit?address=alice%40example.test", "/Admin/Mailboxes/Edit?handler=Recovery&address=alice%40example.test",
+            ("recoveryAddress", "alice@remote.test"));
+        Assert.Contains("Ersatz-Adresse von alice@example.test gespeichert", _web.LastPage);
+        Assert.Equal(new Mailserver.Core.Accounts.RecoveryAddress("alice@remote.test", true), recovery.Get(_server.User("alice").Id));
+
+        await _web.GetAsync("/Admin/Mailboxes/Edit?address=chef%40example.test");
+        Assert.Contains("Administratoren können ihr Passwort nicht per E-Mail zurücksetzen", _web.LastPage);
+
+        await _web.PostAsync("/Admin/Mailboxes/Edit?address=alice%40example.test", "/Admin/Mailboxes/Edit?handler=Recovery&address=alice%40example.test",
+            ("recoveryAddress", "alice@remote.test"), ("remove", "true"));
+        Assert.Null(recovery.Get(_server.User("alice").Id));
+    }
+
+    [Fact]
     public async Task Removing_admin_rights_ends_admin_session()
     {
         _server.HostAccounts.SetAdmin(EmailAddress.Parse(Admin), false);

@@ -1,0 +1,25 @@
+@page
+@model Mailserver.Web.Pages.Recovery.ConfirmModel
+@{ ViewData["Title"] = "Ersatz-Adresse bestätigen"; }
+<div class="login">
+    <div class="brand"><span class="logo">@Icons.Get("mail")</span><span>Mailserver<small>@HttpContext.Request.Host.Host</small></span></div>
+    <h1>Ersatz-Adresse bestätigen</h1>
+    @if (Model.Confirmed is { } account)
+    {
+        <div class="notice good" role="status">Bestätigt. Wer das Passwort von <strong>@account.Address</strong> vergisst, kann es jetzt über
+            „Passwort vergessen“ auf der Anmeldeseite selbst zurücksetzen.</div>
+        <p><a href="/Login">Zur Anmeldung</a></p>
+    }
+    else if (Model.Failed)
+    {
+        <div class="notice bad" role="alert">Dieser Link ist ungültig oder abgelaufen. Die Ersatz-Adresse bitte unter „Passwort“ erneut eintragen.</div>
+    }
+    else
+    {
+        <p>Diese Adresse als Ersatz-Adresse für „Passwort vergessen“ verwenden?</p>
+        <form method="post">
+            <input type="hidden" name="token" value="@Model.Token" />
+            <button type="submit">Bestätigen</button>
+        </form>
+    }
+</div>

@@ -10,8 +10,39 @@ namespace Mailserver.Web.Pages.Admin.Mailboxes;
 
 public sealed class EditModel(AccountStore accounts, MailboxStore mailboxes, RuleStore rules, MailboxSettingsStore settings,
     Mailserver.Core.Security.SendingLimiter sendingLimiter, Microsoft.Extensions.Options.IOptions<MailserverOptions> options,
-    Mailserver.Core.SpamLogging.SpamLog log, Microsoft.Extensions.Logging.ILogger<EditModel> logger) : MailPageModel
+    Mailserver.Core.SpamLogging.SpamLog log, Microsoft.Extensions.Logging.ILogger<EditModel> logger, PasswordRecovery recovery) : MailPageModel
 {
+    public RecoveryAddress? Recovery => recovery.Get(Account.Id);
+
+    /// <summary>Sets (as confirmed – the administrator vouches for it) or removes the address for "Passwort vergessen".</summary>
+    public IActionResult OnPostRecovery(string address, string? recoveryAddress, bool remove = false)
+    {
+        if (!Load(address))
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            if (remove || string.IsNullOrWhiteSpace(recoveryAddress))
+            {
+                recovery.Remove(Account.Id);
+                Message = $"Ersatz-Adresse von {Account.Address} entfernt.";
+            }
+            else
+            {
+                recovery.SetConfirmedAddress(Account, recoveryAddress);
+                Message = $"Ersatz-Adresse von {Account.Address} gespeichert.";
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return Redirect($"/Admin/Mailboxes/Edit?address={Account.Address}");
+    }
+
     public SendingState Sending { get; private set; } = SendingState.Default;
     public (long Hour, long Day) SendingUsage { get; private set; }
     public SendingLimitOptions DefaultLimits => options.Value.Security.Sending;

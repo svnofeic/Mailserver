@@ -1,0 +1,27 @@
+@page
+@model Mailserver.Web.Pages.Recovery.IndexModel
+@{ ViewData["Title"] = "Passwort vergessen"; }
+<div class="login">
+    <div class="brand"><span class="logo">@Icons.Get("mail")</span><span>Mailserver<small>@HttpContext.Request.Host.Host</small></span></div>
+    <h1>Passwort vergessen</h1>
+    @if (Model.Sent)
+    {
+        <div class="notice good" role="status">Falls für dieses Postfach eine bestätigte Ersatz-Adresse hinterlegt ist, ist der Link zum
+            Zurücksetzen jetzt dorthin unterwegs. Er gilt 30 Minuten. Bitte auch im Spam-Ordner nachsehen.</div>
+        <p class="small muted">Keine Mail bekommen? Dann ist keine Ersatz-Adresse eingetragen – bitte an den Administrator wenden.</p>
+        <p><a href="/Login">Zur Anmeldung</a></p>
+    }
+    else
+    {
+        @if (Model.Error is not null)
+        {
+            <div class="notice bad" role="alert">@Model.Error</div>
+        }
+        <p class="small muted">Der Link zum Setzen eines neuen Passworts geht an die Ersatz-Adresse, die unter „Passwort“ hinterlegt wurde.</p>
+        <form method="post">
+            <label>E-Mail-Adresse des Postfachs<input name="email" type="email" autocomplete="username" required autofocus /></label>
+            <button type="submit">Link anfordern</button>
+        </form>
+        <p class="small"><a href="/Login">Zurück zur Anmeldung</a></p>
+    }
+</div>

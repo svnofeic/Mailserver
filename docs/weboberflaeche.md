@@ -63,7 +63,7 @@ darauf öffnet die Mail.
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
 | **Abwesenheit** | Automatische **Weiterleitung** an bis zu 10 Adressen (wahlweise mit oder ohne Kopie im Postfach) und **Abwesenheitsnotiz** mit Zeitraum, Betreff und Text. Solange etwas davon aktiv ist, erinnert ein Hinweis auf jeder Seite daran. |
 | **Benachrichtigungen** | Push-Benachrichtigungen bei neuer Mail pro Gerät ein- und ausschalten, Test senden (siehe oben) |
-| **Passwort** | Passwort ändern (gilt auch für IMAP/SMTP). Alle anderen angemeldeten Browser werden abgemeldet. |
+| **Passwort** | Passwort ändern (gilt auch für IMAP/SMTP). Alle anderen angemeldeten Browser werden abgemeldet. **Ersatz-Adresse** für „Passwort vergessen“ eintragen (siehe unten). |
 
 ## Für Administratoren
 
@@ -94,6 +94,25 @@ Hostname, Ports, Zertifikat und maximale Mailgröße stehen weiterhin nur in `ap
 
 Schutz gegen Aussperren: Das eigene Admin-Postfach kann man sich nicht selbst deaktivieren, löschen oder die Admin-Rechte
 entziehen; die Domain des eigenen Postfachs kann nicht gelöscht werden.
+
+## Passwort vergessen
+
+Auf der Anmeldeseite führt **„Passwort vergessen?“** zu einem Formular: Postfach-Adresse eingeben, der Link zum Setzen eines
+neuen Passworts geht an die **Ersatz-Adresse** des Postfachs (eine externe Adresse, z. B. bei GMX oder Gmail).
+
+- **Ersatz-Adresse eintragen:** Benutzer unter *Passwort* (mit dem aktuellen Passwort); sie gilt erst, wenn der
+  Bestätigungslink an diese Adresse angeklickt wurde. Administratoren tragen sie unter *Postfächer → Postfach* ein – dann
+  gilt sie sofort.
+- **Der Link** gilt 30 Minuten und nur einmal; ein neu angeforderter Link macht ältere ungültig. Gespeichert wird nur eine
+  Prüfsumme. Erst „Passwort setzen“ ändert etwas – das bloße Öffnen (auch durch Link-Scanner von Mailanbietern) nicht.
+- Das Formular antwortet **immer gleich** – es verrät nicht, ob es ein Postfach oder eine Ersatz-Adresse gibt. Höchstens
+  3 Anfragen pro Postfach und 10 pro IP-Adresse und Stunde.
+- Nach dem Zurücksetzen enden alle Sitzungen, Mailprogramme brauchen das neue Passwort, und ins Postfach geht eine
+  Info-Mail. Anfragen und Zurücksetzen stehen im **Verlauf** (Anmeldungen).
+- **Administratoren** sind ausgenommen (wer ihre Ersatz-Adresse übernimmt, hätte sonst den Server). Ein vergessenes
+  Admin-Passwort setzt man auf dem Server: `mailadmin user passwd <adresse>`.
+- Die Links in den Mails zeigen auf `https://<Hostname>:<HttpsPort>`; eine andere Adresse (z. B. `https://webmail.feicht.me`)
+  steht in `appsettings.json` unter `Mailserver:Web:PublicUrl`.
 
 ## Als Benutzer anmelden (Postfach öffnen)
 

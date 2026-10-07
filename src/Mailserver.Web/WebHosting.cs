@@ -89,6 +89,7 @@ public static class WebHosting
         });
         services.AddSingleton<Webmail.WebmailStore>();
         services.AddSingleton<Webmail.InlineImages>();
+        services.AddSingleton<RecoveryThrottle>();
         services.AddSingleton<Webmail.WebmailSender>();
         services.AddSingleton<Webmail.MailActions>();
         services.AddSingleton<Webmail.FolderManager>();
@@ -103,6 +104,7 @@ public static class WebHosting
             pages.Conventions.AuthorizeFolder("/");
             pages.Conventions.AllowAnonymousToPage("/Login");
             pages.Conventions.AllowAnonymousToPage("/Fehler");
+            pages.Conventions.AllowAnonymousToFolder("/Recovery");
             pages.Conventions.AuthorizeFolder("/Admin", AdminPolicy);
         }).AddApplicationPart(typeof(WebHosting).Assembly);
 

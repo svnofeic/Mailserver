@@ -1,0 +1,32 @@
+@page
+@model Mailserver.Web.Pages.Recovery.ResetModel
+@{ ViewData["Title"] = "Neues Passwort"; }
+<div class="login">
+    <div class="brand"><span class="logo">@Icons.Get("mail")</span><span>Mailserver<small>@HttpContext.Request.Host.Host</small></span></div>
+    <h1>Neues Passwort</h1>
+    @if (Model.Done)
+    {
+        <div class="notice good" role="status">Das Passwort für <strong>@Model.Account!.Address</strong> ist gesetzt. Bitte auch im Mailprogramm und
+            auf dem Handy das neue Passwort eintragen.</div>
+        <p><a class="button" href="/Login">Jetzt anmelden</a></p>
+    }
+    else if (Model.Account is null)
+    {
+        <div class="notice bad" role="alert">Dieser Link ist ungültig oder abgelaufen – er gilt nur 30 Minuten und nur einmal.</div>
+        <p><a href="/Recovery">Neuen Link anfordern</a></p>
+    }
+    else
+    {
+        @if (Model.Error is not null)
+        {
+            <div class="notice bad" role="alert">@Model.Error</div>
+        }
+        <p>Postfach <strong>@Model.Account.Address</strong></p>
+        <form method="post">
+            <input type="hidden" name="token" value="@Model.Token" />
+            <label>Neues Passwort (mindestens @PasswordRules.MinLength Zeichen)<input name="password" type="password" autocomplete="new-password" minlength="@PasswordRules.MinLength" required autofocus /></label>
+            <label>Neues Passwort wiederholen<input name="confirm" type="password" autocomplete="new-password" minlength="@PasswordRules.MinLength" required /></label>
+            <button type="submit">Passwort setzen</button>
+        </form>
+    }
+</div>

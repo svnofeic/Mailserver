@@ -48,6 +48,10 @@ public static class SpamLogAction
     public const string LockedOut = "locked-out";
     /// <summary>An administrator opened someone's mailbox in the web interface (Recipient: the mailbox, Detail: the administrator).</summary>
     public const string Impersonated = "impersonated";
+    /// <summary>"Passwort vergessen" was used (Detail: whether and where a link went).</summary>
+    public const string ResetRequested = "reset-requested";
+    /// <summary>A new password was set with a link from "Passwort vergessen".</summary>
+    public const string PasswordReset = "password-reset";
 }
 
 public sealed record SpamLogEntry

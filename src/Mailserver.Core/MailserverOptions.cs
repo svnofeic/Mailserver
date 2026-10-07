@@ -251,6 +251,12 @@ public sealed class WebOptions
     /// <summary>Plain HTTP without TLS. Only for local testing — never enable this in production. 0 disables it.</summary>
     public int InsecureHttpPort { get; set; }
 
+    /// <summary>
+    /// Address of the web interface in links the server sends (e.g. "Passwort vergessen"), such as "https://webmail.feicht.me".
+    /// Empty: https://{Hostname}:{HttpsPort}. Never taken from the request – a forged Host header must not redirect reset links.
+    /// </summary>
+    public string? PublicUrl { get; set; }
+
     /// <summary>Sign-in lifetime; extended with every request.</summary>
     public TimeSpan SessionTimeout { get; set; } = TimeSpan.FromMinutes(60);
 }

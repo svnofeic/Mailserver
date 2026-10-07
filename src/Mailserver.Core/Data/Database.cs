@@ -240,6 +240,22 @@ public sealed class Database
         """
         CREATE INDEX ix_messages_folder_date ON messages (folder_id, internal_date_utc, uid);
         """,
+        // "Passwort vergessen": an external address per mailbox (confirmed by a link) and one-time reset links.
+        // Only SHA-256 hashes of the links are stored.
+        """
+        CREATE TABLE recovery_addresses (
+            account_id        INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+            address           TEXT NOT NULL,
+            verified_utc      TEXT,
+            token_hash        TEXT,
+            token_expires_utc TEXT
+        );
+        CREATE TABLE password_resets (
+            token_hash  TEXT PRIMARY KEY,
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            expires_utc TEXT NOT NULL
+        );
+        """,
     ];
 
     private readonly string _connectionString;

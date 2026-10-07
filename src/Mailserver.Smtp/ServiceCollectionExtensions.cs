@@ -59,6 +59,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Mailserver.Core.Push.PushNotifier>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<AdminNotifier>();
+        services.AddSingleton<Mailserver.Core.Accounts.PasswordRecovery>();
+        services.AddSingleton<Mailserver.Core.Routing.RecoveryMailer>();
         services.AddSingleton<SendingLimiter>();
         services.AddSingleton<IpRules>();
         services.AddSingleton<AuthThrottle>();

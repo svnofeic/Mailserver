@@ -60,6 +60,32 @@
     </form>
 </div>
 
+<h2>Ersatz-Adresse für „Passwort vergessen“</h2>
+<div class="card">
+    @if (Model.Account.IsAdmin)
+    {
+        <p class="small muted" style="margin: 0">Administratoren können ihr Passwort nicht per E-Mail zurücksetzen (auf dem Server:
+            <span class="mono">mailadmin user passwd @Model.Account.Address</span>).</p>
+    }
+    else
+    {
+        <p class="small muted" style="margin-top: 0">An diese externe Adresse geht der Link, wenn der Benutzer „Passwort vergessen“ wählt.
+            Hier eingetragen gilt sie sofort als bestätigt; der Benutzer kann sie auch selbst unter „Passwort“ eintragen.</p>
+        <form method="post" asp-page-handler="Recovery" asp-route-address="@Model.Account.Address" class="row">
+            <label>Ersatz-Adresse<input name="recoveryAddress" type="email" value="@Model.Recovery?.Address" placeholder="name@gmx.de" style="width: 280px" /></label>
+            @if (Model.Recovery is { } current)
+            {
+                @if (current.Verified) { <span class="pill good">bestätigt</span> } else { <span class="pill warn">wartet auf Bestätigung</span> }
+            }
+            <button type="submit" class="secondary">Speichern</button>
+            @if (Model.Recovery is not null)
+            {
+                <button type="submit" name="remove" value="true" class="secondary">Entfernen</button>
+            }
+        </form>
+    }
+</div>
+
 <h2>Passwort setzen</h2>
 <form method="post" asp-page-handler="Password" asp-route-address="@Model.Account.Address" class="row card">
     <label>Neues Passwort (mind. @PasswordRules.MinLength Zeichen)<input name="password" type="password" autocomplete="new-password" required /></label>
