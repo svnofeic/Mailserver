@@ -14,8 +14,14 @@
         return;
     }
 
-    const registration = await navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready);
-    const current = await registration.pushManager.getSubscription();
+    let registration, current;
+    try {
+        registration = await navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready);
+        current = await registration.pushManager.getSubscription();
+    } catch (error) {
+        show('Benachrichtigungen sind hier nicht verfügbar (' + error.message + '). Meist fehlt ein gültiges Zertifikat für diese Adresse.');
+        return;
+    }
     const row = current && [...document.querySelectorAll('tr[data-endpoint]')].find(r => r.dataset.endpoint === current.endpoint);
     if (row) {
         row.querySelector('.this-device').hidden = false;

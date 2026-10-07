@@ -1,4 +1,7 @@
 /* Mailserver – Weboberfläche. Dunkles Design als Standard, helles über data-theme="light". */
+/* "hidden" must win over the display of buttons, pills etc. – scripts show and hide elements with it. */
+[hidden] { display: none !important; }
+
 :root {
     color-scheme: dark;
     --bg: #070b1d;

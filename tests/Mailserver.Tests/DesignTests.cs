@@ -37,6 +37,7 @@ public sealed class DesignTests : IAsyncLifetime
         var css = await _web.GetAsync("/assets/site.css");
         Assert.Equal("text/css", css.Content.Headers.ContentType!.MediaType);
         Assert.Contains("--accent", _web.LastPage);
+        Assert.Contains("[hidden] { display: none !important; }", _web.LastPage); // scripts hide buttons and pills with it
     }
 
     [Fact]
