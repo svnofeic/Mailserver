@@ -57,8 +57,8 @@
     <label class="stack">Challenge-Ordner (optional)
         <input name="Form.ChallengeDirectory" value="@Model.Form.ChallengeDirectory" placeholder="leer = der Mailserver antwortet selbst auf Port 80" />
     </label>
-    <p class="small muted" style="margin-top: -4px">Nur nötig, solange ein anderer Webserver (z. B. IIS) Port 80 belegt: dann dessen Webroot für die
-        Hostnamen angeben, z. B. C:\inetpub\wwwroot.</p>
+    <p class="small muted" style="margin-top: -4px">Normalerweise leer lassen: Unter Windows teilt sich der Mailserver Port 80 mit dem IIS.
+        Nur wenn die Prüfung meldet, dass ein anderer Webserver antwortet, dessen Webroot für die Hostnamen angeben, z. B. C:\inetpub\wwwroot.</p>
     <label class="check"><input type="checkbox" name="Form.UseStaging" value="true" checked="@Model.Form.UseStaging" /> Testmodus (Let's-Encrypt-Staging –
         Zertifikate gelten bei Mailprogrammen nicht als vertrauenswürdig)</label>
     <div class="row" style="margin-top: 12px">

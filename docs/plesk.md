@@ -73,12 +73,14 @@ Wildcards – und nimmt das neueste. Verlängerungen durch Plesk werden ohne Neu
   (z. B. `mail.feicht.me` auch für Postfächer von klett.one und web-waerts.de). Wer `mail.klett.one` usw. behalten will,
   braucht ein Zertifikat, das alle diese Namen enthält (z. B. per win-acme als PFX, `Mailserver:Tls:PfxPath`).
 * Der Dienst läuft als LocalSystem und darf damit die privaten Schlüssel der Plesk-Zertifikate lesen.
-* **Let's Encrypt im Mailserver** (*Verwaltung → Zertifikat*) braucht neben Plesk nicht eingeschaltet zu werden – das
-  Plesk-Zertifikat reicht und wird von Plesk verlängert. Wer es trotzdem nutzt: Port 80 gehört dem IIS, der an die IP
-  des Servers gebunden ist und damit Vorrang hat. Dann unter *Challenge-Ordner* den Webroot der Website eintragen, die
-  `mail.<domain>` auf Port 80 beantwortet. Der Mailserver ruft die Prüf-URL vor Let's Encrypt selbst ab und meldet
-  sofort, wenn dort ein anderer Webserver antwortet (z. B. „Microsoft-IIS/10.0 (404)“). Ohne Plesk/IIS ist Port 80 frei
-  und es braucht keinen Challenge-Ordner.
+* **Let's Encrypt im Mailserver** (*Verwaltung → Zertifikat*): Plesk kann ein **Platzhalter-Zertifikat** (`*.feicht.me`)
+  nur über DNS-Einträge verlängern. Liegt das DNS nicht bei Plesk (z. B. bei Alfahosting), verlängert es sich nicht
+  automatisch. Dann besser im Mailserver ein normales Zertifikat für die konkreten Namen ausstellen
+  (z. B. `mail.feicht.me, webmail.feicht.me`, kein `*`). Port 80 teilt sich der Mailserver dabei mit dem IIS: Er meldet
+  sich beim Windows-Dienst http.sys nur für `/.well-known/acme-challenge/` an (wie win-acme), alles andere beantwortet
+  weiter der IIS. Der *Challenge-Ordner* bleibt leer. Der Mailserver ruft die Prüf-URL vor Let's Encrypt selbst ab und
+  meldet sofort, wenn dort ein anderer Webserver antwortet (z. B. „Microsoft-IIS/10.0 (404)“); nur dann den Webroot der
+  Website, die `mail.<domain>` auf Port 80 beantwortet, als Challenge-Ordner eintragen.
 
 ## 6. Mails von Websites (Kontaktformulare, WordPress, Shops)
 

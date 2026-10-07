@@ -21,11 +21,13 @@ public sealed class AcmeChallengeStore
 
 /// <summary>
 /// A tiny HTTP server that only answers /.well-known/acme-challenge/… and runs only while a certificate is being issued,
-/// so port 80 is not occupied otherwise.
+/// so port 80 is not occupied otherwise. On Windows it registers just that path with http.sys, so it shares port 80
+/// with IIS (like win-acme's self-hosting); elsewhere, or if http.sys refuses, it opens the port itself.
 /// </summary>
 public sealed class AcmeHttpChallengeServer : IAsyncDisposable
 {
     private readonly List<TcpListener> _listeners = [];
+    private HttpListener? _httpSys;
     private readonly AcmeChallengeStore _store;
     private readonly CancellationTokenSource _stop = new();
     private readonly List<Task> _loops = [];
@@ -35,6 +37,11 @@ public sealed class AcmeHttpChallengeServer : IAsyncDisposable
     public static AcmeHttpChallengeServer Start(AcmeChallengeStore store, int port)
     {
         var server = new AcmeHttpChallengeServer(store);
+        if (OperatingSystem.IsWindows() && server.TryHttpSys(port))
+        {
+            return server;
+        }
+
         try
         {
             server.Listen(IPAddress.Any, port);
@@ -55,6 +62,66 @@ public sealed class AcmeHttpChallengeServer : IAsyncDisposable
         }
 
         return server;
+    }
+
+    private bool TryHttpSys(int port)
+    {
+        var listener = new HttpListener();
+        listener.Prefixes.Add($"http://+:{port}{AcmeChallengeStore.PathPrefix}");
+        try
+        {
+            listener.Start();
+        }
+        catch (HttpListenerException)
+        {
+            // No admin rights, or the port is held by a program outside http.sys: fall back to a socket of our own.
+            listener.Close();
+            return false;
+        }
+
+        _httpSys = listener;
+        _loops.Add(HttpSysLoopAsync(listener));
+        return true;
+    }
+
+    private async Task HttpSysLoopAsync(HttpListener listener)
+    {
+        while (!_stop.IsCancellationRequested)
+        {
+            HttpListenerContext context;
+            try
+            {
+                context = await listener.GetContextAsync();
+            }
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
+            {
+                return;
+            }
+
+            try
+            {
+                var request = context.Request;
+                var path = request.Url?.AbsolutePath ?? "";
+                var answer = request.HttpMethod is "GET" or "HEAD" && path.StartsWith(AcmeChallengeStore.PathPrefix, StringComparison.Ordinal)
+                    ? _store.Find(path[AcmeChallengeStore.PathPrefix.Length..])
+                    : null;
+                var body = Encoding.ASCII.GetBytes(answer ?? "Not found");
+                var response = context.Response;
+                response.StatusCode = answer is null ? 404 : 200;
+                response.ContentType = "text/plain";
+                response.ContentLength64 = body.Length;
+                if (request.HttpMethod != "HEAD")
+                {
+                    await response.OutputStream.WriteAsync(body, _stop.Token);
+                }
+
+                response.Close();
+            }
+            catch (Exception ex) when (ex is HttpListenerException or IOException or OperationCanceledException or ObjectDisposedException)
+            {
+                context.Response.Abort();
+            }
+        }
     }
 
     private void Listen(IPAddress address, int port)
@@ -127,6 +194,7 @@ public sealed class AcmeHttpChallengeServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _stop.CancelAsync();
+        _httpSys?.Close();
         foreach (var listener in _listeners)
         {
             listener.Stop();
