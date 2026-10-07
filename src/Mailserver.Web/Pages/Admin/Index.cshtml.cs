@@ -70,7 +70,7 @@ public sealed class IndexModel(
         Stats = SpamLogReport.Build(entries, day, Options.Spam.JunkThreshold);
         Sent = entries.Count(e => e.Stage == SpamLogStage.Outbound && e.Action == SpamLogAction.Sent);
         OutboundFailed = entries.Count(e => e.Stage == SpamLogStage.Outbound && e.Action == SpamLogAction.Failed);
-        LoginFailures = entries.Count(e => e.Stage == SpamLogStage.Auth);
+        LoginFailures = entries.Count(e => e.Stage == SpamLogStage.Auth && e.Action != SpamLogAction.Impersonated);
 
         var week = DateTimeOffset.UtcNow.AddDays(-7);
         var weekStats = SpamLogReport.Build(log.Query(new SpamLogQuery(Since: week)), week, Options.Spam.JunkThreshold);
@@ -156,6 +156,7 @@ public sealed class IndexModel(
         (SpamLogStage.Data, _) => ("inbox", "good", $"Mail von {e.HeaderFrom ?? e.MailFrom} an {e.Recipient}"),
         (SpamLogStage.Outbound, SpamLogAction.Sent) => ("send", "", $"Gesendet an {e.Recipient}"),
         (SpamLogStage.Outbound, _) => ("alert", "bad", $"Zustellung an {e.Recipient} fehlgeschlagen"),
+        (SpamLogStage.Auth, SpamLogAction.Impersonated) => ("eye", "warn", $"Postfach {e.Recipient} von Admin geöffnet ({e.Detail})"),
         (SpamLogStage.Auth, _) => ("key", "bad", $"Fehl-Login {e.Recipient} von {e.ClientIp}"),
         _ => ("ban", "bad", $"Verbindung von {e.ClientIp} abgelehnt"),
     };

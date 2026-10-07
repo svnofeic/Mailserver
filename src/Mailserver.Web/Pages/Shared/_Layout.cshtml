@@ -86,6 +86,14 @@
 </aside>
 }
 <main>
+    @if (User.FindFirst(WebHosting.ImpersonatorNameClaim)?.Value is { } impersonator)
+    {
+        <div class="notice warn impersonation" role="status">
+            <span>@Icons.Get("eye") Sie sind als Administrator <strong>@impersonator</strong> im Postfach <strong>@User.Identity!.Name</strong>.
+                Alles, was Sie hier tun (lesen, löschen, senden), geschieht in diesem Postfach.</span>
+            <form method="post" asp-page="/EndImpersonation"><button type="submit">Zurück zu meinem Konto</button></form>
+        </div>
+    }
     @if (TempData.Peek("Message") is string message)
     {
         <div class="notice good" role="status">@message</div>

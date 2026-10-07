@@ -31,7 +31,15 @@
                         if (automation.Sending.IsBlocked) { <span class="pill bad" title="@automation.Sending.BlockedReason">Versand gesperrt</span> }
                     }
                 </td>
-                <td><a href="/Admin/Mailboxes/Edit?address=@account.Address">Bearbeiten</a></td>
+                <td class="row-actions">
+                    <a href="/Admin/Mailboxes/Edit?address=@account.Address">Bearbeiten</a>
+                    @if (account.Enabled && account.Id != Model.CurrentAccount.Id)
+                    {
+                        <form method="post" asp-page="Edit" asp-page-handler="Impersonate" asp-route-address="@account.Address" class="inline">
+                            <button type="submit" class="link" title="Webmail dieses Postfachs öffnen – wird im Verlauf protokolliert">Öffnen</button>
+                        </form>
+                    }
+                </td>
             </tr>
         }
         </tbody>

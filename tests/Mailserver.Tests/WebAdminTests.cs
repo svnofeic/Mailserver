@@ -213,6 +213,54 @@ public sealed class WebAdminTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Admin_opens_a_mailbox_as_its_user_and_returns()
+    {
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"), "Subject: Nur fuer Alice\r\n\r\nText"u8.ToArray());
+
+        await _web.PostAsync("/Admin/Mailboxes/Edit?address=alice%40example.test", "/Admin/Mailboxes/Edit?handler=Impersonate&address=alice%40example.test");
+        Assert.Contains("Nur fuer Alice", _web.LastPage); // her inbox
+        Assert.Contains("im Postfach <strong>alice@example.test</strong>", _web.LastPage);
+        Assert.Contains("Zurück zu meinem Konto", _web.LastPage);
+
+        // No administrator rights inside the mailbox, and nothing that would outlast the visit.
+        var admin = await _web.GetAsync("/Admin");
+        Assert.NotEqual(HttpStatusCode.OK, admin.StatusCode);
+        await _web.PostAsync("/Account/Password", "/Account/Password", ("current", TestServer.Password), ("password", "neues-passwort-123"),
+            ("confirm", "neues-passwort-123"));
+        Assert.Contains("unter Verwaltung → Postfächer", _web.LastPage);
+        Assert.NotNull(_server.HostAccounts.Authenticate("alice@example.test", TestServer.Password));
+
+        await _web.PostAsync("/Mail", "/EndImpersonation");
+        Assert.Contains("wieder als chef@example.test angemeldet", _web.LastPage);
+        Assert.Equal(HttpStatusCode.OK, (await _web.GetAsync("/Admin/Log?since=24h")).StatusCode);
+        Assert.Contains("Postfach von Admin geöffnet", _web.LastPage);
+        Assert.Contains("durch chef@example.test", _web.LastPage);
+    }
+
+    [Fact]
+    public async Task Impersonation_ends_when_the_admin_loses_the_right()
+    {
+        await _web.PostAsync("/Admin/Mailboxes/Edit?address=alice%40example.test", "/Admin/Mailboxes/Edit?handler=Impersonate&address=alice%40example.test");
+        Assert.Contains("Zurück zu meinem Konto", _web.LastPage);
+
+        _server.HostAccounts.SetAdmin(EmailAddress.Parse(Admin), false);
+        var response = await _web.GetAsync("/Mail");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.StartsWith("/Login", response.Headers.Location!.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task Users_cannot_open_other_mailboxes()
+    {
+        using var alice = new WebClient(_server.WebPort);
+        await alice.LoginAsync("alice@example.test", TestServer.Password);
+        await alice.PostAsync("/Mail", "/Admin/Mailboxes/Edit?handler=Impersonate&address=bob%40example.test");
+        await alice.GetAsync("/Mail");
+        Assert.DoesNotContain("Zurück zu meinem Konto", alice.LastPage);
+        Assert.DoesNotContain("bob@example.test", alice.LastPage);
+    }
+
+    [Fact]
     public async Task Removing_admin_rights_ends_admin_session()
     {
         _server.HostAccounts.SetAdmin(EmailAddress.Parse(Admin), false);

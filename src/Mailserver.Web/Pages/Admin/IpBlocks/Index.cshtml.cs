@@ -21,7 +21,7 @@ public sealed class IndexModel(IpRules rules, AuthThrottle throttle, SpamLog log
         Rules = rules.List();
         var locked = Lockouts.Select(l => l.Address.ToString()).ToHashSet();
         Failing = log.Query(new SpamLogQuery(Since: DateTimeOffset.UtcNow.AddDays(-1), Stage: SpamLogStage.Auth))
-            .Where(e => e.ClientIp is not null)
+            .Where(e => e.ClientIp is not null && e.Action != SpamLogAction.Impersonated)
             .GroupBy(e => e.ClientIp!)
             .Select(g => new FailingAddress(g.Key, g.Count(), g.Select(e => e.Recipient ?? "").Where(u => u.Length > 0).Distinct().Take(5).ToList(),
                 g.Max(e => e.Time), IPAddress.TryParse(g.Key, out var ip) ? rules.Find(ip) : null, locked.Contains(g.Key)))

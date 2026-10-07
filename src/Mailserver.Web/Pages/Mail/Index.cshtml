@@ -21,6 +21,10 @@
             <input type="hidden" name="folder" value="@Model.Folder.Name" />
             <input type="hidden" name="page" value="@Model.PageNumber" />
             <div class="toolbar small">
+                @if (Model.Items.Count > 0)
+                {
+                    <label class="check select-all" title="Alle Nachrichten auf dieser Seite auswählen"><input type="checkbox" data-select-all /> Alle</label>
+                }
                 <button type="submit" name="op" value="read" class="secondary">Gelesen</button>
                 <button type="submit" name="op" value="unread" class="secondary">Ungelesen</button>
                 <button type="submit" name="op" value="flag" class="secondary">Markieren</button>
@@ -37,6 +41,12 @@
                     @foreach (var (folder, _) in Model.Folders.Where(f => f.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
                 </select>
                 <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
+                @if (Mailserver.Web.Webmail.MailActions.CanEmpty(Model.Folder) && Model.Total > 0 && Model.Search is null)
+                {
+                    var name = Model.Folder.Name == "Trash" ? "Papierkorb" : "Spam-Ordner";
+                    <button type="submit" asp-page-handler="Empty" class="danger"
+                            data-confirm="@($"{name} leeren? Alle {Model.Total} Nachrichten werden endgültig gelöscht.")">@Icons.Get("trash") @name leeren</button>
+                }
                 <span class="grow"></span>
                 <span class="muted">@Model.Total Nachricht(en)</span>
             </div>

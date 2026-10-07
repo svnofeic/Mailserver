@@ -16,7 +16,7 @@ public sealed class IndexModel(SpamLog log) : MailPageModel
     [
         SpamLogAction.Accepted, SpamLogAction.Spam, SpamLogAction.Rejected, SpamLogAction.Deferred, SpamLogAction.Delivered,
         SpamLogAction.Discarded, SpamLogAction.Forwarded, SpamLogAction.AutoReplied, SpamLogAction.NotForwarded, SpamLogAction.MarkedSpam, SpamLogAction.MarkedHam, SpamLogAction.Sent,
-        SpamLogAction.Failed, SpamLogAction.LoginFailed, SpamLogAction.LockedOut,
+        SpamLogAction.Failed, SpamLogAction.LoginFailed, SpamLogAction.LockedOut, SpamLogAction.Impersonated,
     ];
 
     public string Since { get; private set; } = "24h";

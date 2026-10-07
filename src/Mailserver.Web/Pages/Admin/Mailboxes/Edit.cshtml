@@ -1,7 +1,15 @@
 @page
 @model Mailserver.Web.Pages.Admin.Mailboxes.EditModel
 @{ ViewData["Title"] = Model.Account.Address.ToString(); }
-<h1>Postfach @Model.Account.Address</h1>
+<div class="page-head">
+    <h1>Postfach @Model.Account.Address</h1>
+    @if (!Model.IsSelf && Model.Account.Enabled)
+    {
+        <form method="post" asp-page-handler="Impersonate" asp-route-address="@Model.Account.Address" class="actions">
+            <button type="submit" class="secondary" title="Webmail dieses Postfachs öffnen, wie der Benutzer es sieht – wird im Verlauf protokolliert">@Icons.Get("eye") Als Benutzer anmelden</button>
+        </form>
+    }
+</div>
 
 <div class="tiles">
     <div class="tile"><div class="label">Belegt</div><div class="value">@Format.Size(Model.Usage)</div></div>

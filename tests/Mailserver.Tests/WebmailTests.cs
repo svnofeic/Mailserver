@@ -125,6 +125,37 @@ public sealed class WebmailTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Trash_and_spam_can_be_emptied_at_once()
+    {
+        var alice = _server.User("alice");
+        for (var i = 0; i < 3; i++)
+        {
+            await _server.HostMailboxes.AppendAsync(alice, Encoding.ASCII.GetBytes($"Subject: Weg {i}\r\n\r\nText"), "Trash");
+            await _server.HostMailboxes.AppendAsync(alice, Encoding.ASCII.GetBytes($"Subject: Spam {i}\r\n\r\nText"), "Junk");
+        }
+
+        await _server.HostMailboxes.AppendAsync(alice, Encoding.ASCII.GetBytes("Subject: Bleibt\r\n\r\nText"));
+
+        await _web.GetAsync("/Mail?folder=Trash");
+        Assert.Contains("data-select-all", _web.LastPage);
+        Assert.Contains("Papierkorb leeren", _web.LastPage);
+        Assert.Contains("Alle 3 Nachrichten werden endgültig gelöscht", _web.LastPage);
+
+        await _web.PostAsync("/Mail?folder=Trash", "/Mail?handler=Empty", ("folder", "Trash"));
+        Assert.Contains("3 Nachricht(en) endgültig gelöscht", _web.LastPage);
+        await _web.PostAsync("/Mail?folder=Junk", "/Mail?handler=Empty", ("folder", "Junk"));
+        Assert.Empty(_server.HostMailboxes.ListMessages(_server.HostMailboxes.GetFolder(alice.Id, "Trash")!.Id));
+        Assert.Empty(_server.HostMailboxes.ListMessages(_server.HostMailboxes.GetFolder(alice.Id, "Junk")!.Id));
+
+        // Other folders are never emptied this way.
+        await _web.GetAsync("/Mail?folder=INBOX");
+        Assert.DoesNotContain("leeren", _web.LastPage);
+        await _web.PostAsync("/Mail?folder=INBOX", "/Mail?handler=Empty", ("folder", "INBOX"));
+        Assert.Contains("Nur Papierkorb und Spam", _web.LastPage);
+        Assert.Single(_server.Inbox("alice"));
+    }
+
+    [Fact]
     public async Task Pages_through_a_long_folder_to_the_oldest_mail()
     {
         var start = new DateTimeOffset(2024, 1, 1, 8, 0, 0, TimeSpan.Zero);

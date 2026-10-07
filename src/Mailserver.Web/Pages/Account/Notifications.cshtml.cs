@@ -13,6 +13,13 @@ public sealed class NotificationsModel(PushSubscriptionStore subscriptions, Vapi
 
     public IActionResult OnPostSubscribe(string endpoint, string p256dh, string auth)
     {
+        if (ImpersonatedBy is not null)
+        {
+            // The administrator's device would otherwise get this user's notifications from now on.
+            ErrorMessage = "Benachrichtigungen kann nur der Benutzer selbst auf seinen Geräten einschalten.";
+            return RedirectToPage();
+        }
+
         try
         {
             var device = subscriptions.Save(CurrentAccount.Id, endpoint, p256dh, auth, DeviceName(Request.Headers.UserAgent.ToString()));

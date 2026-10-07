@@ -13,6 +13,12 @@ public sealed class PasswordModel(AccountStore accounts) : MailPageModel
 
     public async Task<IActionResult> OnPostAsync(string current, string password, string confirm)
     {
+        if (ImpersonatedBy is not null)
+        {
+            ErrorMessage = "Als Administrator setzen Sie das Passwort unter Verwaltung → Postfächer.";
+            return RedirectToPage();
+        }
+
         if (accounts.Authenticate(CurrentAddress.ToString(), current ?? "") is null)
         {
             ErrorMessage = "Das aktuelle Passwort ist falsch.";

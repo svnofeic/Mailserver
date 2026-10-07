@@ -43,6 +43,29 @@ public sealed class MailActions(MailboxStore mailboxes, SpamFeedback feedback)
         }
     }
 
+    /// <summary>Folders whose whole content can be deleted at once.</summary>
+    public static bool CanEmpty(Folder folder) => folder.Name is "Trash" or SpamFeedback.JunkFolder;
+
+    /// <summary>Deletes every message in the trash or the spam folder for good.</summary>
+    public MailActionResult Empty(Folder folder)
+    {
+        if (!CanEmpty(folder))
+        {
+            return new(null, "Nur Papierkorb und Spam lassen sich auf einmal leeren.");
+        }
+
+        var uids = mailboxes.ListMessages(folder.Id).Select(m => m.Uid).ToList();
+        if (uids.Count == 0)
+        {
+            return new($"„{Format.FolderName(folder.Name)}“ ist bereits leer.");
+        }
+
+        // Only these: a message arriving in the meantime is not flagged and stays.
+        mailboxes.UpdateFlags(folder.Id, uids, FlagOperation.Add, [MessageFlags.Deleted]);
+        var removed = mailboxes.Expunge(folder.Id, uids).Count;
+        return new($"„{Format.FolderName(folder.Name)}“ geleert: {removed} Nachricht(en) endgültig gelöscht.");
+    }
+
     private MailActionResult Move(Account account, Folder source, IReadOnlyCollection<long> uids, string targetName, string message)
     {
         var target = targetName is "Trash" or "Junk" or MailboxStore.Inbox

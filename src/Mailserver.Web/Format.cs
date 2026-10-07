@@ -49,6 +49,7 @@ public static class Format
         "failed" => "fehlgeschlagen",
         "login-failed" => "Anmeldung fehlgeschlagen",
         "locked-out" => "IP gesperrt",
+        "impersonated" => "Postfach von Admin geöffnet",
         _ => action,
     };
 
@@ -70,7 +71,7 @@ public static class Format
     public static string Tone(string action) => action switch
     {
         "rejected" or "spam" or "discarded" or "failed" or "login-failed" or "locked-out" or "marked-spam" => "bad",
-        "deferred" or "not-forwarded" => "warn",
+        "deferred" or "not-forwarded" or "impersonated" => "warn",
         _ => "good",
     };
 }

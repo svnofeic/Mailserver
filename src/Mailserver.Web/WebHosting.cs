@@ -19,6 +19,11 @@ public static class WebHosting
 {
     public const string AdminPolicy = "Admin";
     public const string AdminClaim = "mailserver:admin";
+
+    /// <summary>Set while an administrator works in someone else's mailbox: id, address and security stamp of the administrator.</summary>
+    public const string ImpersonatorClaim = "mailserver:impersonator";
+    public const string ImpersonatorNameClaim = "mailserver:impersonator-name";
+    public const string ImpersonatorStampClaim = "mailserver:impersonator-stamp";
     public const string StampClaim = "mailserver:stamp";
 
     /// <summary>Kestrel endpoints, authentication and Razor Pages for the web interface.</summary>
@@ -310,13 +315,37 @@ public static class WebHosting
             new Claim(StampClaim, stamp),
         ], CookieAuthenticationDefaults.AuthenticationScheme));
 
+    /// <summary>
+    /// A session in <paramref name="account"/>'s mailbox opened by <paramref name="admin"/>. It never has administrator rights
+    /// (also not for another administrator's mailbox) and ends as soon as either account changes.
+    /// </summary>
+    public static ClaimsPrincipal CreateImpersonation(Account account, string stamp, Account admin, string adminStamp) =>
+        new(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, account.Id.ToString()),
+            new Claim(ClaimTypes.Name, account.Address.ToString()),
+            new Claim(AdminClaim, "false"),
+            new Claim(StampClaim, stamp),
+            new Claim(ImpersonatorClaim, admin.Id.ToString()),
+            new Claim(ImpersonatorNameClaim, admin.Address.ToString()),
+            new Claim(ImpersonatorStampClaim, adminStamp),
+        ], CookieAuthenticationDefaults.AuthenticationScheme));
+
+    /// <summary>The administrator behind an impersonated session, if still allowed to be one.</summary>
+    public static Account? Impersonator(ClaimsPrincipal user, AccountStore accounts) =>
+        long.TryParse(user.FindFirstValue(ImpersonatorClaim), out var id) && accounts.FindAccount(id) is { Enabled: true, IsAdmin: true } admin &&
+        accounts.GetSecurityStamp(id) == user.FindFirstValue(ImpersonatorStampClaim)
+            ? admin
+            : null;
+
     /// <summary>Ends sessions whose account was deleted, disabled, demoted or got a new password.</summary>
     private static async Task ValidatePrincipalAsync(CookieValidatePrincipalContext context)
     {
         var accounts = context.HttpContext.RequestServices.GetRequiredService<AccountStore>();
         var id = long.TryParse(context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var value) ? value : 0;
         var account = accounts.FindAccount(id);
-        if (account is { Enabled: true } && accounts.GetSecurityStamp(id) == context.Principal?.FindFirstValue(StampClaim))
+        if (account is { Enabled: true } && accounts.GetSecurityStamp(id) == context.Principal?.FindFirstValue(StampClaim) &&
+            (context.Principal!.FindFirst(ImpersonatorClaim) is null || Impersonator(context.Principal, accounts) is not null))
         {
             return;
         }

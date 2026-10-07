@@ -57,7 +57,7 @@ darauf öffnet die Mail.
 
 | Seite | Inhalt |
 |---|---|
-| **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen, Entwürfe, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
+| **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl („Alle“ wählt die ganze Seite), **Papierkorb/Spam leeren** mit einem Klick, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen, Entwürfe, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
@@ -77,7 +77,7 @@ mailadmin user admin sven@feicht.me on
 |---|---|
 | **Admin** | Kennzahlen (Domains, Postfächer, Warteschlange; letzte 24 h: eingegangen, Spam, abgelehnt, Greylisting, versendet, Zustellfehler, Fehl-Logins), Hinweise zum Spamfilter, Zertifikat mit Ablaufwarnung |
 | **Domains** | anlegen (mit DKIM-Schlüssel), löschen, **benötigte DNS-Einträge** zum Kopieren, DKIM-Schlüsselwechsel |
-| **Postfächer** | anlegen, Passwort setzen, Speicherlimit, aktivieren/deaktivieren, Admin-Recht, löschen; Ordnerübersicht; Weiterleitung und Abwesenheitsnotiz für jedes Postfach (z. B. Vertretung bei Krankheit). Die Liste zeigt „Weiterleitung“ / „abwesend“ / „Versand gesperrt“ an. Karte **Versand**: Verbrauch der letzten Stunde/24 h, eigene Limits für das Postfach (leer = Standard, 0 = ohne Limit), „Versand freigeben“ nach einer Sperre. |
+| **Postfächer** | anlegen, Passwort setzen, Speicherlimit, aktivieren/deaktivieren, Admin-Recht, löschen; Ordnerübersicht; Weiterleitung und Abwesenheitsnotiz für jedes Postfach (z. B. Vertretung bei Krankheit). Die Liste zeigt „Weiterleitung“ / „abwesend“ / „Versand gesperrt“ an. Karte **Versand**: Verbrauch der letzten Stunde/24 h, eigene Limits für das Postfach (leer = Standard, 0 = ohne Limit), „Versand freigeben“ nach einer Sperre. **Als Benutzer anmelden** bzw. „Öffnen“ in der Liste: siehe unten. |
 | **Zertifikat** | Verwendetes TLS-Zertifikat (Namen, Aussteller, Ablauf). **Let's Encrypt**: automatisch ausstellen und verlängern – E-Mail, Hostnamen, Testmodus, optional Challenge-Ordner für IIS; „Jetzt ausstellen“, letzter Versuch mit Fehlermeldung. Ohne Zertifikat läuft die Weboberfläche mit einem Notfall-Zertifikat (Browser-Warnung), damit man hier eines anfordern kann. |
 | **Aliase** | Aliase und Weiterleitungen anlegen und löschen |
 | **Alle Regeln** | Regeln für alle Postfächer, einzelne Domains oder Postfächer |
@@ -94,6 +94,20 @@ Hostname, Ports, Zertifikat und maximale Mailgröße stehen weiterhin nur in `ap
 
 Schutz gegen Aussperren: Das eigene Admin-Postfach kann man sich nicht selbst deaktivieren, löschen oder die Admin-Rechte
 entziehen; die Domain des eigenen Postfachs kann nicht gelöscht werden.
+
+## Als Benutzer anmelden (Postfach öffnen)
+
+Unter **Postfächer** öffnet „Öffnen“ bzw. auf der Seite eines Postfachs **Als Benutzer anmelden** das Webmail dieses
+Postfachs so, wie der Benutzer es sieht – ohne sein Passwort, etwa um bei einem Problem zu helfen oder eine Mail zu suchen.
+
+- Ein farbiger Balken zeigt die ganze Zeit, in wessen Postfach man arbeitet; **Zurück zu meinem Konto** kehrt zum eigenen
+  Konto zurück, ohne neue Anmeldung.
+- Alles geschieht wirklich in diesem Postfach: Geöffnete Mails gelten als gelesen, Gelöschtes ist gelöscht, Gesendetes
+  geht mit der Adresse des Benutzers hinaus.
+- Während der Übernahme gibt es keine Verwaltungsrechte. Passwort ändern und Push-Benachrichtigungen einschalten sind
+  gesperrt, damit nichts davon den Besuch überdauert.
+- Jede Übernahme steht im **Verlauf** (Anmeldungen, „Postfach von Admin geöffnet … durch …“) und im Windows-Ereignisprotokoll.
+- Verliert der Administrator seine Rechte oder ändert sich das Passwort eines der beiden Konten, endet die Sitzung sofort.
 
 ## Weiterleitung und Abwesenheitsnotiz – wie sie arbeiten
 

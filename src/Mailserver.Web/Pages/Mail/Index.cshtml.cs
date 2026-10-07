@@ -67,6 +67,19 @@ public sealed class IndexModel(WebmailStore store, MailActions actions) : MailPa
         return Redirect($"/Mail?folder={Uri.EscapeDataString(source.Name)}&page={page}");
     }
 
+    public IActionResult OnPostEmpty(string folder)
+    {
+        if (store.Folder(CurrentAccount.Id, folder) is not { } source)
+        {
+            return NotFound();
+        }
+
+        var result = actions.Empty(source);
+        ErrorMessage = result.Error;
+        Message = result.Message;
+        return Redirect($"/Mail?folder={Uri.EscapeDataString(source.Name)}");
+    }
+
     public string PageUrl(int page) =>
         $"/Mail?folder={Uri.EscapeDataString(Folder.Name)}&page={page}{(Search is null ? "" : "&q=" + Uri.EscapeDataString(Search))}";
 }

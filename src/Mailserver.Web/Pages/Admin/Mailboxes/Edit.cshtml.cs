@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Mailserver.Core;
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Rules;
@@ -7,7 +9,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Mailserver.Web.Pages.Admin.Mailboxes;
 
 public sealed class EditModel(AccountStore accounts, MailboxStore mailboxes, RuleStore rules, MailboxSettingsStore settings,
-    Mailserver.Core.Security.SendingLimiter sendingLimiter, Microsoft.Extensions.Options.IOptions<MailserverOptions> options) : MailPageModel
+    Mailserver.Core.Security.SendingLimiter sendingLimiter, Microsoft.Extensions.Options.IOptions<MailserverOptions> options,
+    Mailserver.Core.SpamLogging.SpamLog log, Microsoft.Extensions.Logging.ILogger<EditModel> logger) : MailPageModel
 {
     public SendingState Sending { get; private set; } = SendingState.Default;
     public (long Hour, long Day) SendingUsage { get; private set; }
@@ -141,6 +144,36 @@ public sealed class EditModel(AccountStore accounts, MailboxStore mailboxes, Rul
         }
 
         return Redirect($"/Admin/Mailboxes/Edit?address={Account.Address}");
+    }
+
+    /// <summary>Opens the mailbox as its owner would see it; the administrator returns with "Zurück zu meinem Konto".</summary>
+    public async Task<IActionResult> OnPostImpersonateAsync(string address)
+    {
+        if (!Load(address))
+        {
+            return NotFound();
+        }
+
+        if (IsSelf || !Account.Enabled)
+        {
+            ErrorMessage = IsSelf ? "Das ist Ihr eigenes Postfach." : "Das Postfach ist deaktiviert.";
+            return Redirect($"/Admin/Mailboxes/Edit?address={Account.Address}");
+        }
+
+        var admin = CurrentAccount;
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
+            WebHosting.CreateImpersonation(Account, accounts.GetSecurityStamp(Account.Id)!, admin, accounts.GetSecurityStamp(admin.Id)!));
+        log.Write(new Mailserver.Core.SpamLogging.SpamLogEntry
+        {
+            Stage = Mailserver.Core.SpamLogging.SpamLogStage.Auth,
+            Action = Mailserver.Core.SpamLogging.SpamLogAction.Impersonated,
+            ClientIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Recipient = Account.Address.ToString(),
+            Detail = $"Web, durch {admin.Address}",
+        });
+        logger.LogWarning("Administrator {Admin} opened the mailbox of {Account} in the web interface", admin.Address, Account.Address);
+        Message = $"Sie arbeiten jetzt im Postfach {Account.Address}.";
+        return Redirect("/Mail");
     }
 
     public IActionResult OnPostDelete(string address)

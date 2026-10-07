@@ -46,6 +46,8 @@ public static class SpamLogAction
     public const string Failed = "failed";
     public const string LoginFailed = "login-failed";
     public const string LockedOut = "locked-out";
+    /// <summary>An administrator opened someone's mailbox in the web interface (Recipient: the mailbox, Detail: the administrator).</summary>
+    public const string Impersonated = "impersonated";
 }
 
 public sealed record SpamLogEntry
@@ -176,7 +178,7 @@ public sealed class SpamLog(Database database, IOptions<MailserverOptions> optio
                 (SpamLogStage.Connect or SpamLogStage.Sender or SpamLogStage.Data, SpamLogAction.Rejected) => 2,
                 (SpamLogStage.Outbound, SpamLogAction.Sent) => 3,
                 (SpamLogStage.Outbound, SpamLogAction.Failed) => 4,
-                (SpamLogStage.Auth, _) => 5,
+                (SpamLogStage.Auth, SpamLogAction.LoginFailed or SpamLogAction.LockedOut) => 5,
                 _ => -1,
             };
             if (index >= 0)

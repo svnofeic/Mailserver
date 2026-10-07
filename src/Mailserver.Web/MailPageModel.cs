@@ -19,6 +19,9 @@ public abstract class MailPageModel : PageModel
 
     public bool IsAdmin => User.HasClaim(WebHosting.AdminClaim, "true");
 
+    /// <summary>The administrator working in this mailbox, or null for the owner's own session.</summary>
+    public string? ImpersonatedBy => User.FindFirstValue(WebHosting.ImpersonatorNameClaim);
+
     /// <summary>Success notice; shown on this page or, after a redirect, on the next one.</summary>
     public string? Message
     {
