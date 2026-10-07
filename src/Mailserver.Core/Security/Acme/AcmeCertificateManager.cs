@@ -217,6 +217,7 @@ public sealed partial class AcmeCertificateManager(
                 }
 
                 published.Add(token);
+                await SelfCheckAsync(name, acme.HttpPort, token, keyAuthorization, acme.ChallengeDirectory, cancellationToken);
                 report($"Prüfung von {name} über http://{name}/.well-known/acme-challenge/…");
                 await client.AcceptChallengeAsync(challenge["url"]!.GetValue<string>(), cancellationToken);
                 await WaitForAsync(client, authorizationUrl, "valid", status =>
@@ -370,4 +371,49 @@ public sealed partial class AcmeCertificateManager(
 
     [GeneratedRegex("^[A-Za-z0-9_-]{16,256}$")]
     private static partial Regex TokenPattern();
+
+    /// <summary>
+    /// Fetches the challenge the way Let's Encrypt will, before Let's Encrypt is asked: if another web server answers port 80
+    /// (on Windows with Plesk the IIS, bound to the server's IP, wins over this server's listener), the reason is clear at once
+    /// and no failed validation counts against Let's Encrypt's limits. If this server cannot reach itself (DNS, firewall
+    /// hairpin), the check is skipped and Let's Encrypt decides.
+    /// </summary>
+    public static async Task SelfCheckAsync(string name, int port, string token, string keyAuthorization, string? challengeDirectory,
+        CancellationToken cancellationToken)
+    {
+        var url = $"http://{name}{(port == 80 ? "" : $":{port}")}/.well-known/acme-challenge/{token}";
+        using var http = new HttpClient(new SocketsHttpHandler
+        {
+            // Let's Encrypt follows redirects, also to https; the certificate there may not fit yet.
+            SslOptions = { RemoteCertificateValidationCallback = (_, _, _, _) => true },
+        }) { Timeout = TimeSpan.FromSeconds(10) };
+        string body;
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.GetAsync(url, cancellationToken);
+            body = (await response.Content.ReadAsStringAsync(cancellationToken)).Trim();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        using (response)
+        {
+            if (response.IsSuccessStatusCode && body == keyAuthorization)
+            {
+                return;
+            }
+
+            var server = response.Headers.Server.ToString() is { Length: > 0 } header ? header : "ein anderer Webserver";
+            throw new AcmeException(
+                $"Abgebrochen, bevor Let's Encrypt gefragt wurde: Unter http://{name}/.well-known/acme-challenge/… antwortet nicht der " +
+                $"Mailserver, sondern {server} ({(int)response.StatusCode}). " +
+                (string.IsNullOrWhiteSpace(challengeDirectory)
+                    ? "Port 80 gehört einem anderen Webserver (mit Plesk dem IIS). Dessen Webroot für " + name + " als Challenge-Ordner " +
+                      "eintragen – oder das Zertifikat über Plesk ausstellen; der Mailserver findet es dort selbst."
+                    : $"Der Challenge-Ordner {challengeDirectory} gehört nicht zu der Website, die {name} auf Port 80 beantwortet."));
+        }
+    }
 }

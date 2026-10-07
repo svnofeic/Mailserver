@@ -40,6 +40,40 @@ public sealed class AcmeTests : IDisposable
     }
 
     [Fact]
+    public async Task Self_check_finds_another_web_server_on_port_80()
+    {
+        const string token = "token-1234567890abcdef";
+        // Stand-in for IIS: answers every request with 404 and its own Server header.
+        var iis = new TcpListener(IPAddress.Loopback, 0);
+        iis.Start();
+        var port = ((IPEndPoint)iis.LocalEndpoint).Port;
+        var answering = Task.Run(async () =>
+        {
+            using var client = await iis.AcceptTcpClientAsync();
+            var stream = client.GetStream();
+            _ = await stream.ReadAsync(new byte[4096]); // the request line is enough
+            await stream.WriteAsync("HTTP/1.1 404 Not Found\r\nServer: Microsoft-IIS/10.0\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"u8.ToArray());
+        });
+
+        var ex = await Assert.ThrowsAsync<AcmeException>(() =>
+            AcmeCertificateManager.SelfCheckAsync("localhost", port, token, token + ".thumbprint", null, CancellationToken.None));
+        Assert.Contains("Microsoft-IIS/10.0 (404)", ex.Message);
+        Assert.Contains("Challenge-Ordner", ex.Message);
+        await answering;
+        iis.Stop();
+
+        // The mail server itself answering: fine. Nobody answering: Let's Encrypt decides.
+        var store = new AcmeChallengeStore();
+        store.Add(token, token + ".thumbprint");
+        await using (AcmeHttpChallengeServer.Start(store, port))
+        {
+            await AcmeCertificateManager.SelfCheckAsync("localhost", port, token, token + ".thumbprint", null, CancellationToken.None);
+        }
+
+        await AcmeCertificateManager.SelfCheckAsync("localhost", port, token, token + ".thumbprint", null, CancellationToken.None);
+    }
+
+    [Fact]
     public void Busy_port_gives_a_helpful_message()
     {
         var blocker = new TcpListener(IPAddress.Any, 0);

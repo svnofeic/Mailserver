@@ -73,6 +73,12 @@ Wildcards – und nimmt das neueste. Verlängerungen durch Plesk werden ohne Neu
   (z. B. `mail.feicht.me` auch für Postfächer von klett.one und web-waerts.de). Wer `mail.klett.one` usw. behalten will,
   braucht ein Zertifikat, das alle diese Namen enthält (z. B. per win-acme als PFX, `Mailserver:Tls:PfxPath`).
 * Der Dienst läuft als LocalSystem und darf damit die privaten Schlüssel der Plesk-Zertifikate lesen.
+* **Let's Encrypt im Mailserver** (*Verwaltung → Zertifikat*) braucht neben Plesk nicht eingeschaltet zu werden – das
+  Plesk-Zertifikat reicht und wird von Plesk verlängert. Wer es trotzdem nutzt: Port 80 gehört dem IIS, der an die IP
+  des Servers gebunden ist und damit Vorrang hat. Dann unter *Challenge-Ordner* den Webroot der Website eintragen, die
+  `mail.<domain>` auf Port 80 beantwortet. Der Mailserver ruft die Prüf-URL vor Let's Encrypt selbst ab und meldet
+  sofort, wenn dort ein anderer Webserver antwortet (z. B. „Microsoft-IIS/10.0 (404)“). Ohne Plesk/IIS ist Port 80 frei
+  und es braucht keinen Challenge-Ordner.
 
 ## 6. Mails von Websites (Kontaktformulare, WordPress, Shops)
 
