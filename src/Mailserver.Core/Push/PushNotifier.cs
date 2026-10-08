@@ -23,8 +23,8 @@ public sealed class PushNotifier(
 
     private readonly Channel<Job> _queue = Channel.CreateBounded<Job>(new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropOldest });
 
-    /// <summary>A message was stored in the inbox of <paramref name="account"/>.</summary>
-    public void NewMail(Account account, long uid, byte[] message)
+    /// <summary>A message was stored in the inbox (or <paramref name="folder"/>) of <paramref name="account"/>.</summary>
+    public void NewMail(Account account, long uid, byte[] message, string folder = MailboxStore.Inbox)
     {
         if (subscriptions.ForAccount(account.Id).Count == 0)
         {
@@ -42,7 +42,7 @@ public sealed class PushNotifier(
             : "Neue Mail";
         var subject = headers[HeaderId.Subject] is { Length: > 0 } s ? Decode(s) : "(kein Betreff)";
         Enqueue(account.Id, from, subject.Length > 180 ? subject[..180] + "…" : subject,
-            $"/Mail/Read?folder=INBOX&uid={uid}", Unread(account.Id));
+            $"/Mail/Read?folder={Uri.EscapeDataString(folder)}&uid={uid}", Unread(account.Id));
     }
 
     /// <summary>Sends a test message to every device of the mailbox right away and reports how each push service answered.</summary>

@@ -62,6 +62,7 @@ darauf öffnet die Mail.
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
 | **Abwesenheit** | Automatische **Weiterleitung** an bis zu 10 Adressen (wahlweise mit oder ohne Kopie im Postfach) und **Abwesenheitsnotiz** mit Zeitraum, Betreff und Text. Solange etwas davon aktiv ist, erinnert ein Hinweis auf jeder Seite daran. |
+| **Fremde Konten** | Adressen bei anderen Anbietern (GMX, eigener Provider …) einbinden: Mails abrufen und mit der Adresse senden (siehe unten) |
 | **Benachrichtigungen** | Push-Benachrichtigungen bei neuer Mail pro Gerät ein- und ausschalten, Test senden (siehe oben) |
 | **Passwort** | Passwort ändern (gilt auch für IMAP/SMTP). Alle anderen angemeldeten Browser werden abgemeldet. **Ersatz-Adresse** für „Passwort vergessen“ eintragen (siehe unten). |
 
@@ -127,6 +128,30 @@ Postfachs so, wie der Benutzer es sieht – ohne sein Passwort, etwa um bei eine
   gesperrt, damit nichts davon den Besuch überdauert.
 - Jede Übernahme steht im **Verlauf** (Anmeldungen, „Postfach von Admin geöffnet … durch …“) und im Windows-Ereignisprotokoll.
 - Verliert der Administrator seine Rechte oder ändert sich das Passwort eines der beiden Konten, endet die Sitzung sofort.
+
+## Fremde Konten
+
+Unter *Fremde Konten* lassen sich bis zu 10 E-Mail-Adressen bei anderen Anbietern mit dem eigenen Postfach verbinden.
+
+- **Abrufen:** Alle 5 Minuten holt der Server neue Mails aus dem Posteingang beim Anbieter (IMAP) und legt sie in einem
+  eigenen Ordner ab (Standard: die Adresse; wahlweise der Posteingang). Beim Anbieter bleiben die Mails liegen – es wird
+  nur übernommen, was seit dem letzten Abruf neu ist. Beim Einrichten lässt sich wählen, ob auch die schon vorhandenen
+  Mails übernommen werden. **Jetzt abrufen** holt sofort.
+- Gelesen/ungelesen wird beim Abruf übernommen; neue ungelesene Mails lösen eine Push-Benachrichtigung aus. Der
+  Virenschutz prüft auch abgerufene Mails, der Spamfilter nicht (das hat der Anbieter schon getan).
+- **Senden:** Ist ein Postausgangsserver (SMTP) eingetragen, steht die Adresse beim Schreiben als Absender zur Auswahl.
+  Die Mail geht dann über den Server des Anbieters hinaus – so passen SPF und DKIM der fremden Domain, und die Mail
+  landet beim Empfänger nicht im Spam. Die Kopie liegt in *Gesendet* des eigenen Postfachs. Antworten auf Mails im
+  Ordner eines fremden Kontos werden automatisch von dieser Adresse geschrieben.
+- Beim Speichern meldet sich der Server einmal per IMAP und SMTP beim Anbieter an; falsche Angaben fallen so sofort auf.
+  Leere Servernamen werden als `imap.<domain>` / `smtp.<domain>` angenommen, der Benutzername als die Adresse.
+- Übliche Einstellungen: IMAP Port 993 mit SSL/TLS, SMTP Port 465 mit SSL/TLS oder 587 mit STARTTLS. Manche Anbieter
+  verlangen, dass IMAP erst in ihren Einstellungen freigeschaltet wird (z. B. GMX, Web.de), oder ein eigenes App-Passwort
+  (z. B. Gmail, iCloud). Outlook.com/Hotmail erlaubt keine Anmeldung mit Passwort mehr und geht deshalb nicht.
+- Die Passwörter liegen verschlüsselt in der Datenbank; der Schlüssel liegt in `data\secrets` und ist Teil der
+  Datensicherung. Fehler beim Abruf (z. B. geändertes Passwort) stehen in der Liste beim jeweiligen Konto.
+- Mailprogramme (Outlook, Apple Mail …) sehen den Ordner per IMAP ebenfalls. Mit der fremden Adresse senden geht dort aber
+  nur, wenn das Mailprogramm selbst den Server des Anbieters verwendet.
 
 ## Weiterleitung und Abwesenheitsnotiz – wie sie arbeiten
 

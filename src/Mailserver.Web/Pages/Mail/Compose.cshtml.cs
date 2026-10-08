@@ -34,6 +34,7 @@ public sealed class ComposeModel(
     WebmailSender sender,
     MailboxStore mailboxes,
     IOptions<MailserverOptions> options,
+    Mailserver.Core.External.ExternalAccountStore external,
     ILogger<ComposeModel> logger) : MailPageModel
 {
     [BindProperty]
@@ -245,13 +246,19 @@ public sealed class ComposeModel(
         return match.Success ? match.Groups[1].Value : html;
     }
 
-    /// <summary>When replying to mail sent to one of the user's aliases, answer from that alias.</summary>
+    /// <summary>
+    /// When replying to mail sent to one of the user's aliases, answer from that alias; mail fetched from another provider
+    /// is answered from that address (also when it arrived as Bcc or through a mailing list).
+    /// </summary>
     private void SelectSenderMatching(MimeMessage original)
     {
         var senders = sender.SenderAddresses(CurrentAccount);
         var match = original.To.Mailboxes.Concat(original.Cc.Mailboxes)
             .Select(m => m.Address)
-            .FirstOrDefault(a => senders.Contains(a, StringComparer.OrdinalIgnoreCase));
+            .FirstOrDefault(a => senders.Contains(a, StringComparer.OrdinalIgnoreCase))
+            ?? external.List(CurrentAccount.Id)
+                .FirstOrDefault(a => a.CanSend && !a.Settings.Folder.Equals(MailboxStore.Inbox, StringComparison.OrdinalIgnoreCase) &&
+                                     a.Settings.Folder.Equals(Form.OriginalFolder, StringComparison.OrdinalIgnoreCase))?.Address;
         if (match is not null)
         {
             Form.From = senders.First(s => s.Equals(match, StringComparison.OrdinalIgnoreCase));

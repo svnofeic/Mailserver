@@ -62,6 +62,7 @@ Sicherung tut das). Läuft es ab, schlägt die Sicherung fehl, die Admins bekomm
   snapshots\2026-10-05_030000\   eine Sicherung pro Nacht
       mailserver.db               Postfächer (mit Passwörtern), Ordner, Aliase, Regeln, Weiterleitungen, Verlauf
       dkim\  acme\  queue\        DKIM-Schlüssel, Let's-Encrypt-Zertifikat, noch nicht zugestellte Mails
+      push\  secrets\             Schlüssel für Push-Benachrichtigungen und für die Passwörter fremder Konten
       settings.json, appsettings.json
       manifest.json               Version, Datum, Anzahl Postfächer und Mails
   mail\                           alle Mails – nur neue werden jede Nacht dazukopiert

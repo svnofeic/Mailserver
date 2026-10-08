@@ -49,6 +49,7 @@ Daten (Standard: `C:\Mailserver\data`):
 - `mail\<KontoId>\<JJJJMM>\*.eml`: die Nachrichten als normale `.eml`-Dateien
 - `queue\*.eml`: ausgehende Nachrichten, die noch nicht zugestellt sind
 - `dkim\<domain>.<selector>.pem`: die DKIM-Schlüssel
+- `secrets\key.bin`: Schlüssel für die gespeicherten Passwörter fremder Konten (Abruf bei anderen Anbietern)
 
 Gesichert wird automatisch jede Nacht in einen Ordner, eine Netzwerkfreigabe, **OneDrive** oder **pCloud**
 (Admin → Datensicherung, Anleitung: [docs/datensicherung.md](docs/datensicherung.md)):

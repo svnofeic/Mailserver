@@ -18,7 +18,7 @@ public sealed record BackupManifest(string Version, string Hostname, DateTimeOff
 /// <summary>
 /// Backs up the data directory into a backup store (folder, OneDrive, pCloud):
 /// <code>
-/// snapshots/2026-10-05_030000/   database (consistent copy), settings.json, dkim, acme, queue, manifest.json
+/// snapshots/2026-10-05_030000/   database (consistent copy), settings.json, dkim, acme, queue, push, secrets, manifest.json
 /// mail/                          mirror of data\mail, uploaded incrementally
 /// </code>
 /// The mail files never change once written, so only new ones are uploaded each night; which ones are already there is
@@ -37,7 +37,7 @@ public sealed class BackupManager(
     public const string SnapshotsFolder = "snapshots";
     public const string MailFolder = "mail";
     public const string ManifestFile = "manifest.json";
-    private static readonly string[] ConfigFolders = ["dkim", "acme", "queue", "push"];
+    private static readonly string[] ConfigFolders = ["dkim", "acme", "queue", "push", "secrets"];
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly BackupStores _stores = stores ?? new BackupStores(paths, new CloudTokens(paths));

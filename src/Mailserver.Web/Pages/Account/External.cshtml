@@ -1,0 +1,149 @@
+@page
+@model Mailserver.Web.Pages.Account.ExternalModel
+@using Mailserver.Core.External
+@{
+    ViewData["Title"] = "Fremde Konten";
+    var f = Model.Form;
+    string SecurityName(MailSecurity security) => security switch
+    {
+        MailSecurity.Ssl => "SSL/TLS",
+        MailSecurity.StartTls => "STARTTLS",
+        _ => "keine",
+    };
+}
+@section Head {
+    <style>
+        .for-send { display: none; }
+        form:has(#send:checked) .for-send { display: block; }
+    </style>
+}
+<div class="page-head">
+    <div>
+        <h1>Fremde Konten</h1>
+        <p class="subtitle">E-Mail-Adressen bei anderen Anbietern hier mitlesen: Neue Mails werden alle paar Minuten abgeholt und in einem eigenen
+            Ordner abgelegt; beim Anbieter bleiben sie liegen. Beim Schreiben lässt sich die Adresse als Absender wählen – verschickt wird dann über
+            den Server des Anbieters.</p>
+    </div>
+    @if (!Model.Editing)
+    {
+        <a class="button" href="/Account/External?add=true">@Icons.Get("plus") Adresse hinzufügen</a>
+    }
+</div>
+
+@if (Model.Accounts.Count > 0)
+{
+    <section class="panel">
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Adresse</th><th>Ordner</th><th>Abruf</th><th>Senden</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var account in Model.Accounts)
+                    {
+                        <tr>
+                            <td><strong>@account.Address</strong>
+                                <div class="small muted">@account.Settings.Imap.Host · @account.Fetched abgerufen</div>
+                                @if (account.LastError is { } error)
+                                {
+                                    <div class="small" style="color: var(--bad); overflow-wrap: anywhere">@error</div>
+                                }</td>
+                            <td><a href="/Mail?folder=@Uri.EscapeDataString(account.Settings.Folder)">@Format.FolderName(account.Settings.Folder)</a></td>
+                            <td>
+                                @if (!account.Enabled)
+                                {
+                                    <span class="pill">aus</span>
+                                }
+                                else if (account.LastError is not null)
+                                {
+                                    <span class="pill bad">Fehler</span>
+                                }
+                                else
+                                {
+                                    <span class="pill good">aktiv</span>
+                                }
+                                <div class="small muted">@(account.LastFetch is { } last ? "zuletzt " + Format.Time(last) : "noch nicht")</div>
+                            </td>
+                            <td>@(account.Settings.Smtp is { } smtp ? smtp.Host : "–")</td>
+                            <td>
+                                <div class="row-actions">
+                                    <form method="post" asp-page-handler="Fetch" class="inline"><input type="hidden" name="id" value="@account.Id" />
+                                        <button type="submit" class="secondary">@Icons.Get("refresh") Jetzt abrufen</button></form>
+                                    <a class="button secondary" href="/Account/External?edit=@account.Id">Bearbeiten</a>
+                                    <form method="post" asp-page-handler="Enable" class="inline"><input type="hidden" name="id" value="@account.Id" />
+                                        <input type="hidden" name="enabled" value="@(account.Enabled ? "false" : "true")" />
+                                        <button type="submit" class="secondary">@(account.Enabled ? "Abruf aus" : "Abruf ein")</button></form>
+                                    <form method="post" asp-page-handler="Remove" class="inline"><input type="hidden" name="id" value="@account.Id" />
+                                        <button type="submit" class="danger" data-confirm="@account.Address entfernen? Die abgerufenen Mails bleiben im Ordner.">Entfernen</button></form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+@if (Model.Editing)
+{
+    <form method="post" asp-page-handler="Save" class="panel" style="max-width: 760px">
+        <div class="panel-head"><h2><span class="badge-icon">@Icons.Get("at")</span> @(f.Id is null ? "Adresse hinzufügen" : "Adresse bearbeiten")</h2></div>
+        <input type="hidden" name="Form.Id" value="@f.Id" />
+        <div class="row">
+            <label>E-Mail-Adresse<input name="Form.Address" value="@f.Address" type="email" required autocomplete="off" placeholder="name@anbieter.de" /></label>
+            <label>Ordner hier<input name="Form.Folder" value="@f.Folder" placeholder="leer = die Adresse" /></label>
+        </div>
+
+        <h3>Posteingang (IMAP)</h3>
+        <div class="row">
+            <label>Server<input name="Form.ImapHost" value="@f.ImapHost" autocomplete="off" placeholder="leer = imap.&lt;domain&gt;" /></label>
+            <label>Port<input name="Form.ImapPort" value="@f.ImapPort" type="number" min="1" max="65535" style="width: 100px" /></label>
+            <label>Verschlüsselung
+                <select name="Form.ImapSecurity">
+                    @foreach (var security in Enum.GetValues<MailSecurity>())
+                    {
+                        <option value="@security" selected="@(f.ImapSecurity == security)">@SecurityName(security)</option>
+                    }
+                </select>
+            </label>
+        </div>
+        <div class="row">
+            <label>Benutzername<input name="Form.UserName" value="@f.UserName" autocomplete="off" placeholder="leer = die Adresse" /></label>
+            <label>Passwort@(f.Id is null ? "" : " (leer = unverändert)")<input name="Form.Password" type="password" autocomplete="new-password" /></label>
+        </div>
+        @if (f.Id is null)
+        {
+            <label class="check"><input type="checkbox" name="Form.FetchExisting" value="true" checked="@f.FetchExisting" />
+                auch die Mails übernehmen, die schon im Posteingang beim Anbieter liegen (sonst nur neue)</label>
+        }
+
+        <h3>Postausgang (SMTP)</h3>
+        <label class="check"><input type="checkbox" id="send" name="Form.Send" value="true" checked="@f.Send" /> mit dieser Adresse auch senden</label>
+        <div class="for-send">
+            <div class="row">
+                <label>Server<input name="Form.SmtpHost" value="@f.SmtpHost" autocomplete="off" placeholder="leer = smtp.&lt;domain&gt;" /></label>
+                <label>Port<input name="Form.SmtpPort" value="@f.SmtpPort" type="number" min="1" max="65535" style="width: 100px" /></label>
+                <label>Verschlüsselung
+                    <select name="Form.SmtpSecurity">
+                        @foreach (var security in Enum.GetValues<MailSecurity>())
+                        {
+                            <option value="@security" selected="@(f.SmtpSecurity == security)">@SecurityName(security)</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <p class="small muted" style="margin-top: 0">Anmeldung mit demselben Benutzernamen und Passwort. Übliche Ports: 465 mit SSL/TLS oder
+                587 mit STARTTLS.</p>
+        </div>
+
+        <p class="small muted">Beim Speichern meldet sich der Server einmal beim Anbieter an, um die Angaben zu prüfen. Die Serverdaten stehen in den
+            Hilfe-Seiten des Anbieters (Stichwort „IMAP“); manche Anbieter verlangen, dass der Zugriff per IMAP erst in deren Einstellungen
+            eingeschaltet wird, oder ein eigenes App-Passwort. Das Passwort wird verschlüsselt gespeichert.</p>
+        <div class="row">
+            <button type="submit">Prüfen und speichern</button>
+            @if (Model.Accounts.Count > 0)
+            {
+                <a class="button secondary" href="/Account/External">Abbrechen</a>
+            }
+        </div>
+    </form>
+}

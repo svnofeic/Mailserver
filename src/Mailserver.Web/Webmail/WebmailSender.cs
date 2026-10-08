@@ -45,14 +45,20 @@ public sealed class WebmailSender(
     SpamLog spamLog,
     Mailserver.Core.Antivirus.MalwareFilter malwareFilter,
     Mailserver.Core.Security.SendingLimiter sendingLimiter,
-    IOptions<MailserverOptions> options)
+    IOptions<MailserverOptions> options,
+    Mailserver.Core.External.ExternalAccountStore external,
+    Mailserver.Core.External.IExternalMail externalMail)
 {
     public const int MaxRecipients = 100;
 
-    /// <summary>Addresses the account may send as: its own and aliases that deliver to it.</summary>
+    /// <summary>
+    /// Addresses the account may send as: its own, aliases that deliver to it, and addresses at other providers with a
+    /// sending server (mail from these goes out through that provider).
+    /// </summary>
     public IReadOnlyList<string> SenderAddresses(Account account) =>
         new[] { account.Address.ToString() }
             .Concat(accounts.ListAliases().Where(a => accounts.MaySendAs(account, a.Address)).Select(a => a.Address.ToString()))
+            .Concat(external.List(account.Id).Where(a => a.CanSend).Select(a => a.Address))
             .ToList();
 
     public async Task SendAsync(Account account, Draft draft, IPAddress? clientIp, CancellationToken cancellationToken)
@@ -86,9 +92,27 @@ public sealed class WebmailSender(
                 : $"Nicht gesendet – {scan.Reason}.");
         }
 
-        var prepared = await preparer.PrepareAsync(raw.ToArray(), cancellationToken);
+        byte[] prepared;
+        var provider = external.FindSender(account.Id, envelopeSender);
+        if (provider is not null)
+        {
+            // An address at another provider: its server sends (and signs) it, so SPF and DKIM of that domain fit.
+            prepared = raw.ToArray();
+            try
+            {
+                await externalMail.SendAsync(provider, prepared, recipients, cancellationToken);
+            }
+            catch (Mailserver.Core.External.ExternalMailException ex)
+            {
+                throw new ComposeException($"Nicht gesendet – {ex.Message}");
+            }
+        }
+        else
+        {
+            prepared = await preparer.PrepareAsync(raw.ToArray(), cancellationToken);
+            await router.RouteAsync(prepared, envelopeSender, recipients, allowRelay: true, cancellationToken);
+        }
 
-        await router.RouteAsync(prepared, envelopeSender, recipients, allowRelay: true, cancellationToken);
         await mailboxes.AppendAsync(account, prepared, "Sent", $"{MessageFlags.Seen}", cancellationToken: cancellationToken);
 
         spamLog.Write(new SpamLogEntry
@@ -101,7 +125,7 @@ public sealed class WebmailSender(
             HeaderFrom = envelopeSender,
             Subject = message.Subject,
             MessageId = message.MessageId,
-            Detail = $"Webmail, angemeldet als {account.Address}",
+            Detail = $"Webmail, angemeldet als {account.Address}" + (provider is null ? "" : $", gesendet über {provider.Settings.Smtp!.Host}"),
         });
     }
 
@@ -115,7 +139,8 @@ public sealed class WebmailSender(
 
     private (MimeMessage Message, List<EmailAddress> Recipients) Build(Account account, Draft draft, bool requireRecipients)
     {
-        if (!EmailAddress.TryParse(draft.From, out var from) || !accounts.MaySendAs(account, from))
+        if (!EmailAddress.TryParse(draft.From, out var from) ||
+            (!accounts.MaySendAs(account, from) && external.FindSender(account.Id, from.ToString()) is null))
         {
             throw new ComposeException("Diese Absenderadresse darf nicht verwendet werden.");
         }

@@ -68,6 +68,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Mailserver.Core.Backup.BackupStores>();
         services.AddSingleton<Mailserver.Core.Backup.CloudConnector>();
         services.AddSingleton<Mailserver.Core.Backup.BackupManager>();
+        services.AddSingleton<SecretProtector>();
+        services.AddSingleton<Mailserver.Core.External.ExternalAccountStore>();
+        services.AddSingleton<External.ExternalMailClient>();
+        services.AddSingleton<Mailserver.Core.External.IExternalMail>(sp => sp.GetRequiredService<External.ExternalMailClient>());
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeChallengeStore>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeCertificateManager>();
         services.AddSingleton<CertificateProvider>();
@@ -87,6 +91,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());
         services.AddHostedService<BackupService>();
         services.AddHostedService<PushService>();
+        services.AddHostedService<External.ExternalFetchService>();
         return services;
     }
 }

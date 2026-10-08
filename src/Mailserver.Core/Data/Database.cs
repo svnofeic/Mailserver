@@ -256,6 +256,33 @@ public sealed class Database
             expires_utc TEXT NOT NULL
         );
         """,
+        // Mail addresses at other providers: fetched by IMAP into a folder of the mailbox, sent through the provider's SMTP
+        // server. Passwords are encrypted (SecretProtector). last_uid NULL: on the first fetch only remember where the inbox
+        // stands; 0: fetch everything already there.
+        """
+        CREATE TABLE external_accounts (
+            id             INTEGER PRIMARY KEY,
+            account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            address        TEXT NOT NULL COLLATE NOCASE,
+            folder         TEXT NOT NULL,
+            imap_host      TEXT NOT NULL,
+            imap_port      INTEGER NOT NULL,
+            imap_security  TEXT NOT NULL,
+            smtp_host      TEXT,
+            smtp_port      INTEGER,
+            smtp_security  TEXT,
+            user_name      TEXT NOT NULL,
+            password       TEXT NOT NULL,
+            enabled        INTEGER NOT NULL DEFAULT 1,
+            uid_validity   INTEGER,
+            last_uid       INTEGER,
+            fetched        INTEGER NOT NULL DEFAULT 0,
+            last_fetch_utc TEXT,
+            last_error     TEXT,
+            created_utc    TEXT NOT NULL,
+            UNIQUE (account_id, address)
+        );
+        """,
     ];
 
     private readonly string _connectionString;
