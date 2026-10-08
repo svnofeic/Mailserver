@@ -86,11 +86,38 @@
 
         @if (Model.PageCount > 1)
         {
-            <div class="toolbar">
-                @if (Model.PageNumber > 0) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber - 1)">← Neuere</a> }
-                <span class="muted">Seite @(Model.PageNumber + 1) von @Model.PageCount</span>
-                @if (Model.PageNumber + 1 < Model.PageCount) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber + 1)">Ältere →</a> }
-            </div>
+            <nav class="pager" aria-label="Seiten">
+                @if (Model.PageNumber > 0) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber - 1)" rel="prev">← Neuere</a> }
+                <span class="pages">
+                    @foreach (var number in Model.PageLinks())
+                    {
+                        if (number is not { } n)
+                        {
+                            <span class="gap">…</span>
+                        }
+                        else if (n == Model.PageNumber)
+                        {
+                            <span class="current" aria-current="page">@(n + 1)</span>
+                        }
+                        else
+                        {
+                            <a href="@Model.PageUrl(n)">@(n + 1)</a>
+                        }
+                    }
+                </span>
+                @if (Model.PageNumber + 1 < Model.PageCount) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber + 1)" rel="next">Ältere →</a> }
+                <span class="muted small">Seite @(Model.PageNumber + 1) von @Model.PageCount · @Model.Total Mails</span>
+                @if (Model.PageCount > 7)
+                {
+                    <form method="get" action="/Mail" class="jump">
+                        <input type="hidden" name="folder" value="@Model.Folder.Name" />
+                        @if (Model.Search is not null) { <input type="hidden" name="q" value="@Model.Search" /> }
+                        <label class="small muted">Gehe zu Seite
+                            <input type="number" name="seite" min="1" max="@Model.PageCount" value="@(Model.PageNumber + 1)" required /></label>
+                        <button type="submit" class="secondary">Los</button>
+                    </form>
+                }
+            </nav>
         }
         @if (Model.Folder.Name == "Junk")
         {

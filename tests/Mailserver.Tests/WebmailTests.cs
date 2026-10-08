@@ -180,6 +180,30 @@ public sealed class WebmailTests : IAsyncLifetime
 
         await _web.GetAsync("/Mail?folder=INBOX&page=7");
         Assert.Contains("Seite 3 von 3", _web.LastPage);
+
+        // Every page can be chosen directly; the current one is marked.
+        Assert.Contains("href=\"/Mail?folder=INBOX&amp;page=0\">1</a>", _web.LastPage);
+        Assert.Contains("href=\"/Mail?folder=INBOX&amp;page=1\">2</a>", _web.LastPage);
+        Assert.Contains("aria-current=\"page\">3</span>", _web.LastPage);
+
+        // "Gehe zu Seite" counts from 1.
+        await _web.GetAsync("/Mail?folder=INBOX&seite=2");
+        Assert.Contains("Seite 2 von 3", _web.LastPage);
+        Assert.Contains("Nummer 069", _web.LastPage);
+    }
+
+    [Theory]
+    [InlineData(0, 3, "1 2 3")]
+    [InlineData(0, 20, "1 2 3 … 20")]
+    [InlineData(9, 20, "1 … 8 9 10 11 12 … 20")]
+    [InlineData(3, 20, "1 2 3 4 5 6 … 20")]
+    [InlineData(19, 20, "1 … 18 19 20")]
+    public void Page_links(int current, int pages, string expected)
+    {
+        var model = new Mailserver.Web.Pages.Mail.IndexModel(null!, null!);
+        typeof(Mailserver.Web.Pages.Mail.IndexModel).GetProperty("PageNumber")!.SetValue(model, current);
+        typeof(Mailserver.Web.Pages.Mail.IndexModel).GetProperty("Total")!.SetValue(model, pages * Mailserver.Web.Pages.Mail.IndexModel.PageSize);
+        Assert.Equal(expected, string.Join(' ', model.PageLinks().Select(p => p is { } n ? (n + 1).ToString() : "…")));
     }
 
     [Fact]
