@@ -114,12 +114,14 @@ else
         </table>
     </div>
 }
+<p class="small muted">„Nie sperren“ gilt für Fehl-Logins und für die Spam-Sperrlisten (z. B. Spamhaus): Leitet ein anderer Anbieter Mails
+    hierher weiter und steht sein Server auf einer Sperrliste, dessen Adresse hier eintragen. Die übrigen Spam-Prüfungen gelten weiter.</p>
 <form method="post" asp-page-handler="Add" class="card row">
     <label>Adresse oder Netz<input name="network" required placeholder="203.0.113.7 oder 203.0.113.0/24" /></label>
     <label>Art
         <select name="kind">
             <option value="Block">sperren</option>
-            <option value="Allow">nie sperren (z. B. Büro)</option>
+            <option value="Allow">nie sperren (z. B. Büro, weiterleitender Server)</option>
         </select>
     </label>
     <label>Dauer

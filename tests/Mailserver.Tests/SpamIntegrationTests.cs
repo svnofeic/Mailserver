@@ -284,3 +284,60 @@ public sealed class GreylistingIntegrationTests : IAsyncLifetime
         await client.DisconnectAsync(true);
     }
 }
+
+/// <summary>Spamhaus ZEN as rejecting blocklist: weak listings only score, allowed IPs (e.g. a forwarder) are not looked up.</summary>
+public sealed class BlocklistIntegrationTests : IAsyncLifetime
+{
+    private readonly FakeDns _dns = new();
+    private TestServer _server = null!;
+
+    public async Task InitializeAsync()
+    {
+        _dns.Ptr["127.0.0.1"] = "mout.provider.test";
+        _server = await TestServer.StartAsync(new Dictionary<string, string?>
+        {
+            ["Mailserver:Spam:TrustLoopback"] = "false",
+            ["Mailserver:Spam:Greylisting:Enabled"] = "false",
+            ["Mailserver:Spam:DnsBlocklists:0:Zone"] = "zen.spamhaus.org",
+            ["Mailserver:Spam:DnsBlocklists:0:Action"] = "Reject",
+        }, services => services.AddSingleton<IDnsResolver>(_dns));
+    }
+
+    public async Task DisposeAsync() => await _server.DisposeAsync();
+
+    [Fact]
+    public async Task Css_listing_only_scores()
+    {
+        _dns.AddA("1.0.0.127.zen.spamhaus.org", "127.0.0.3");
+        await SendAsync();
+
+        var stored = _server.HostMailboxes.ListFolders(_server.User("alice").Id).SelectMany(f => _server.HostMailboxes.ListMessages(f.Id)).Single();
+        Assert.Contains("DNSBL_ZEN.SPAMHAUS.ORG", await _server.ReadAsync(stored));
+    }
+
+    [Fact]
+    public async Task Sbl_listing_rejects_unless_the_address_is_allowed()
+    {
+        _dns.AddA("1.0.0.127.zen.spamhaus.org", "127.0.0.2");
+        var ex = await Assert.ThrowsAsync<SmtpCommandException>(SendAsync);
+        Assert.Contains("blocked using zen.spamhaus.org", ex.Message);
+        var log = _server.Services.GetRequiredService<SpamLog>();
+        Assert.Contains("127.0.0.2 SBL", log.Query(new SpamLogQuery(Action: SpamLogAction.Rejected)).Single().Detail);
+
+        // "Nie sperren" under IP-Sperren, e.g. for the servers of a provider that forwards mail here.
+        _server.Services.GetRequiredService<Core.Security.IpRules>().Add("127.0.0.1", Core.Security.IpRuleKind.Allow, "Weiterleitung");
+        await SendAsync();
+        Assert.Single(_server.Inbox("alice"));
+    }
+
+    private async Task SendAsync()
+    {
+        var message = new MimeMessage { Subject = "Weitergeleitet", Body = new TextPart("plain") { Text = "Inhalt" } };
+        message.From.Add(MailboxAddress.Parse("someone@unknown.test"));
+        message.To.Add(MailboxAddress.Parse("alice@example.test"));
+        using var client = new SmtpClient { LocalDomain = "mout.provider.test" };
+        await client.ConnectAsync("127.0.0.1", _server.InboundPort, SecureSocketOptions.None);
+        await client.SendAsync(message);
+        await client.DisconnectAsync(true);
+    }
+}

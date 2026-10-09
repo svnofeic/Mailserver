@@ -52,7 +52,8 @@ public sealed class SpamFilter(
     Greylist greylist,
     AccountStore accounts,
     SpamLog spamLog,
-    ILogger<SpamFilter> logger)
+    ILogger<SpamFilter> logger,
+    Mailserver.Core.Security.IpRules? ipRules = null)
 {
     private SpamOptions Settings => options.Value.Spam;
 
@@ -74,22 +75,27 @@ public sealed class SpamFilter(
         var ptr = await dns.GetPtrAsync(session.Ip!, cancellationToken);
         session.ReverseDns = ptr.Records.FirstOrDefault();
 
-        var checks = Settings.EffectiveDnsBlocklists.Where(b => b.Zone.Length > 0)
-            .Select(async b => (List: b, Listed: await blocklists.IsListedAsync(session.Ip!, b.Zone, cancellationToken)));
-        foreach (var (list, listed) in await Task.WhenAll(checks))
+        // "Nie sperren" under IP-Sperren (e.g. the servers of a provider that forwards mail here): no blocklist lookups.
+        var checks = ipRules?.IsAllowed(session.Ip) == true ? [] : Settings.EffectiveDnsBlocklists.Where(b => b.Zone.Length > 0)
+            .Select(async b => (List: b, Codes: await blocklists.LookupAsync(session.Ip!, b.Zone, cancellationToken)));
+        var found = new List<string>();
+        foreach (var (list, codes) in await Task.WhenAll(checks))
         {
-            if (listed)
+            if (codes.Count > 0)
             {
-                var reject = list.Action.Equals("Reject", StringComparison.OrdinalIgnoreCase);
-                session.Listings.Add((list.Zone, reject ? double.PositiveInfinity : list.Score));
+                var reject = list.Action.Equals("Reject", StringComparison.OrdinalIgnoreCase) &&
+                             !codes.All(c => DnsBlocklistChecker.IsWeakSpamhausListing(list.Zone, c));
+                // A weak listing in a list meant for rejection still counts clearly.
+                var score = list.Action.Equals("Reject", StringComparison.OrdinalIgnoreCase) ? 4.0 : list.Score;
+                session.Listings.Add((list.Zone, reject ? double.PositiveInfinity : score));
+                found.Add($"{list.Zone} ({string.Join(", ", codes.Select(c => DnsBlocklistChecker.SpamhausList(c) is { } name && list.Zone.Contains("spamhaus", StringComparison.OrdinalIgnoreCase) ? $"{c} {name}" : c.ToString()))})");
             }
         }
 
         if (session.Listings.Any(l => double.IsPositiveInfinity(l.Score)))
         {
-            logger.LogInformation("Rejecting {Ip}: listed in {Zones}", session.Ip, string.Join(", ", session.Listings.Select(l => l.Zone)));
-            Log(session, SpamLogStage.Connect, SpamLogAction.Rejected,
-                detail: "listed in " + string.Join(", ", session.Listings.Select(l => l.Zone)));
+            logger.LogInformation("Rejecting {Ip}: listed in {Zones}", session.Ip, string.Join(", ", found));
+            Log(session, SpamLogStage.Connect, SpamLogAction.Rejected, detail: "listed in " + string.Join(", ", found));
             return Rejection(session);
         }
 

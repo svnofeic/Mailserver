@@ -6,7 +6,7 @@ Mails, die andere Server über Port 25 einliefern, durchlaufen diese Prüfungen:
 
 | Zeitpunkt | Prüfung | Wirkung |
 |---|---|---|
-| Verbindung | **DNS-Blacklists** (Standard: Spamhaus ZEN, SpamCop) | Spamhaus-Treffer: Ablehnung. SpamCop-Treffer: +3 Punkte |
+| Verbindung | **DNS-Blacklists** (Standard: Spamhaus ZEN, SpamCop) | Spamhaus-Treffer: Ablehnung (nur CSS, 127.0.0.3: +4 Punkte). SpamCop-Treffer: +3 Punkte |
 | Verbindung | **Reverse DNS** der IP | fehlt: +1,5 |
 | MAIL FROM | **SPF** (RFC 7208) | fail +3,5 · softfail +1,5 · fehlerhaft +1 · neutral +0,3 · kein SPF +0,5 |
 | RCPT TO | **Greylisting** | unbekannte Absender müssen es nach 5 Minuten erneut versuchen (nicht bei SPF pass) |
@@ -38,6 +38,13 @@ Verbindungen vom Server selbst (127.0.0.1) und aus `Spam:TrustedNetworks` werden
 **Hinweis zu Spamhaus:** Spamhaus beantwortet Anfragen über große öffentliche DNS-Resolver (z. B. 8.8.8.8) nicht und liefert dann
 Fehlercodes, die der Server ignoriert. Die Liste wirkt also nur, wenn der Server den DNS-Resolver des VPS-Anbieters oder einen
 eigenen verwendet.
+
+**Weiterleitungen von anderen Anbietern:** Leitet ein anderer Anbieter (z. B. IONOS, GMX) Mails hierher weiter, kommen sie von
+dessen Servern. Steht einer davon auf einer Sperrliste, wird die Mail abgelehnt („blocked using zen.spamhaus.org“). Abhilfe:
+die Adresse des Servers (steht in der Fehlermeldung bzw. im Verlauf, z. B. `82.165.159.39`) unter *Verwaltung → IP-Sperren* als
+**nie sperren** eintragen – dann werden für ihn keine Sperrlisten abgefragt; die übrigen Prüfungen bleiben. Ganz ohne solche
+Probleme: die Adresse unter *Fremde Konten* abrufen lassen statt weiterleiten. Im Verlauf steht bei einer Ablehnung, welche
+Spamhaus-Liste getroffen hat (SBL, CSS, XBL, PBL, DROP).
 
 ## Eigene Regeln
 
