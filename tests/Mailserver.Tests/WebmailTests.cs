@@ -192,6 +192,34 @@ public sealed class WebmailTests : IAsyncLifetime
         Assert.Contains("Nummer 069", _web.LastPage);
     }
 
+    [Fact]
+    public async Task Expired_form_comes_back_instead_of_an_empty_error()
+    {
+        // As from a page that was open too long: no (valid) antiforgery token.
+        var response = await _web.PostRawAsync("/Mail/Compose?handler=Send", ("Form.From", "alice@example.test"), ("Form.To", "bob@example.test"),
+            ("Form.Subject", "Lange geschrieben"), ("Form.Body", "Viel Text"), ("__RequestVerificationToken", "veraltet"));
+        var page = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("zu lange geöffnet", page);
+        Assert.Contains("value=\"Lange geschrieben\"", page);
+        Assert.Empty(_server.Inbox("bob"));
+
+        // Sending from the page shown again works.
+        var token = System.Text.RegularExpressions.Regex.Match(page, "name=\"__RequestVerificationToken\" type=\"hidden\" value=\"([^\"]+)\"").Groups[1].Value;
+        await _web.PostRawAsync("/Mail/Compose?handler=Send", ("Form.From", "alice@example.test"), ("Form.To", "bob@example.test"),
+            ("Form.Subject", "Lange geschrieben"), ("Form.Body", "Viel Text"), ("__RequestVerificationToken", WebUtility.HtmlDecode(token)));
+        await TestServer.WaitUntilAsync(() => _server.Inbox("bob").Count == 1, "delivery");
+    }
+
+    [Fact]
+    public async Task Error_responses_have_a_page()
+    {
+        var response = await _web.GetAsync("/Mail/Read?folder=INBOX&uid=999999");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Contains("Nicht gefunden", _web.LastPage);
+    }
+
     [Theory]
     [InlineData(0, 3, "1 2 3")]
     [InlineData(0, 20, "1 2 3 … 20")]

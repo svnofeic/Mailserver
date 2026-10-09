@@ -114,6 +114,9 @@ public static class WebHosting
     public static WebApplication UseMailserverWeb(this WebApplication app)
     {
         app.UseExceptionHandler("/Fehler");
+        // Error responses without content (400, 404, 413 …) get the error page: an empty response makes Safari on the iPhone
+        // offer a "file" for download instead of showing anything.
+        app.UseStatusCodePagesWithReExecute("/Fehler", "?code={0}");
         app.Use(async (context, next) =>
         {
             // Blocked addresses (Admin → IP-Sperren) get nothing; Let's Encrypt validation must still get through.

@@ -29,7 +29,11 @@ public sealed class ComposeForm
     public bool KeepAttachments { get; set; } = true;
 }
 
+// The token is checked in the handlers: a mail written for minutes must not end in an empty error response when the token
+// no longer fits (e.g. the app was in the background, or the server restarted); the form comes back to be sent again.
+[IgnoreAntiforgeryToken]
 public sealed class ComposeModel(
+    Microsoft.AspNetCore.Antiforgery.IAntiforgery antiforgery,
     WebmailStore store,
     WebmailSender sender,
     MailboxStore mailboxes,
@@ -105,6 +109,11 @@ public sealed class ComposeModel(
 
     public async Task<IActionResult> OnPostSendAsync(CancellationToken cancellationToken)
     {
+        if (await RefusedAsync() is { } refused)
+        {
+            return refused;
+        }
+
         try
         {
             await sender.SendAsync(CurrentAccount, await BuildDraftAsync(cancellationToken), HttpContext.Connection.RemoteIpAddress, cancellationToken);
@@ -129,6 +138,11 @@ public sealed class ComposeModel(
 
     public async Task<IActionResult> OnPostDraftAsync(CancellationToken cancellationToken)
     {
+        if (await RefusedAsync() is { } refused)
+        {
+            return refused;
+        }
+
         try
         {
             var saved = await sender.SaveDraftAsync(CurrentAccount, await BuildDraftAsync(cancellationToken), cancellationToken);
@@ -142,6 +156,21 @@ public sealed class ComposeModel(
             Prepare();
             return Page();
         }
+    }
+
+    /// <summary>The form again with a notice if the antiforgery token is missing or expired; null if it is valid.</summary>
+    private async Task<IActionResult?> RefusedAsync()
+    {
+        if (await antiforgery.IsRequestValidAsync(HttpContext))
+        {
+            return null;
+        }
+
+        logger.LogWarning("Webmail form of {User} had no valid antiforgery token; shown again", CurrentAddress);
+        ErrorMessage = "Nicht gesendet: Die Seite war zu lange geöffnet. Bitte noch einmal auf „Senden“ tippen" +
+                       (Files.Any(f => f.Length > 0) ? " und die Anhänge erneut auswählen." : ".");
+        Prepare();
+        return Page();
     }
 
     private async Task<Draft> BuildDraftAsync(CancellationToken cancellationToken)

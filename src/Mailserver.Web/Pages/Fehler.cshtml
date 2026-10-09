@@ -1,5 +1,18 @@
 @page
-@{ ViewData["Title"] = "Fehler"; }
-<h1>Es ist ein Fehler aufgetreten</h1>
-<p class="muted">Die Aktion konnte nicht ausgeführt werden. Details stehen im Protokoll des Servers.</p>
+@using Microsoft.AspNetCore.Diagnostics
+@{
+    ViewData["Title"] = "Fehler";
+    var error = ViewContext.HttpContext.Features.Get<IExceptionHandlerFeature>()?.Error;
+    var code = error is Microsoft.AspNetCore.Http.BadHttpRequestException bad ? bad.StatusCode : int.TryParse(ViewContext.HttpContext.Request.Query["code"], out var c) ? c : ViewContext.HttpContext.Response.StatusCode;
+    var (title, text) = code switch
+    {
+        400 => ("Die Anfrage war ungültig", "Meist war die Seite zu lange geöffnet. Bitte zurückgehen, die Seite neu laden und es noch einmal versuchen."),
+        403 => ("Keine Berechtigung", "Diese Seite ist nur für Administratoren."),
+        404 => ("Nicht gefunden", "Diese Seite oder Nachricht gibt es nicht (mehr)."),
+        413 => ("Zu groß", "Die Daten sind zu groß – zum Beispiel zu große Anhänge. Bitte kleinere Dateien wählen."),
+        _ => ("Es ist ein Fehler aufgetreten", "Die Aktion konnte nicht ausgeführt werden. Details stehen im Protokoll des Servers."),
+    };
+}
+<h1>@title</h1>
+<p class="muted">@text</p>
 <p><a href="/">Zur Übersicht</a></p>
