@@ -36,12 +36,8 @@ internal sealed class InboundMailboxFilter(AccountStore accounts, MailboxStore m
             throw Reject(SmtpReplyCode.TransactionFailed, blocked);
         }
 
-        if (options.Value.Security.RejectUnauthenticatedLocalSender &&
-            !string.IsNullOrEmpty(from.Host) && accounts.IsLocalDomain(from.Host))
-        {
-            throw Reject(SmtpReplyCode.MailboxUnavailable, "5.7.1 Use the submission port with authentication to send as a local domain");
-        }
-
+        // One of our own domains as sender is checked after DATA (SpamFilter): it may be our own mail coming back through a
+        // forwarding at another provider, recognisable by our DKIM signature.
         var sender = string.IsNullOrEmpty(from.User) ? "" : from.AsAddress();
         if (await spamFilter.CheckSenderAsync(session, sender, cancellationToken) is { } spfRejection)
         {

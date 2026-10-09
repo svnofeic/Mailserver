@@ -59,7 +59,11 @@ Benachrichtigung bei Fehlern.
 ### Sicherheitsregeln
 
 - **Port 25** nimmt nur Mails für eigene Postfächer und Aliase an. Weiterleiten an fremde Server ("Open Relay") ist ausgeschlossen, und ein Login ist dort nicht möglich.
-- Mails, die auf Port 25 ohne Login eine eigene Domain als Absender angeben, werden abgelehnt (Schutz vor Spoofing).
+- Mails, die auf Port 25 ohne Login eine eigene Domain als Absender angeben, werden abgelehnt (Schutz vor Spoofing) –
+  außer sie tragen eine gültige DKIM-Signatur dieses Servers. So kommen eigene Mails an, die über eine Weiterleitung bei
+  einem anderen Anbieter (z. B. GMX → feicht.me) zurückkommen.
+- Weitergeleitete Mails, bei denen SPF scheitert (der Weiterleiter steht nicht im SPF des Absenders), deren DKIM-Signatur
+  aber gültig ist (DMARC besteht), gelten nicht als Spam (Test `SPF_FAIL_DKIM_PASS`, 0,3 Punkte statt 3,5).
 - **Port 587/465** verlangt TLS und einen Login. Ohne Zertifikat bleiben diese Ports aus.
 - Ein Benutzer darf nur mit der eigenen Adresse oder einem eigenen Alias senden.
 - **Virenschutz:** Gefährliche Anhänge (Programme, Skripte, Verknüpfungen, ISO-Abbilder – auch in ZIP-Archiven und als

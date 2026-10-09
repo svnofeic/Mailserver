@@ -8,6 +8,7 @@ using Mailserver.Core.Rules;
 using Mailserver.Core.SpamLogging;
 using Microsoft.Extensions.DependencyInjection;
 using MimeKit;
+using MimeKit.Cryptography;
 
 namespace Mailserver.Tests;
 
@@ -161,6 +162,62 @@ public sealed class SpamIntegrationTests : IAsyncLifetime
         Assert.Equal("DMARC p=reject", rejected.Detail);
         var discarded = Assert.Single(log.Query(new SpamLogQuery(Action: SpamLogAction.Discarded)));
         Assert.Equal("Gewinnspiel", discarded.Rules);
+    }
+
+    [Fact]
+    public async Task Own_mail_coming_back_through_a_forwarding_is_accepted_only_with_our_signature()
+    {
+        // alice writes to an address at another provider, which forwards it to bob here: MAIL FROM is still alice@example.test.
+        var keys = _server.Services.GetRequiredService<Core.Dkim.DkimKeyStore>();
+        _dns.AddTxt("test._domainkey.example.test", keys.GetDnsRecord("example.test", "test"));
+        var message = new MimeMessage { Subject = "Weitergeleitet", Body = new TextPart("plain") { Text = "Inhalt" } };
+        message.From.Add(MailboxAddress.Parse("alice@example.test"));
+        message.To.Add(MailboxAddress.Parse("alice@gmx.test"));
+        using var raw = new MemoryStream();
+        await message.WriteToAsync(raw);
+        var signed = await _server.Services.GetRequiredService<Core.Routing.OutgoingMessagePreparer>().PrepareAsync(raw.ToArray(), CancellationToken.None);
+
+        await SendRawAsync("alice@example.test", "bob@example.test", MimeMessage.Load(new MemoryStream(signed)));
+        Assert.Contains("Weitergeleitet", await _server.ReadAsync(Assert.Single(_server.Inbox("bob"))));
+
+        // Without our signature it is a forgery and still refused.
+        var ex = await Assert.ThrowsAsync<SmtpCommandException>(() => SendRawAsync("alice@example.test", "bob@example.test", message));
+        Assert.Contains("submission port", ex.Message);
+        Assert.Single(_server.Inbox("bob"));
+    }
+
+    [Fact]
+    public async Task Forwarded_mail_with_failing_spf_but_valid_signature_is_not_spam()
+    {
+        // The forwarder (127.0.0.1) is not in the SPF of the original sender, but its DKIM signature survived.
+        _dns.AddTxt("forwarded.test", "v=spf1 ip4:198.51.100.1 -all");
+        _dns.AddTxt("_dmarc.forwarded.test", "v=DMARC1; p=reject");
+        var keys = _server.Services.GetRequiredService<Core.Dkim.DkimKeyStore>();
+        keys.GenerateKey("forwarded.test", "s1");
+        _dns.AddTxt("s1._domainkey.forwarded.test", keys.GetDnsRecord("forwarded.test", "s1"));
+        var message = new MimeMessage { Subject = "Rechnung", Body = new TextPart("plain") { Text = "Inhalt" } };
+        message.From.Add(MailboxAddress.Parse("billing@forwarded.test"));
+        message.To.Add(MailboxAddress.Parse("alice@gmx.test"));
+        message.Prepare(EncodingConstraint.SevenBit);
+        new DkimSigner(keys.GetKeyPath("forwarded.test", "s1"), "forwarded.test", "s1")
+        {
+            HeaderCanonicalizationAlgorithm = DkimCanonicalizationAlgorithm.Relaxed,
+            BodyCanonicalizationAlgorithm = DkimCanonicalizationAlgorithm.Relaxed,
+        }.Sign(message, [HeaderId.From, HeaderId.Subject, HeaderId.To]);
+
+        await SendRawAsync("billing@forwarded.test", "alice@example.test", message);
+
+        var content = await _server.ReadAsync(Assert.Single(_server.Inbox("alice")));
+        Assert.Contains("SPF_FAIL_DKIM_PASS", content);
+        Assert.Contains("dmarc=pass", content);
+    }
+
+    private async Task SendRawAsync(string mailFrom, string recipient, MimeMessage message)
+    {
+        using var client = new SmtpClient { LocalDomain = "mx.sender.test" };
+        await client.ConnectAsync("127.0.0.1", _server.InboundPort, SecureSocketOptions.None);
+        await client.SendAsync(message, MailboxAddress.Parse(mailFrom), [MailboxAddress.Parse(recipient)]);
+        await client.DisconnectAsync(true);
     }
 
     private List<Core.Storage.StoredMessage> Messages(string user, string folder) =>

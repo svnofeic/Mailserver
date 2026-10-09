@@ -29,6 +29,12 @@ public sealed class InboundSession(IPAddress? ip, string? helo, string? sessionI
     public List<(string Zone, double Score)> Listings { get; } = [];
     public string MailFrom { get; internal set; } = "";
     public SpfOutcome? Spf { get; internal set; }
+
+    /// <summary>
+    /// MAIL FROM names one of this server's domains. Decided only after DATA: a message this server signed itself and that
+    /// comes back through a forwarding at another provider is fine; anything else is refused.
+    /// </summary>
+    public bool ClaimsLocalSender { get; internal set; }
 }
 
 public sealed record FilterResult(string? Rejection, InboundVerdict Verdict, string Headers);
@@ -98,6 +104,9 @@ public sealed class SpamFilter(
     {
         session.MailFrom = mailFrom;
         session.Spf = null;
+        // Also from trusted networks and with the spam filter switched off; only relay networks (Smtp:RelayNetworks) never get here.
+        session.ClaimsLocalSender = options.Value.Security.RejectUnauthenticatedLocalSender &&
+                                    Domain(mailFrom) is { } senderDomain && accounts.IsLocalDomain(senderDomain);
         if (session.Trusted)
         {
             return null;
@@ -136,13 +145,25 @@ public sealed class SpamFilter(
     public async Task<FilterResult> CheckMessageAsync(InboundSession session, byte[] rawMessage, IReadOnlyList<string> recipients,
         CancellationToken cancellationToken)
     {
-        if (session.Trusted)
+        if (session.Trusted && !session.ClaimsLocalSender)
         {
             return new FilterResult(null, InboundVerdict.Clean, "");
         }
 
         var message = await MimeMessage.LoadAsync(new MemoryStream(rawMessage, writable: false), cancellationToken);
         var dkimResults = await dkim.VerifyAsync(message, cancellationToken);
+        if (session.ClaimsLocalSender && !dkimResults.Any(d => d.Result == DkimResult.Pass && Aligned(d.Domain, Domain(session.MailFrom))))
+        {
+            Log(session, SpamLogStage.Data, SpamLogAction.Rejected, recipient: string.Join(", ", recipients), message: message,
+                detail: "eigene Domain als Absender ohne Anmeldung und ohne gültige DKIM-Signatur");
+            return new FilterResult(LocalSenderRejection, InboundVerdict.Clean, "");
+        }
+
+        if (session.Trusted)
+        {
+            return new FilterResult(null, InboundVerdict.Clean, "");
+        }
+
         var spfOutcome = session.Spf ?? new SpfOutcome(SpfResult.None, "");
         var fromDomain = message.From.Mailboxes.FirstOrDefault()?.Domain?.ToLowerInvariant();
         var dmarcOutcome = string.IsNullOrEmpty(fromDomain)
@@ -159,8 +180,12 @@ public sealed class SpamFilter(
                 dmarc: dmarcOutcome.FromDomain.Length == 0 ? null : $"{dmarcOutcome.Result.ToString().ToLowerInvariant()} p={dmarcOutcome.Policy.ToString().ToLowerInvariant()}",
                 detail: detail);
 
+        // SPF fails at every plain forwarding (the forwarder is not in the original sender's SPF); a signature of the sender
+        // domain that survived the trip shows the mail is genuine (DMARC passes through DKIM).
+        var forwarded = spfOutcome.Result is SpfResult.Fail or SpfResult.SoftFail && dmarcOutcome.Result == DmarcResult.Pass;
         switch (spfOutcome.Result)
         {
+            case SpfResult.Fail or SpfResult.SoftFail when forwarded: Add("SPF_FAIL_DKIM_PASS", 0.3); break;
             case SpfResult.Fail: Add("SPF_FAIL", 3.5); break;
             case SpfResult.SoftFail: Add("SPF_SOFTFAIL", 1.5); break;
             case SpfResult.PermError: Add("SPF_PERMERROR", 1.0); break;
@@ -200,7 +225,8 @@ public sealed class SpamFilter(
         }
 
         // A foreign server claiming to send as one of our own domains without a valid signature is almost always spoofing.
-        if (fromDomain is not null && accounts.IsLocalDomain(fromDomain) && dmarcOutcome.Result != DmarcResult.Pass)
+        if (fromDomain is not null && accounts.IsLocalDomain(fromDomain) && dmarcOutcome.Result != DmarcResult.Pass &&
+            !dkimResults.Any(d => d.Result == DkimResult.Pass && Aligned(d.Domain, fromDomain)))
         {
             Add("FROM_LOCAL_SPOOF", 5.0);
         }
@@ -250,6 +276,17 @@ public sealed class SpamFilter(
             string.Join(", ", tests.Select(t => $"{t.Name}={t.Score}")));
         return new FilterResult(null, verdict, headers.ToString());
     }
+
+    public const string LocalSenderRejection = "5.7.1 Use the submission port with authentication to send as a local domain";
+
+    private static string? Domain(string address) =>
+        address.LastIndexOf('@') is var at and >= 0 && at < address.Length - 1 ? address[(at + 1)..].ToLowerInvariant() : null;
+
+    /// <summary>Relaxed alignment as in DMARC: the same domain or a subdomain of it.</summary>
+    private static bool Aligned(string signingDomain, string? domain) =>
+        domain is not null && (signingDomain.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+                               domain.EndsWith("." + signingDomain, StringComparison.OrdinalIgnoreCase) ||
+                               signingDomain.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Headers a sender must not be able to set: spam headers (rules could match them) and Authentication-Results claiming
