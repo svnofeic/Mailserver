@@ -27,6 +27,10 @@ nicht erreichbar ist.
 
 - Voraussetzung ist ein **gültiges Zertifikat** für den Hostnamen (z. B. Let's Encrypt unter Verwaltung → Zertifikat);
   mit einem selbst ausgestellten Zertifikat bieten die Browser die Installation nicht an.
+- **Aktualisieren:** In der App oben auf der Seite nach unten ziehen, bis der Kreis mit dem Pfeil farbig wird, und
+  loslassen – wie im Browser. Mit ungespeicherten Eingaben (z. B. einer angefangenen Mail) passiert dabei nichts, damit
+  nichts verloren geht. Mailliste und Übersichten laden sich außerdem von selbst neu, wenn man nach über einer Minute
+  in die App zurückkehrt.
 - Gedrückt halten auf dem App-Symbol zeigt Verknüpfungen: Neue Mail, Übersicht, Server-Übersicht.
 - Unter Windows, macOS und Android kann die App als Mailprogramm für **mailto:-Links** eingetragen werden; der Browser
   fragt beim ersten Mal nach. Empfänger, Cc, Betreff und Text aus dem Link stehen dann schon in „Neue Mail“.

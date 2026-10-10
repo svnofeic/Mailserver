@@ -32,7 +32,7 @@
     <script src="/assets/app.js?v=@version" defer></script>
     @await RenderSectionAsync("Head", required: false)
 </head>
-<body data-unread="@unread">
+<body data-unread="@unread" data-refresh-on-resume="@(ViewData["RefreshOnResume"] is true ? "" : null)">
 <div class="shell@(signedIn ? " signed-in" : "")">
 @if (signedIn)
 {

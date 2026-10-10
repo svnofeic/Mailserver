@@ -2,6 +2,7 @@
 @model Mailserver.Web.Pages.Admin.IndexModel
 @using Mailserver.Web.Pages.Admin
 @{
+    ViewData["RefreshOnResume"] = true;
     ViewData["Title"] = "Admin";
     var labels = Model.DayLabels;
     var received = Model.Daily.Select(d => d.Received).ToList();

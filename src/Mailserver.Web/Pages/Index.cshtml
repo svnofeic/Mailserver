@@ -1,6 +1,7 @@
 @page
 @model Mailserver.Web.Pages.IndexModel
 @{
+    ViewData["RefreshOnResume"] = true;
     ViewData["Title"] = "Übersicht";
     var inbox = Model.Folders.FirstOrDefault(f => f.Folder.Name == "INBOX").Status;
     var quota = Model.CurrentAccount.QuotaBytes;

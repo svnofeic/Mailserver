@@ -1,6 +1,7 @@
 @page
 @model Mailserver.Web.Pages.Mail.IndexModel
-@{ ViewData["Title"] = Mailserver.Web.Webmail.FolderDisplay.Leaf(Model.Folder.Name); }
+@{ ViewData["RefreshOnResume"] = true;
+    ViewData["Title"] = Mailserver.Web.Webmail.FolderDisplay.Leaf(Model.Folder.Name); }
 <div class="mail">
     <aside>
         <a class="button" href="/Mail/Compose">@Icons.Get("pencil") Neue Mail</a>

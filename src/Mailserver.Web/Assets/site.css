@@ -378,6 +378,14 @@ ul.hints { margin: 0; padding-left: 20px; }
 .toolbar .grow { flex: 1; }
 .toolbar.small button { padding: 6px 12px; font-size: 13px; }
 .toolbar select { padding: 6px 10px; font-size: 13px; }
+/* Pull to reload in the installed app (app.js). */
+.pull-refresh { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; z-index: 100; width: 40px; height: 40px;
+    margin-top: -48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none;
+    background: var(--surface-2); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0, 0, 0, .25); transform: translate(-50%, 0); }
+.pull-refresh svg { width: 20px; height: 20px; fill: none; stroke: var(--muted); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.pull-refresh.ready svg, .pull-refresh.loading svg { stroke: var(--accent); }
+.pull-refresh.loading { opacity: 1 !important; animation: pull-spin .8s linear infinite; }
+@keyframes pull-spin { from { transform: translate(-50%, 56px) rotate(0deg); } to { transform: translate(-50%, 56px) rotate(360deg); } }
 .folder-counts { display: flex; flex-wrap: wrap; gap: 4px 6px; }
 .folder-counts .pill strong { margin-left: 3px; }
 table.news td.num, table.news th.num { text-align: right; font-variant-numeric: tabular-nums; width: 60px; }
