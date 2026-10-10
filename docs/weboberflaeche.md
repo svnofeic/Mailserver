@@ -9,8 +9,9 @@ belegt, 8443 und 8880 durch Plesk; der Port lässt sich unter `Mailserver:Web:Ht
 **Design:** dunkel mit Glas-Effekt als Standard; unten in der Seitenleiste lässt sich auf **Hell** umschalten (wird pro
 Browser gemerkt). Die Admin-Übersicht zeigt Kennzahlen mit Trend gegenüber der Vorwoche, Verläufe über 14 Tage
 (Mailverkehr, Spam, abgelehnte Verbindungen, Fehl-Logins), die Verteilung des Eingangs, die letzte Aktivität, die
-häufigsten Spam-Absender und abgelehnten Adressen sowie den Systemzustand (Zertifikat, Sicherung, Virenschutz,
-Warteschlange). Alle Diagramme werden auf dem Server gezeichnet – kein JavaScript, keine externen Dienste.
+häufigsten Spam-Absender und abgelehnten Adressen, den Systemzustand (Zertifikat, Sicherung, Virenschutz,
+Warteschlange) sowie **neue Mails pro Postfach**: alle Postfächer mit der Zahl ungelesener Mails je Ordner (Posteingang
+zuerst, Spam und Papierkorb zuletzt) und „Öffnen“ zum direkten Wechsel ins Postfach. Alle Diagramme werden auf dem Server gezeichnet – kein JavaScript, keine externen Dienste.
 
 ## Als App installieren
 

@@ -48,6 +48,11 @@ public sealed class IndexModel(
     public int OutboundFailed { get; private set; }
     public int LoginFailures { get; private set; }
     public IReadOnlyList<string> Hints { get; private set; } = [];
+
+    /// <summary>A mailbox with its unread mail per folder (inbox first, spam and trash last).</summary>
+    public sealed record MailboxNews(Mailserver.Core.Accounts.Account Account, long Total, IReadOnlyList<(string Folder, long Unseen)> Folders);
+
+    public IReadOnlyList<MailboxNews> News { get; private set; } = [];
     public string CertificateInfo { get; private set; } = "";
     public string? CertificateWarning { get; private set; }
     public long TotalUsage { get; private set; }
@@ -60,6 +65,13 @@ public sealed class IndexModel(
         var all = accounts.ListAccounts();
         Mailboxes = all.Count;
         TotalUsage = all.Sum(a => mailboxes.GetUsage(a.Id));
+        var unseen = mailboxes.UnseenPerFolder().ToLookup(u => u.AccountId);
+        static int Order(string folder) => folder switch { MailboxStore.Inbox => 0, "Junk" => 2, "Trash" => 3, _ => 1 };
+        News = all.OrderBy(a => a.Address.ToString(), StringComparer.OrdinalIgnoreCase)
+            .Select(a => new MailboxNews(a, unseen[a.Id].Sum(u => u.Unseen),
+                unseen[a.Id].OrderBy(u => Order(u.Folder)).ThenBy(u => u.Folder, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(u => (u.Folder, u.Unseen)).ToList()))
+            .ToList();
         Aliases = accounts.ListAliases().Count;
         var queued = queue.List();
         QueueCount = queued.Count;

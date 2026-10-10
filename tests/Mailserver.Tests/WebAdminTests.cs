@@ -29,6 +29,29 @@ public sealed class WebAdminTests : IAsyncLifetime
         await _server.DisposeAsync();
     }
 
+    [Fact]
+    public async Task Overview_shows_unread_mail_per_mailbox_and_folder()
+    {
+        var mail = System.Text.Encoding.ASCII.GetBytes("Subject: Hallo\r\n\r\nText");
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"), mail);
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"), mail);
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"), mail, flags: Core.Storage.MessageFlags.Seen);
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"), mail, "Junk");
+
+        await _web.GetAsync("/Admin");
+        var page = _web.LastPage;
+        Assert.Contains("Neue Mails pro Postfach", page);
+        var row = page[page.IndexOf(">alice@example.test</a>", StringComparison.Ordinal)..];
+        row = row[..row.IndexOf("</tr>", StringComparison.Ordinal)];
+        Assert.Contains("<strong>3</strong>", row);
+        Assert.Contains("Posteingang <strong>2</strong>", row);
+        Assert.Contains("Spam <strong>1</strong>", row);
+        // Inbox before spam; bob has nothing new.
+        Assert.True(row.IndexOf("Posteingang", StringComparison.Ordinal) < row.IndexOf("Spam", StringComparison.Ordinal));
+        var bob = page[page.IndexOf(">bob@example.test</a>", StringComparison.Ordinal)..];
+        Assert.Contains("keine neuen Mails", bob[..bob.IndexOf("</tr>", StringComparison.Ordinal)]);
+    }
+
     [Theory]
     [InlineData("/Admin", "Admin-Übersicht")]
     [InlineData("/Admin/Domains", "example.test")]

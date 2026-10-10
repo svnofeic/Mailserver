@@ -190,6 +190,58 @@
     </div>
 </section>
 
+<section class="panel">
+    <div class="panel-head">
+        <h2><span class="badge-icon">@Icons.Get("inbox")</span> Neue Mails pro Postfach</h2>
+        <span class="small muted">ungelesen, je Ordner</span>
+    </div>
+    @if (Model.News.Count == 0)
+    {
+        <p class="muted" style="margin: 0">Noch keine Postfächer.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="news">
+                <thead><tr><th>Postfach</th><th class="num">Neu</th><th>Ordner</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var mailbox in Model.News)
+                    {
+                        <tr>
+                            <td><a href="/Admin/Mailboxes/Edit?address=@mailbox.Account.Address">@mailbox.Account.Address</a>
+                                @if (!mailbox.Account.Enabled) { <span class="pill">deaktiviert</span> }</td>
+                            <td class="num">@if (mailbox.Total > 0) { <strong>@mailbox.Total</strong> } else { <span class="muted">0</span> }</td>
+                            <td>
+                                @if (mailbox.Folders.Count == 0)
+                                {
+                                    <span class="small muted">keine neuen Mails</span>
+                                }
+                                else
+                                {
+                                    <span class="folder-counts">
+                                        @foreach (var (folder, count) in mailbox.Folders)
+                                        {
+                                            <span class="pill @(folder is "Junk" or "Trash" ? "" : "good")">@Format.FolderName(folder) <strong>@count</strong></span>
+                                        }
+                                    </span>
+                                }
+                            </td>
+                            <td class="row-actions">
+                                @if (mailbox.Account.Enabled && mailbox.Account.Id != Model.CurrentAccount.Id)
+                                {
+                                    <form method="post" asp-page="/Admin/Mailboxes/Edit" asp-page-handler="Impersonate" asp-route-address="@mailbox.Account.Address" class="inline">
+                                        <button type="submit" class="link" title="Webmail dieses Postfachs öffnen – wird im Verlauf protokolliert">Öffnen</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
 @if (Model.Hints.Count > 0)
 {
     <h2>Hinweise zum Spamfilter (7 Tage)</h2>

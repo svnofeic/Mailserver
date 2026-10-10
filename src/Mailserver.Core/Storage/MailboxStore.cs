@@ -261,6 +261,19 @@ public sealed class MailboxStore(Database database, DataPaths paths)
             ("$value", subscribed ? 1 : 0), ("$account", accountId), ("$name", NormalizeFolderName(name))) > 0;
     }
 
+    /// <summary>Unread messages per folder of all mailboxes, only folders that have some (one query for the admin overview).</summary>
+    public IReadOnlyList<(long AccountId, string Folder, long Unseen)> UnseenPerFolder()
+    {
+        using var connection = database.Open();
+        return connection.Query(
+            """
+            SELECT f.account_id, f.name, COUNT(*) FROM messages m JOIN folders f ON f.id = m.folder_id
+            WHERE (' ' || m.flags || ' ') NOT LIKE '% \Seen %' AND (' ' || m.flags || ' ') NOT LIKE '% \Deleted %'
+            GROUP BY f.id
+            """,
+            r => (r.GetInt64(0), r.GetString(1), r.GetInt64(2)));
+    }
+
     public FolderStatus GetStatus(long folderId)
     {
         using var connection = database.Open();
