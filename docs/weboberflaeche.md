@@ -150,9 +150,34 @@ Unter *Fremde Konten* lassen sich bis zu 10 E-Mail-Adressen bei anderen Anbieter
   Ordner eines fremden Kontos werden automatisch von dieser Adresse geschrieben.
 - Beim Speichern meldet sich der Server einmal per IMAP und SMTP beim Anbieter an; falsche Angaben fallen so sofort auf.
   Leere Servernamen werden als `imap.<domain>` / `smtp.<domain>` angenommen, der Benutzername als die Adresse.
-- Übliche Einstellungen: IMAP Port 993 mit SSL/TLS, SMTP Port 465 mit SSL/TLS oder 587 mit STARTTLS. Manche Anbieter
-  verlangen, dass IMAP erst in ihren Einstellungen freigeschaltet wird (z. B. GMX, Web.de), oder ein eigenes App-Passwort
-  (z. B. Gmail, iCloud). Outlook.com/Hotmail erlaubt keine Anmeldung mit Passwort mehr und geht deshalb nicht.
+- **Bekannte Anbieter** – T-Online/Magenta, GMX, WEB.DE, Gmail, iCloud, Yahoo, freenet, Posteo, mailbox.org: Die
+  Serverdaten trägt der Server selbst ein, es reichen Adresse und Passwort. Was beim Anbieter vorher nötig ist:
+
+  | Anbieter | Vorher erledigen |
+  |---|---|
+  | T-Online | ein eigenes **E-Mail-Passwort** festlegen (E-Mail Center → Einstellungen → Passwörter); das normale Login-Passwort geht nicht |
+  | GMX, WEB.DE | E-Mail → Einstellungen → POP3/IMAP Abruf → „POP3 und IMAP Zugriff erlauben“ |
+  | Gmail, Yahoo | App-Passwort erzeugen (bei Google erst die Bestätigung in zwei Schritten einschalten) |
+  | iCloud | app-spezifisches Passwort unter account.apple.com |
+
+  Schlägt die Prüfung fehl, zeigt die Fehlermeldung den passenden Hinweis. Andere Anbieter: übliche Einstellungen sind
+  IMAP Port 993 mit SSL/TLS und SMTP Port 465 mit SSL/TLS oder 587 mit STARTTLS.
+- **Outlook.com, Hotmail, Live, MSN:** Microsoft erlaubt dafür keine Passwörter mehr. Adresse eintragen, Passwort leer
+  lassen, *Prüfen und speichern* – die Seite zeigt einen Code. <https://microsoft.com/devicelogin> öffnen (auf einem
+  beliebigen Gerät), Code eingeben, mit der Outlook-Adresse anmelden und zustimmen. Nach ein paar Sekunden ist die
+  Adresse eingerichtet. Gespeichert wird kein Passwort, sondern ein Zugangsschlüssel von Microsoft (verschlüsselt).
+  Ändert sich das Microsoft-Passwort oder widerruft Microsoft den Zugang, steht beim Konto ein Hinweis – dann
+  **Neu anmelden**.
+- Dafür braucht der Server **einmalig eine App-Registrierung bei Microsoft** (kostenlos, ca. 5 Minuten; ein Administrator
+  trägt die Anwendungs-ID unten auf der Seite *Fremde Konten* ein – oder es wird die der OneDrive-Sicherung genutzt):
+  1. <https://entra.microsoft.com> → *Anwendungen → App-Registrierungen → Neue Registrierung*, Name z. B. `Mailserver`,
+     Kontotypen **„Konten in einem beliebigen Organisationsverzeichnis und persönliche Microsoft-Konten“**, Umleitungs-URI
+     leer. (Lässt das Portal mit einem privaten Konto keine Registrierung zu: vorher ein kostenloses Azure-Konto anlegen.)
+  2. *Authentifizierung* → **„Öffentliche Clientflows zulassen“ auf „Ja“** → Speichern.
+  3. *API-Berechtigungen → Berechtigung hinzufügen → Microsoft Graph → Delegierte Berechtigungen*:
+     `IMAP.AccessAsUser.All`, `SMTP.Send` und `offline_access`.
+  4. Die **Anwendungs-ID (Client)** von der Übersichtsseite kopieren und unter *Fremde Konten → Outlook.com / Hotmail
+     (Administrator)* eintragen. Wird dieselbe Registrierung auch für OneDrive genutzt, zusätzlich `Files.ReadWrite`.
 - Die Passwörter liegen verschlüsselt in der Datenbank; der Schlüssel liegt in `data\secrets` und ist Teil der
   Datensicherung. Fehler beim Abruf (z. B. geändertes Passwort) stehen in der Liste beim jeweiligen Konto.
 - Mailprogramme (Outlook, Apple Mail …) sehen den Ordner per IMAP ebenfalls. Mit der fremden Adresse senden geht dort aber

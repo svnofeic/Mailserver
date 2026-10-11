@@ -12,9 +12,14 @@
     };
 }
 @section Head {
+    @if (Model.PendingSignIn is not null)
+    {
+        <meta http-equiv="refresh" content="5" />
+    }
     <style>
         .for-send { display: none; }
         form:has(#send:checked) .for-send { display: block; }
+        .code { font-size: 26px; font-weight: 600; letter-spacing: 2px; }
     </style>
 }
 <div class="page-head">
@@ -30,6 +35,21 @@
     }
 </div>
 
+@if (Model.PendingSignIn is { } signIn)
+{
+    <section class="panel">
+        <div class="panel-head"><h2><span class="badge-icon">@Icons.Get("key")</span> Bei Microsoft anmelden: @signIn.Address</h2></div>
+        <ol style="margin-top: 0">
+            <li><a href="@signIn.Login.VerificationUri" target="_blank" rel="noopener">@signIn.Login.VerificationUri</a> öffnen – auf einem beliebigen Gerät.</li>
+            <li>Diesen Code eingeben: <span class="code mono">@signIn.Login.UserCode</span></li>
+            <li>Mit <strong>@signIn.Address</strong> anmelden und den Zugriff auf E-Mails erlauben.</li>
+        </ol>
+        <p class="small muted" style="margin-bottom: 0">Gültig bis @Format.Time(signIn.Login.Expires). Diese Seite aktualisiert sich von selbst; sobald die
+            Anmeldung bestätigt ist, prüft der Server die Verbindung und richtet die Adresse ein. Gespeichert wird kein Passwort, nur ein Zugangsschlüssel
+            von Microsoft (verschlüsselt).</p>
+    </section>
+}
+
 @if (Model.Accounts.Count > 0)
 {
     <section class="panel">
@@ -41,7 +61,8 @@
                     {
                         <tr>
                             <td><strong>@account.Address</strong>
-                                <div class="small muted">@account.Settings.Imap.Host · @account.Fetched abgerufen</div>
+                                <div class="small muted">@account.Settings.Imap.Host · @account.Fetched abgerufen
+                                    @if (account.Settings.Auth == ExternalAuth.Microsoft) { <span>· über Microsoft angemeldet</span> }</div>
                                 @if (account.LastError is { } error)
                                 {
                                     <div class="small" style="color: var(--bad); overflow-wrap: anywhere">@error</div>
@@ -68,6 +89,11 @@
                                     <form method="post" asp-page-handler="Fetch" class="inline"><input type="hidden" name="id" value="@account.Id" />
                                         <button type="submit" class="secondary">@Icons.Get("refresh") Jetzt abrufen</button></form>
                                     <a class="button secondary" href="/Account/External?edit=@account.Id">Bearbeiten</a>
+                                    @if (account.Settings.Auth == ExternalAuth.Microsoft)
+                                    {
+                                        <form method="post" asp-page-handler="Reauth" class="inline"><input type="hidden" name="id" value="@account.Id" />
+                                            <button type="submit" class="secondary">Neu anmelden</button></form>
+                                    }
                                     <form method="post" asp-page-handler="Enable" class="inline"><input type="hidden" name="id" value="@account.Id" />
                                         <input type="hidden" name="enabled" value="@(account.Enabled ? "false" : "true")" />
                                         <button type="submit" class="secondary">@(account.Enabled ? "Abruf aus" : "Abruf ein")</button></form>
@@ -93,6 +119,11 @@
             <label>Ordner hier<input name="Form.Folder" value="@f.Folder" placeholder="leer = die Adresse" /></label>
         </div>
 
+        <p class="small muted" style="margin-top: 0">Für @string.Join(", ", MailProviders.Names.Where(n => n != MailProviders.Outlook.Name)) trägt der Server
+            die Serverdaten selbst ein – die Felder darunter einfach leer lassen. <strong>Outlook.com, Hotmail und Live</strong>
+            @(Model.MicrosoftReady ? "werden ohne Passwort über eine Anmeldung bei Microsoft verbunden (nach dem Speichern erscheint ein Code)."
+                                   : "lassen sich erst einbinden, wenn ein Administrator die App-Registrierung bei Microsoft eingetragen hat (siehe unten).")</p>
+
         <h3>Posteingang (IMAP)</h3>
         <div class="row">
             <label>Server<input name="Form.ImapHost" value="@f.ImapHost" autocomplete="off" placeholder="leer = imap.&lt;domain&gt;" /></label>
@@ -108,7 +139,8 @@
         </div>
         <div class="row">
             <label>Benutzername<input name="Form.UserName" value="@f.UserName" autocomplete="off" placeholder="leer = die Adresse" /></label>
-            <label>Passwort@(f.Id is null ? "" : " (leer = unverändert)")<input name="Form.Password" type="password" autocomplete="new-password" /></label>
+            <label>Passwort@(f.Id is null ? "" : " (leer = unverändert)")<input name="Form.Password" type="password" autocomplete="new-password"
+                                                                           placeholder="bei Outlook.com leer lassen" /></label>
         </div>
         @if (f.Id is null)
         {
@@ -146,4 +178,19 @@
             }
         </div>
     </form>
+}
+
+@if (Model.IsAdmin)
+{
+    <section class="panel" style="max-width: 760px">
+        <div class="panel-head"><h2><span class="badge-icon">@Icons.Get("settings")</span> Outlook.com / Hotmail (Administrator)</h2></div>
+        <p class="small muted" style="margin-top: 0">Microsoft lässt Outlook.com-, Hotmail- und Live-Adressen nur noch über eine eigene App-Registrierung zu
+            (einmalig, kostenlos – Schritt für Schritt in docs/weboberflaeche.md unter „Fremde Konten“). Ist für die OneDrive-Sicherung schon eine
+            eingetragen, wird diese genutzt.@(Model.MicrosoftReady && string.IsNullOrEmpty(Model.MicrosoftClientId) ? " Das ist gerade der Fall." : "")</p>
+        <form method="post" asp-page-handler="MicrosoftApp" class="row">
+            <label>Anwendungs-ID (Client-ID)<input name="clientId" value="@Model.MicrosoftClientId" class="mono" style="width: 320px"
+                                                   placeholder="00000000-0000-0000-0000-000000000000" /></label>
+            <button type="submit" class="secondary">Speichern</button>
+        </form>
+    </section>
 }

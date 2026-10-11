@@ -32,6 +32,7 @@ public sealed class ExternalMailClient(
     MalwareFilter malware,
     IOptions<MailserverOptions> options,
     ILogger<ExternalMailClient> logger,
+    MicrosoftMailAuth microsoft,
     PushNotifier? push = null) : IExternalMail
 {
     /// <summary>Messages per run; a full inbox taken over with "fetch existing mail" arrives over several runs.</summary>
@@ -49,7 +50,7 @@ public sealed class ExternalMailClient(
         {
             using var imap = new ImapClient { Timeout = TimeoutMilliseconds, ServerCertificateValidationCallback = CertificateValidation };
             await imap.ConnectAsync(settings.Imap.Host, settings.Imap.Port, Socket(settings.Imap.Security), cancellationToken);
-            await imap.AuthenticateAsync(settings.UserName, password, cancellationToken);
+            await LoginAsync(imap, settings, password, cancellationToken);
             await imap.DisconnectAsync(true, cancellationToken);
         }
         catch (Exception ex) when (Expected(ex, cancellationToken))
@@ -61,7 +62,7 @@ public sealed class ExternalMailClient(
         {
             try
             {
-                using var smtp = await ConnectSmtpAsync(smtpServer, settings.UserName, password, cancellationToken);
+                using var smtp = await ConnectSmtpAsync(smtpServer, settings, password, cancellationToken);
                 await smtp.DisconnectAsync(true, cancellationToken);
             }
             catch (Exception ex) when (Expected(ex, cancellationToken))
@@ -76,13 +77,12 @@ public sealed class ExternalMailClient(
     public async Task SendAsync(ExternalAccount account, byte[] message, IReadOnlyList<EmailAddress> recipients, CancellationToken cancellationToken)
     {
         var server = account.Settings.Smtp ?? throw new ExternalMailException($"Für {account.Address} ist kein Postausgangsserver eingetragen.");
-        var password = store.Password(account.Id)
-                       ?? throw new ExternalMailException($"Das Passwort für {account.Address} ist nicht mehr lesbar – bitte unter Fremde Konten neu eingeben.");
         try
         {
+            var secret = await SecretAsync(account, cancellationToken);
             using var stream = new MemoryStream(message, writable: false);
             var mime = await MimeMessage.LoadAsync(stream, cancellationToken);
-            using var smtp = await ConnectSmtpAsync(server, account.Settings.UserName, password, cancellationToken);
+            using var smtp = await ConnectSmtpAsync(server, account.Settings, secret, cancellationToken);
             await smtp.SendAsync(mime, MailboxAddress.Parse(account.Address), recipients.Select(r => new MailboxAddress(null, r.ToString())),
                 cancellationToken);
             await smtp.DisconnectAsync(true, cancellationToken);
@@ -90,6 +90,11 @@ public sealed class ExternalMailClient(
         catch (Exception ex) when (Expected(ex, cancellationToken))
         {
             logger.LogWarning("Sending as {Address} through {Server} failed: {Error}", account.Address, server, ex.Message);
+            if (ex is AuthenticationException)
+            {
+                microsoft.Forget(account.Id);
+            }
+
             throw new ExternalMailException($"Versand über {server.Host} fehlgeschlagen: {Describe(ex)}");
         }
     }
@@ -108,8 +113,7 @@ public sealed class ExternalMailClient(
             // The caller's copy may be older than the last run (e.g. a page loaded a while ago).
             account = store.Find(account.Id) ?? throw new ExternalMailException("Dieses Konto gibt es nicht mehr.");
             var owner = accounts.FindAccount(account.AccountId) ?? throw new ExternalMailException("Das Postfach gibt es nicht mehr.");
-            var password = store.Password(account.Id)
-                           ?? throw new ExternalMailException("Das gespeicherte Passwort ist nicht mehr lesbar – bitte neu eingeben.");
+            var password = await SecretAsync(account, cancellationToken);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMinutes(10));
             fetched = await FetchCoreAsync(account, owner, password, n => fetched = n, timeout.Token);
@@ -123,7 +127,12 @@ public sealed class ExternalMailClient(
         }
         catch (Exception ex) when (Expected(ex, cancellationToken))
         {
-            var error = Describe(ex);
+            var error = ex is AuthenticationException && account.Settings.Auth == ExternalAuth.Microsoft ? MicrosoftMailAuth.Expired : Describe(ex);
+            if (ex is AuthenticationException)
+            {
+                microsoft.Forget(account.Id);
+            }
+
             logger.LogWarning("Fetching {Address} failed: {Error}", account.Address, ex.Message);
             store.RecordAttempt(account.Id, error);
             return new FetchResult(fetched, error);
@@ -140,7 +149,7 @@ public sealed class ExternalMailClient(
         var server = account.Settings.Imap;
         using var client = new ImapClient { Timeout = TimeoutMilliseconds, ServerCertificateValidationCallback = CertificateValidation };
         await client.ConnectAsync(server.Host, server.Port, Socket(server.Security), cancellationToken);
-        await client.AuthenticateAsync(account.Settings.UserName, password, cancellationToken);
+        await LoginAsync(client, account.Settings, password, cancellationToken);
         var inbox = client.Inbox;
         await inbox.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
         long validity = inbox.UidValidity;
@@ -240,13 +249,25 @@ public sealed class ExternalMailClient(
         return newest.Count > 0 ? newest[0].UniqueId.Id : 0;
     }
 
-    private async Task<SmtpClient> ConnectSmtpAsync(MailServerAddress server, string userName, string password, CancellationToken cancellationToken)
+    /// <summary>The password, or for Outlook.com a current access token.</summary>
+    private async Task<string> SecretAsync(ExternalAccount account, CancellationToken cancellationToken) =>
+        account.Settings.Auth == ExternalAuth.Microsoft
+            ? await microsoft.AccessTokenAsync(account, cancellationToken)
+            : store.Password(account.Id) ?? throw new ExternalMailException(
+                $"Das gespeicherte Passwort für {account.Address} ist nicht mehr lesbar – bitte unter Fremde Konten neu eingeben.");
+
+    private static Task LoginAsync(MailService client, ExternalAccountSettings settings, string secret, CancellationToken cancellationToken) =>
+        settings.Auth == ExternalAuth.Microsoft
+            ? client.AuthenticateAsync(new SaslMechanismOAuth2(settings.UserName, secret), cancellationToken)
+            : client.AuthenticateAsync(settings.UserName, secret, cancellationToken);
+
+    private async Task<SmtpClient> ConnectSmtpAsync(MailServerAddress server, ExternalAccountSettings settings, string secret, CancellationToken cancellationToken)
     {
         var smtp = new SmtpClient { Timeout = TimeoutMilliseconds, ServerCertificateValidationCallback = CertificateValidation };
         try
         {
             await smtp.ConnectAsync(server.Host, server.Port, Socket(server.Security), cancellationToken);
-            await smtp.AuthenticateAsync(userName, password, cancellationToken);
+            await LoginAsync(smtp, settings, secret, cancellationToken);
             return smtp;
         }
         catch

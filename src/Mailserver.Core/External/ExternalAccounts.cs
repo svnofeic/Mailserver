@@ -21,9 +21,18 @@ public sealed record MailServerAddress(string Host, int Port, MailSecurity Secur
     public override string ToString() => $"{Host}:{Port}";
 }
 
+/// <summary>How the server logs in at the provider.</summary>
+public enum ExternalAuth
+{
+    Password,
+    /// <summary>OAuth 2 with a refresh token from a sign-in at Microsoft (Outlook.com, Hotmail, Live).</summary>
+    Microsoft,
+}
+
 /// <summary>What the user enters for an address at another provider.</summary>
 /// <param name="Smtp">Null: the address is only fetched, not used as sender.</param>
-public sealed record ExternalAccountSettings(string Address, string Folder, MailServerAddress Imap, MailServerAddress? Smtp, string UserName);
+public sealed record ExternalAccountSettings(string Address, string Folder, MailServerAddress Imap, MailServerAddress? Smtp, string UserName,
+    ExternalAuth Auth = ExternalAuth.Password);
 
 public sealed record ExternalAccount(
     long Id,
@@ -45,7 +54,8 @@ public sealed record ExternalAccount(
 public interface IExternalMail
 {
     /// <summary>Logs in to IMAP (and SMTP, if given). Returns a German error text, or null if both work.</summary>
-    Task<string?> TestAsync(ExternalAccountSettings settings, string password, CancellationToken cancellationToken);
+    /// <param name="secret">The password, or for <see cref="ExternalAuth.Microsoft"/> an access token.</param>
+    Task<string?> TestAsync(ExternalAccountSettings settings, string secret, CancellationToken cancellationToken);
 
     /// <summary>Sends a finished message through the provider's SMTP server. Throws <see cref="ExternalMailException"/>.</summary>
     Task SendAsync(ExternalAccount account, byte[] message, IReadOnlyList<EmailAddress> recipients, CancellationToken cancellationToken);
@@ -65,7 +75,7 @@ public sealed class ExternalAccountStore(Database database, AccountStore account
     public const int MaxPerMailbox = 10;
 
     private const string Columns = "id, account_id, address, folder, imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security, " +
-                                   "user_name, enabled, uid_validity, last_uid, fetched, last_fetch_utc, last_error, created_utc";
+                                   "user_name, enabled, uid_validity, last_uid, fetched, last_fetch_utc, last_error, created_utc, auth";
 
     public IReadOnlyList<ExternalAccount> List(long accountId)
     {
@@ -118,8 +128,8 @@ public sealed class ExternalAccountStore(Database database, AccountStore account
         var id = (long)connection.Scalar(
             """
             INSERT INTO external_accounts (account_id, address, folder, imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security,
-                                           user_name, password, last_uid, created_utc)
-            VALUES ($account, $address, $folder, $imapHost, $imapPort, $imapSecurity, $smtpHost, $smtpPort, $smtpSecurity, $user, $password, $lastUid, $now)
+                                           user_name, password, last_uid, created_utc, auth)
+            VALUES ($account, $address, $folder, $imapHost, $imapPort, $imapSecurity, $smtpHost, $smtpPort, $smtpSecurity, $user, $password, $lastUid, $now, $auth)
             RETURNING id
             """,
             [.. Parameters(settings), ("$account", owner.Id), ("$password", secrets.Protect(password)),
@@ -140,12 +150,20 @@ public sealed class ExternalAccountStore(Database database, AccountStore account
             $"""
             UPDATE external_accounts SET address = $address, folder = $folder, imap_host = $imapHost, imap_port = $imapPort,
                 imap_security = $imapSecurity, smtp_host = $smtpHost, smtp_port = $smtpPort, smtp_security = $smtpSecurity, user_name = $user,
-                last_error = NULL{(string.IsNullOrEmpty(password) ? "" : ", password = $password")}
+                auth = $auth, last_error = NULL{(string.IsNullOrEmpty(password) ? "" : ", password = $password")}
                 {(sameInbox ? "" : ", uid_validity = NULL, last_uid = NULL")}
             WHERE id = $id
             """,
             [.. Parameters(settings), ("$id", id), ("$password", string.IsNullOrEmpty(password) ? null : secrets.Protect(password))]);
         return Find(id)!;
+    }
+
+    /// <summary>Replaces the stored password or refresh token (Microsoft hands out a new one now and then).</summary>
+    public void SetSecret(long id, string secret)
+    {
+        using var connection = database.Open();
+        connection.Execute("UPDATE external_accounts SET password = $password, last_error = NULL WHERE id = $id",
+            ("$password", secrets.Protect(secret)), ("$id", id));
     }
 
     public bool SetEnabled(long accountId, long id, bool enabled)
@@ -208,7 +226,7 @@ public sealed class ExternalAccountStore(Database database, AccountStore account
 
         var userName = string.IsNullOrWhiteSpace(settings.UserName) ? address.ToString() : settings.UserName.Trim();
         return new ExternalAccountSettings(address.ToString(), folder, CheckServer(settings.Imap, "IMAP"),
-            settings.Smtp is null ? null : CheckServer(settings.Smtp, "SMTP"), userName);
+            settings.Smtp is null ? null : CheckServer(settings.Smtp, "SMTP"), userName, settings.Auth);
     }
 
     private static MailServerAddress CheckServer(MailServerAddress server, string kind)
@@ -232,6 +250,7 @@ public sealed class ExternalAccountStore(Database database, AccountStore account
         ("$address", settings.Address), ("$folder", settings.Folder), ("$user", settings.UserName),
         ("$imapHost", settings.Imap.Host), ("$imapPort", settings.Imap.Port), ("$imapSecurity", settings.Imap.Security.ToString()),
         ("$smtpHost", settings.Smtp?.Host), ("$smtpPort", settings.Smtp?.Port), ("$smtpSecurity", settings.Smtp?.Security.ToString()),
+        ("$auth", settings.Auth.ToString()),
     ];
 
     private static ExternalAccount Read(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
@@ -240,7 +259,7 @@ public sealed class ExternalAccountStore(Database database, AccountStore account
         new ExternalAccountSettings(r.GetString(2), r.GetString(3),
             new MailServerAddress(r.GetString(4), r.GetInt32(5), Enum.Parse<MailSecurity>(r.GetString(6))),
             r.IsDBNull(7) ? null : new MailServerAddress(r.GetString(7), r.GetInt32(8), Enum.Parse<MailSecurity>(r.GetString(9))),
-            r.GetString(10)),
+            r.GetString(10), Enum.Parse<ExternalAuth>(r.GetString(18))),
         r.GetInt64(11) != 0,
         r.IsDBNull(12) ? null : r.GetInt64(12),
         r.IsDBNull(13) ? null : r.GetInt64(13),

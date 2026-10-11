@@ -30,6 +30,20 @@ public sealed class WebAdminTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Admin_enters_the_microsoft_app_registration_for_outlook_addresses()
+    {
+        await _web.GetAsync("/Account/External");
+        Assert.Contains("lassen sich erst einbinden", _web.LastPage);
+
+        await _web.PostAsync("/Account/External", "/Account/External?handler=MicrosoftApp", ("clientId", "kein-guid"));
+        Assert.Contains("00000000-0000-0000-0000-000000000000", _web.LastPage);
+        await _web.PostAsync("/Account/External", "/Account/External?handler=MicrosoftApp", ("clientId", "11111111-2222-3333-4444-555555555555"));
+        Assert.Contains("App-Registrierung gespeichert", _web.LastPage);
+        Assert.Contains("11111111-2222-3333-4444-555555555555", await File.ReadAllTextAsync(Path.Combine(_server.DataDirectory, "settings.json")));
+        Assert.Contains("ohne Passwort über eine Anmeldung bei Microsoft", _web.LastPage);
+    }
+
+    [Fact]
     public async Task Overview_shows_unread_mail_per_mailbox_and_folder()
     {
         var mail = System.Text.Encoding.ASCII.GetBytes("Subject: Hallo\r\n\r\nText");

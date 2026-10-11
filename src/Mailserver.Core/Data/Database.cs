@@ -283,6 +283,10 @@ public sealed class Database
             UNIQUE (account_id, address)
         );
         """,
+        // Outlook.com and friends sign in through Microsoft: then "password" holds the (encrypted) refresh token.
+        """
+        ALTER TABLE external_accounts ADD COLUMN auth TEXT NOT NULL DEFAULT 'Password';
+        """,
     ];
 
     private readonly string _connectionString;

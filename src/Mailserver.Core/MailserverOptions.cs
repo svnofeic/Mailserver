@@ -32,6 +32,28 @@ public sealed class MailserverOptions
     public AntivirusOptions Antivirus { get; set; } = new();
 
     public BackupOptions Backup { get; set; } = new();
+
+    public ExternalMailOptions External { get; set; } = new();
+}
+
+/// <summary>Addresses at other providers (Fremde Konten).</summary>
+public sealed record ExternalMailOptions
+{
+    /// <summary>
+    /// App registration at Microsoft for Outlook.com/Hotmail/Live addresses (sign-in with a code, like OneDrive).
+    /// Empty: the one of the OneDrive backup (Backup:OneDriveClientId) is used, if any.
+    /// </summary>
+    public string? MicrosoftClientId { get; set; }
+
+    /// <summary>"common" (personal and work accounts) or "consumers" (personal accounts only).</summary>
+    public string MicrosoftTenant { get; set; } = "common";
+
+    /// <summary>Only for tests: instead of https://login.microsoftonline.com.</summary>
+    public string? MicrosoftLoginUrl { get; set; }
+
+    public string? EffectiveMicrosoftClientId(BackupOptions backup) =>
+        !string.IsNullOrWhiteSpace(MicrosoftClientId) ? MicrosoftClientId.Trim() :
+        !string.IsNullOrWhiteSpace(backup.OneDriveClientId) ? backup.OneDriveClientId.Trim() : null;
 }
 
 /// <summary>Automatic nightly backup of the data directory (database, settings, keys, mails).</summary>

@@ -15,6 +15,7 @@ using Mailserver.Smtp.Delivery;
 using Mailserver.Smtp.Receiving;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Mailserver.Smtp;
@@ -71,7 +72,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SecretProtector>();
         services.AddSingleton<Mailserver.Core.External.ExternalAccountStore>();
         services.AddSingleton<External.ExternalMailClient>();
-        services.AddSingleton<Mailserver.Core.External.IExternalMail>(sp => sp.GetRequiredService<External.ExternalMailClient>());
+        services.TryAddSingleton<Mailserver.Core.External.IExternalMail>(sp => sp.GetRequiredService<External.ExternalMailClient>());
+        services.AddSingleton<Mailserver.Core.External.MicrosoftMailAuth>();
+        services.AddSingleton<Mailserver.Core.External.MicrosoftSignIns>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeChallengeStore>();
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeCertificateManager>();
         services.AddSingleton<CertificateProvider>();

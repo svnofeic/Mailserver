@@ -34,20 +34,45 @@ public sealed class ExternalForm
         SmtpSecurity = account.Settings.Smtp?.Security ?? MailSecurity.Ssl,
     };
 
-    /// <summary>Empty server names are guessed as imap./smtp. plus the domain, as most providers name them.</summary>
+    /// <summary>
+    /// Empty server names come from the list of known providers (T-Online, GMX …) or are guessed as imap./smtp. plus the
+    /// domain, as most providers name them. Outlook.com addresses always use Microsoft's servers and sign-in.
+    /// </summary>
     public ExternalAccountSettings ToSettings()
     {
-        var domain = Address.Contains('@') ? Address[(Address.LastIndexOf('@') + 1)..].Trim() : "";
-        var imapHost = string.IsNullOrWhiteSpace(ImapHost) ? "imap." + domain : ImapHost;
-        var smtpHost = string.IsNullOrWhiteSpace(SmtpHost) ? "smtp." + domain : SmtpHost;
-        return new ExternalAccountSettings(Address.Trim(), Folder ?? "", new MailServerAddress(imapHost, ImapPort, ImapSecurity),
-            Send ? new MailServerAddress(smtpHost, SmtpPort, SmtpSecurity) : null, UserName ?? "");
+        var address = Address.Trim();
+        var provider = MailProviders.For(address);
+        if (provider is { Microsoft: true })
+        {
+            return new ExternalAccountSettings(address, Folder ?? "", provider.Imap, Send ? provider.Smtp : null, UserName ?? "", ExternalAuth.Microsoft);
+        }
+
+        var domain = address.Contains('@') ? address[(address.LastIndexOf('@') + 1)..] : "";
+        var imap = !string.IsNullOrWhiteSpace(ImapHost) ? new MailServerAddress(ImapHost, ImapPort, ImapSecurity)
+            : provider?.Imap ?? new MailServerAddress("imap." + domain, ImapPort, ImapSecurity);
+        var smtp = !string.IsNullOrWhiteSpace(SmtpHost) ? new MailServerAddress(SmtpHost, SmtpPort, SmtpSecurity)
+            : provider?.Smtp ?? new MailServerAddress("smtp." + domain, SmtpPort, SmtpSecurity);
+        return new ExternalAccountSettings(address, Folder ?? "", imap, Send ? smtp : null, UserName ?? "");
     }
 }
 
 /// <summary>Addresses at other providers: fetched into a folder of this mailbox, usable as sender in webmail.</summary>
-public sealed class ExternalModel(ExternalAccountStore store, IExternalMail client) : MailPageModel
+public sealed class ExternalModel(
+    ExternalAccountStore store,
+    IExternalMail client,
+    MicrosoftMailAuth microsoft,
+    MicrosoftSignIns signIns,
+    Mailserver.Core.Configuration.SettingsStore settings,
+    Microsoft.Extensions.Options.IOptions<Mailserver.Core.MailserverOptions> options) : MailPageModel
 {
+    /// <summary>A sign-in at Microsoft waiting for the user to confirm the code.</summary>
+    public MicrosoftSignIn? PendingSignIn { get; private set; }
+
+    /// <summary>Outlook.com addresses can be added (an app registration at Microsoft is entered).</summary>
+    public bool MicrosoftReady => microsoft.ClientId is not null;
+
+    public string? MicrosoftClientId => options.Value.External.MicrosoftClientId;
+
     [BindProperty]
     public ExternalForm Form { get; set; } = new();
 
@@ -58,6 +83,22 @@ public sealed class ExternalModel(ExternalAccountStore store, IExternalMail clie
 
     public IActionResult OnGet(long? edit, bool add = false)
     {
+        if (signIns.Take(CurrentAccount.Id) is { } signIn)
+        {
+            if (!signIn.Done)
+            {
+                PendingSignIn = signIn;
+            }
+            else if (signIn.Error is { } error)
+            {
+                ErrorMessage = $"{signIn.Address}: {error}";
+            }
+            else
+            {
+                Message = signIn.Result;
+            }
+        }
+
         Accounts = store.List(CurrentAccount.Id);
         if (edit is { } id)
         {
@@ -88,6 +129,20 @@ public sealed class ExternalModel(ExternalAccountStore store, IExternalMail clie
         try
         {
             var settings = store.Check(CurrentAccount, Form.ToSettings(), existing?.Id);
+            if (settings.Auth == ExternalAuth.Microsoft)
+            {
+                if (existing is { Settings.Auth: ExternalAuth.Microsoft } && existing.Address.Equals(settings.Address, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Same Microsoft account, e.g. another folder: the sign-in stays valid.
+                    store.Update(CurrentAccount, existing.Id, settings, null);
+                    Message = $"{settings.Address} gespeichert.";
+                    return RedirectToPage();
+                }
+
+                await signIns.StartAsync(CurrentAccount, settings, Form.FetchExisting, existing?.Id, HttpContext.RequestAborted);
+                return RedirectToPage();
+            }
+
             // Checked before saving: a typo should show up now, not as a failed fetch an hour later.
             var password = string.IsNullOrEmpty(Form.Password) && existing is not null ? store.Password(existing.Id) : Form.Password;
             if (string.IsNullOrEmpty(password))
@@ -99,7 +154,7 @@ public sealed class ExternalModel(ExternalAccountStore store, IExternalMail clie
 
             if (await client.TestAsync(settings, password, HttpContext.RequestAborted) is { } error)
             {
-                throw new ArgumentException(error);
+                throw new ArgumentException(MailProviders.For(settings.Address)?.Hint is { } hint ? $"{error} Hinweis: {hint}" : error);
             }
 
             var saved = existing is null
@@ -117,7 +172,7 @@ public sealed class ExternalModel(ExternalAccountStore store, IExternalMail clie
 
             return RedirectToPage();
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or ExternalMailException)
         {
             ErrorMessage = ex.Message;
             Form.Password = null;
@@ -149,6 +204,46 @@ public sealed class ExternalModel(ExternalAccountStore store, IExternalMail clie
             };
         }
 
+        return RedirectToPage();
+    }
+
+    /// <summary>Signs an Outlook.com address in again (Microsoft revoked the sign-in, e.g. after a password change).</summary>
+    public async Task<IActionResult> OnPostReauthAsync(long id)
+    {
+        if (store.Get(CurrentAccount.Id, id) is not { Settings.Auth: ExternalAuth.Microsoft } account)
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            await signIns.StartAsync(CurrentAccount, account.Settings, fetchExisting: false, account.Id, HttpContext.RequestAborted);
+        }
+        catch (ExternalMailException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return RedirectToPage();
+    }
+
+    /// <summary>The app registration at Microsoft for Outlook.com addresses (administrators only).</summary>
+    public IActionResult OnPostMicrosoftApp(string? clientId)
+    {
+        if (!IsAdmin)
+        {
+            return Forbid();
+        }
+
+        clientId = clientId?.Trim();
+        if (!string.IsNullOrEmpty(clientId) && !Guid.TryParse(clientId, out _))
+        {
+            ErrorMessage = "Die Anwendungs-ID sieht aus wie 00000000-0000-0000-0000-000000000000.";
+            return RedirectToPage();
+        }
+
+        settings.SaveExternal(options.Value.External with { MicrosoftClientId = string.IsNullOrEmpty(clientId) ? null : clientId });
+        Message = string.IsNullOrEmpty(clientId) ? "App-Registrierung entfernt." : "App-Registrierung gespeichert – Outlook.com-Adressen lassen sich jetzt hinzufügen.";
         return RedirectToPage();
     }
 

@@ -63,6 +63,19 @@ public sealed class SettingsStore(DataPaths paths, Microsoft.Extensions.Configur
         }
     }
 
+    /// <summary>Stores the settings for external accounts (Mailserver:External).</summary>
+    public void SaveExternal(ExternalMailOptions external)
+    {
+        lock (_lock)
+        {
+            var root = Load();
+            var section = root["Mailserver"] as JsonObject ?? new JsonObject();
+            root["Mailserver"] = section;
+            section["External"] = JsonSerializer.SerializeToNode(new { external.MicrosoftClientId, external.MicrosoftTenant }, Json);
+            Write(root);
+        }
+    }
+
     /// <summary>Stores the backup settings (Mailserver:Backup).</summary>
     public void SaveBackup(BackupOptions backup)
     {
