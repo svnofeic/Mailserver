@@ -32,7 +32,8 @@ public sealed class MicrosoftMailAuth(ExternalAccountStore store, IOptions<Mails
         var json = await PostAsync("devicecode", new() { ["client_id"] = clientId, ["scope"] = Scope }, cancellationToken);
         if (json["device_code"] is null)
         {
-            throw new ExternalMailException($"Microsoft lehnt die Anmeldung ab: {Describe(json)}");
+            var reason = Describe(json);
+            throw new ExternalMailException($"Microsoft lehnt die Anmeldung ab: {reason}" + Hint(reason));
         }
 
         return new DeviceLogin((string)json["user_code"]!, (string)json["verification_uri"]!, (string)json["device_code"]!,
@@ -64,7 +65,7 @@ public sealed class MicrosoftMailAuth(ExternalAccountStore store, IOptions<Mails
                 case "authorization_declined" or "access_denied":
                     throw new ExternalMailException("Die Anmeldung bei Microsoft wurde abgelehnt.");
                 default:
-                    throw new ExternalMailException($"Anmeldung bei Microsoft fehlgeschlagen: {Describe(json)}");
+                    throw new ExternalMailException($"Anmeldung bei Microsoft fehlgeschlagen: {Describe(json)}{Hint(Describe(json))}");
             }
         }
 
@@ -143,6 +144,20 @@ public sealed class MicrosoftMailAuth(ExternalAccountStore store, IOptions<Mails
             throw new ExternalMailException($"Microsoft ist gerade nicht erreichbar ({ex.Message}).");
         }
     }
+
+    /// <summary>What to change in the app registration for the usual setup mistakes.</summary>
+    public static string Hint(string reason) => reason switch
+    {
+        _ when reason.Contains("AADSTS70002", StringComparison.Ordinal) =>
+            " – In der App-Registrierung unter „Authentifizierung“ die Einstellung „Öffentliche Clientflows zulassen“ auf „Ja“ stellen, " +
+            "speichern und nach ein bis zwei Minuten erneut versuchen.",
+        _ when reason.Contains("AADSTS700016", StringComparison.Ordinal) =>
+            " – Die Anwendungs-ID ist falsch, oder die App-Registrierung erlaubt keine persönlichen Microsoft-Konten " +
+            "(Kontotypen: „… und persönliche Microsoft-Konten“).",
+        _ when reason.Contains("AADSTS50020", StringComparison.Ordinal) || reason.Contains("AADSTS50194", StringComparison.Ordinal) =>
+            " – Die App-Registrierung muss bei den Kontotypen „Konten in einem beliebigen Organisationsverzeichnis und persönliche Microsoft-Konten“ erlauben.",
+        _ => "",
+    };
 
     private static string Describe(JsonNode json)
     {

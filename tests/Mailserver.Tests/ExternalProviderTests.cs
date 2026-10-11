@@ -34,6 +34,14 @@ public sealed class ExternalProviderTests
         Assert.Equal("smtp.kleiner-anbieter.de", guessed.Smtp!.Host);
     }
 
+    [Fact]
+    public void Common_app_registration_mistakes_get_a_hint()
+    {
+        Assert.Contains("Öffentliche Clientflows zulassen", MicrosoftMailAuth.Hint("AADSTS70002: The provided client is not supported for this feature."));
+        Assert.Contains("persönliche Microsoft-Konten", MicrosoftMailAuth.Hint("AADSTS700016: Application not found"));
+        Assert.Equal("", MicrosoftMailAuth.Hint("AADSTS90000: anything else"));
+    }
+
     [Theory]
     [InlineData("anna@live.com")]
     [InlineData("anna@outlook.de")]
