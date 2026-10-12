@@ -403,11 +403,16 @@ table.news td.num, table.news th.num { text-align: right; font-variant-numeric: 
 .search { position: relative; display: flex; gap: 8px; }
 .search input { padding-left: 36px; min-width: 260px; }
 .search .icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+/* Fixed column widths: the same layout in every folder and on every page, whatever the subjects and names. */
+table.messages { table-layout: fixed; }
 table.messages td { padding: 11px 14px; vertical-align: middle; }
 table.messages tr.unread td { font-weight: 650; }
 table.messages tr.unread td.subject a { color: var(--text); }
-table.messages td.sel { width: 36px; }
-table.messages td.from { width: 230px; max-width: 230px; white-space: nowrap; }
+table.messages td.sel { width: 48px; }
+table.messages td.from { width: 230px; white-space: nowrap; overflow: hidden; }
+table.messages td.subject { overflow: hidden; }
+table.messages td.date { width: 145px; text-align: right; }
+table.messages td.size { width: 84px; text-align: right; }
 table.messages td.from .sender { display: flex; align-items: center; gap: 11px; min-width: 0; }
 table.messages td.from .sender span { overflow: hidden; text-overflow: ellipsis; }
 table.messages td.subject a { color: var(--nav-text); text-decoration: none; display: flex; align-items: center; gap: 7px; min-width: 0; }
@@ -450,6 +455,16 @@ iframe.mailbody { width: 100%; height: 70vh; border: 1px solid var(--border); bo
 .editor-area blockquote { margin: 0 0 0 .8ex; border-left: 2px solid #c8ccd4; padding-left: 1ex; color: #4b5563; }
 .editor-area p { margin: 0 0 .6em; }
 
+/* Narrower windows: the subject keeps the most room. */
+@media (min-width: 761px) and (max-width: 1300px) {
+    table.messages td.size { display: none; }
+    table.messages td.from { width: 30%; }
+    table.messages td.date { width: 135px; }
+}
+@media (min-width: 761px) and (max-width: 900px) {
+    table.messages td.date { display: none; }
+}
+
 @media (max-width: 760px) {
     main { padding: 18px max(14px, env(safe-area-inset-right)) calc(44px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
     h1 { font-size: 22px; }
@@ -458,8 +473,8 @@ iframe.mailbody { width: 100%; height: 70vh; border: 1px solid var(--border); bo
     .folder-select { display: block; }
     .search input { min-width: 0; width: 100%; }
     table.messages td.size, table.messages td.date { display: none; }
-    table.messages { table-layout: fixed; }
     table.messages td { padding: 10px 8px; }
+    table.messages td.sel { width: 34px; }
     table.messages td.from { width: 36%; max-width: none; overflow: hidden; text-overflow: ellipsis; }
     table.messages td.from .avatar { display: none; }
     .compose .field { grid-template-columns: 1fr; gap: 3px; }
