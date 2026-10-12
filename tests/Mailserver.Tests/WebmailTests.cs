@@ -474,6 +474,34 @@ public sealed class WebmailTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Single_attachments_of_the_original_can_be_left_out_and_new_files_added()
+    {
+        var builder = new BodyBuilder { TextBody = "Drei Dateien" };
+        builder.Attachments.Add("eins.pdf", Pdf, new ContentType("application", "pdf"));
+        builder.Attachments.Add("zwei.txt", "zwei"u8.ToArray(), new ContentType("text", "plain"));
+        builder.Attachments.Add("drei.txt", "drei"u8.ToArray(), new ContentType("text", "plain"));
+        var original = new MimeMessage { Subject = "Dateien", Body = builder.ToMessageBody() };
+        original.From.Add(MailboxAddress.Parse("someone@remote.test"));
+        original.To.Add(MailboxAddress.Parse("alice@example.test"));
+        await DeliverAsync(original);
+        var uid = _server.Inbox("alice").Single().Uid;
+
+        await _web.GetAsync($"/Mail/Compose?mode=forward&folder=INBOX&uid={uid}");
+        Assert.Contains("name=\"Form.Keep\" value=\"2\"", _web.LastPage);
+        Assert.Contains("data-attachment-list", _web.LastPage);
+
+        // "zwei.txt" unticked, one new file added.
+        await _web.PostMultipartAsync($"/Mail/Compose?mode=forward&folder=INBOX&uid={uid}", "/Mail/Compose?handler=Send",
+            [("Form.Mode", "forward"), ("Form.OriginalFolder", "INBOX"), ("Form.OriginalUid", uid.ToString()), ("Form.KeepChosen", "true"),
+             ("Form.Keep", "0"), ("Form.Keep", "2"),
+             ("Form.From", "alice@example.test"), ("Form.To", "bob@example.test"), ("Form.Subject", "WG: Dateien"), ("Form.Body", "FYI")],
+            ("Files", "neu.txt", "neu"u8.ToArray()));
+
+        var forwarded = MimeMessage.Load(new MemoryStream(Encoding.UTF8.GetBytes(await _server.ReadAsync(_server.Inbox("bob").Single()))));
+        Assert.Equal(["eins.pdf", "drei.txt", "neu.txt"], forwarded.Attachments.OfType<MimePart>().Select(p => p.FileName).ToArray());
+    }
+
+    [Fact]
     public async Task Drafts_are_saved_and_replaced_when_sent()
     {
         await _web.PostMultipartAsync("/Mail/Compose", "/Mail/Compose?handler=Draft",

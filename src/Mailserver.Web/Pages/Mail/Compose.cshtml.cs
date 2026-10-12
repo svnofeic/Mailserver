@@ -27,6 +27,12 @@ public sealed class ComposeForm
     /// <summary>Filled by the editor script; empty when JavaScript is off (then the plain text field is used).</summary>
     public string? BodyHtml { get; set; }
     public bool KeepAttachments { get; set; } = true;
+
+    /// <summary>Set when the page lists the carried attachments one by one: then only those in <see cref="Keep"/> are sent.</summary>
+    public bool KeepChosen { get; set; }
+
+    /// <summary>Indexes of the attachments of the original message (forward, draft) that stay.</summary>
+    public List<int> Keep { get; set; } = [];
 }
 
 // The token is checked in the handlers: a mail written for minutes must not end in an empty error response when the token
@@ -48,7 +54,7 @@ public sealed class ComposeModel(
     public List<IFormFile> Files { get; set; } = [];
 
     public IReadOnlyList<string> Senders { get; private set; } = [];
-    public List<string> CarriedAttachments { get; } = [];
+    public List<(string Name, long Size)> CarriedAttachments { get; } = [];
     public long MaxAttachmentBytes => options.Value.MaxMessageSizeBytes * 3 / 4;
 
     public string Title => Form.Mode switch
@@ -176,11 +182,15 @@ public sealed class ComposeModel(
     private async Task<Draft> BuildDraftAsync(CancellationToken cancellationToken)
     {
         var attachments = new List<OutgoingAttachment>();
-        if (Form.KeepAttachments && Form.Mode is "forward" or "draft" && Original() is { } original)
+        if (Form.Mode is "forward" or "draft" && Original() is { } original)
         {
-            foreach (var attachment in MailAttachments.List(original))
+            var carried = MailAttachments.List(original);
+            for (var i = 0; i < carried.Count; i++)
             {
-                attachments.Add(new OutgoingAttachment(attachment.Name, attachment.ContentType, MailAttachments.Content(attachment)));
+                if (Form.KeepChosen ? Form.Keep.Contains(i) : Form.KeepAttachments)
+                {
+                    attachments.Add(new OutgoingAttachment(carried[i].Name, carried[i].ContentType, MailAttachments.Content(carried[i])));
+                }
             }
         }
 
@@ -301,7 +311,7 @@ public sealed class ComposeModel(
         Senders = sender.SenderAddresses(CurrentAccount);
         if (Form.Mode is "forward" or "draft" && Original() is { } original)
         {
-            CarriedAttachments.AddRange(MailAttachments.List(original).Select(a => a.Name));
+            CarriedAttachments.AddRange(MailAttachments.List(original).Select(a => (a.Name, a.Size)));
         }
     }
 

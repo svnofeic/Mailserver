@@ -104,3 +104,106 @@
         textarea.value = editor.innerText;
     });
 })();
+
+// Attachments: each choice (or files dragged onto the form) adds to the list instead of replacing it, and every file can
+// be removed again. The list is handed to the normal file field before sending, so the server sees a plain upload.
+(function () {
+    'use strict';
+
+    var zone = document.querySelector('[data-attachments]');
+    var input = zone && zone.querySelector('input[type="file"][name="Files"]');
+    var list = zone && zone.querySelector('[data-attachment-list]');
+    if (!input || !list || typeof DataTransfer === 'undefined') { return; }
+    try { new DataTransfer(); } catch (e) { return; }
+
+    var max = parseInt(zone.dataset.max || '0', 10);
+    var files = [];
+
+    function size(bytes) {
+        if (bytes < 1024) { return bytes + ' B'; }
+        if (bytes < 1024 * 1024) { return Math.round(bytes / 1024) + ' KB'; }
+        return (bytes / 1024 / 1024).toFixed(1).replace('.', ',') + ' MB';
+    }
+
+    function sync() {
+        var transfer = new DataTransfer();
+        files.forEach(function (file) { transfer.items.add(file); });
+        input.files = transfer.files;
+        render();
+    }
+
+    function render() {
+        list.replaceChildren();
+        files.forEach(function (file, index) {
+            var item = document.createElement('li');
+            var name = document.createElement('span');
+            name.textContent = '📎 ' + file.name;
+            var info = document.createElement('span');
+            info.className = 'small muted';
+            info.textContent = size(file.size);
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'link remove';
+            remove.textContent = 'Entfernen';
+            remove.setAttribute('aria-label', file.name + ' entfernen');
+            remove.addEventListener('click', function () {
+                files.splice(index, 1);
+                sync();
+            });
+            item.append(name, info, remove);
+            list.appendChild(item);
+        });
+
+        var total = files.reduce(function (sum, file) { return sum + file.size; }, 0);
+        if (max > 0 && total > max) {
+            var warning = document.createElement('li');
+            warning.className = 'too-large';
+            warning.textContent = 'Zusammen ' + size(total) + ' – mehr als die erlaubten ' + size(max) + '. Bitte Dateien entfernen.';
+            list.appendChild(warning);
+        }
+    }
+
+    function add(selected) {
+        Array.prototype.forEach.call(selected, function (file) {
+            var known = files.some(function (f) { return f.name === file.name && f.size === file.size && f.lastModified === file.lastModified; });
+            if (!known) { files.push(file); }
+        });
+        sync();
+    }
+
+    // A separate picker: choosing again adds files; the real field only carries the list.
+    var picker = document.createElement('input');
+    picker.type = 'file';
+    picker.multiple = true;
+    picker.hidden = true;
+    picker.addEventListener('change', function () {
+        add(picker.files);
+        picker.value = '';
+    });
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = '📎 Datei hinzufügen';
+    button.addEventListener('click', function () { picker.click(); });
+    var label = input.closest('label');
+    (label || input).hidden = true;
+    zone.append(picker, button);
+
+    var form = zone.closest('form');
+    form.addEventListener('dragover', function (event) {
+        if (event.dataTransfer && Array.prototype.indexOf.call(event.dataTransfer.types, 'Files') >= 0) {
+            event.preventDefault();
+            zone.classList.add('dropping');
+        }
+    });
+    form.addEventListener('dragleave', function (event) {
+        if (!form.contains(event.relatedTarget)) { zone.classList.remove('dropping'); }
+    });
+    form.addEventListener('drop', function (event) {
+        if (event.dataTransfer && event.dataTransfer.files.length > 0) {
+            event.preventDefault();
+            zone.classList.remove('dropping');
+            add(event.dataTransfer.files);
+        }
+    });
+})();
