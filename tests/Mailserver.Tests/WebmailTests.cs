@@ -95,6 +95,40 @@ public sealed class WebmailTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Files_sent_inline_are_listed_as_attachments_but_pictures_shown_in_the_text_are_not()
+    {
+        // As Apple Mail sends it: the PDF and a photo "inline" next to the text, a logo embedded in the HTML text.
+        var related = new MultipartRelated { new TextPart("html") { Text = "<p>Hallo <img src=\"cid:logo@test\"></p>" } };
+        related.Add(new MimePart("image", "png") { ContentId = "logo@test", ContentTransferEncoding = ContentEncoding.Base64,
+            Content = new MimeContent(new MemoryStream([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) });
+        MimePart Inline(string type, string subtype, string name, byte[] content) => new(type, subtype)
+        {
+            Content = new MimeContent(new MemoryStream(content)), ContentTransferEncoding = ContentEncoding.Base64,
+            ContentDisposition = new ContentDisposition(ContentDisposition.Inline) { FileName = name },
+        };
+        var forwarded = new MimeMessage { Subject = "Alte Nachricht", Body = new TextPart("plain") { Text = "alt" } };
+        var mixed = new Multipart("mixed")
+        {
+            related,
+            Inline("application", "pdf", "Rechnung.pdf", "%PDF-1.4 Rechnung"u8.ToArray()),
+            Inline("image", "jpeg", "Foto.jpg", [0xFF, 0xD8, 0xFF, 0xE0]),
+            new MessagePart { Message = forwarded },
+        };
+        var message = new MimeMessage { Subject = "Inline", Body = mixed };
+        using var raw = new MemoryStream();
+        message.WriteTo(raw);
+        var stored = await _server.HostMailboxes.AppendAsync(_server.User("alice"), raw.ToArray());
+
+        await _web.GetAsync($"/Mail/Read?folder=INBOX&uid={stored.Uid}");
+        var names = System.Text.RegularExpressions.Regex.Matches(_web.LastPage, "📎 <a [^>]*>([^<]+)</a>").Select(m => m.Groups[1].Value).ToList();
+        Assert.Equal(["Rechnung.pdf", "Foto.jpg", "Alte Nachricht.eml"], names);
+
+        var pdf = await _web.GetAsync($"/Mail/Attachment?folder=INBOX&uid={stored.Uid}&index=0&view=1");
+        Assert.Equal("application/pdf", pdf.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("%PDF-1.4 Rechnung", _web.LastPage);
+    }
+
+    [Fact]
     public async Task Embedded_images_are_linked_not_copied_into_the_body()
     {
         var picture = Enumerable.Range(0, 50_000).Select(i => (byte)i).ToArray();

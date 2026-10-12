@@ -7,11 +7,23 @@ public sealed record MailAttachment(string Name, string ContentType, long Size, 
 /// <summary>Attachments of a message in a stable order (the index is used in download links).</summary>
 public static class MailAttachments
 {
+    /// <summary>
+    /// Everything that is not the text of the message: parts marked as attachment, and also files sent "inline" (Apple Mail
+    /// and Outlook do so for PDFs and pictures) – except pictures the HTML text shows itself (cid: links).
+    /// </summary>
     public static IReadOnlyList<MailAttachment> List(MimeMessage message)
     {
         var result = new List<MailAttachment>();
-        foreach (var entity in message.Attachments)
+        var html = message.HtmlBody ?? "";
+        foreach (var entity in message.BodyParts)
         {
+            if (entity is MimePart { IsAttachment: false } inline &&
+                ((inline is TextPart && string.IsNullOrEmpty(inline.FileName)) ||
+                 (!string.IsNullOrEmpty(inline.ContentId) && html.Contains("cid:" + inline.ContentId, StringComparison.OrdinalIgnoreCase))))
+            {
+                continue; // the text itself, or a picture shown in it
+            }
+
             switch (entity)
             {
                 case MimePart part:
