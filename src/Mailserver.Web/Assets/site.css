@@ -406,6 +406,36 @@ table.news td.num, table.news th.num { text-align: right; font-variant-numeric: 
 .search { position: relative; display: flex; gap: 8px; }
 .search input { padding-left: 36px; min-width: 260px; }
 .search .icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+/* Spam history: fixed columns that fit the page; long addresses and test lists wrap instead of widening the table. */
+table.delivery { table-layout: fixed; }
+table.delivery th, table.delivery td { padding-left: 9px; padding-right: 9px; }
+table.delivery td { overflow-wrap: break-word; vertical-align: top; }
+table.delivery td .mono { word-break: normal; font-size: 12px; }
+table.delivery td.time span { white-space: nowrap; }
+table.delivery th.time { width: 96px; }
+table.delivery th.recipient { width: 15%; }
+table.delivery th.sender { width: 17%; }
+table.delivery th.score { width: 62px; }
+table.delivery th.result { width: 128px; }
+table.delivery th.reason { width: 24%; }
+table.delivery th.actions { width: 130px; }
+table.delivery td .pill { white-space: nowrap; }
+table.delivery td .pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: top; }
+table.delivery td button { white-space: normal; padding: 6px 10px; font-size: 12.5px; line-height: 1.25; text-align: center; }
+@media (max-width: 1100px) {
+    table.delivery th.time { width: 92px; }
+    table.delivery th.sender { width: 16%; }
+    table.delivery th.reason { width: 16%; }
+    table.delivery th.score { width: 50px; }
+    table.delivery th.result { width: 124px; }
+    table.delivery th.actions { width: 104px; }
+}
+/* Phone: as before, the table keeps its natural widths and scrolls sideways. */
+@media (max-width: 760px) {
+    table.delivery { table-layout: auto; min-width: 720px; }
+    table.delivery td { overflow-wrap: anywhere; }
+}
+
 /* Fixed column widths: the same layout in every folder and on every page, whatever the subjects and names. */
 table.messages { table-layout: fixed; }
 table.messages td { padding: 11px 14px; vertical-align: middle; }

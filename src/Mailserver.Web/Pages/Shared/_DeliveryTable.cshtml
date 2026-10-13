@@ -11,13 +11,13 @@
 else
 {
     <div class="table-wrap">
-        <table>
+        <table class="delivery">
             <thead>
             <tr>
-                <th>Zeit</th>
-                @if (showRecipient) { <th>Empfänger</th> }
-                <th>Absender</th><th>Betreff</th><th class="num">Score</th><th>Ergebnis</th><th>Grund</th>
-                @if (allowActions) { <th></th> }
+                <th class="time">Zeit</th>
+                @if (showRecipient) { <th class="recipient">Empfänger</th> }
+                <th class="sender">Absender</th><th class="subject">Betreff</th><th class="num score">Score</th><th class="result">Ergebnis</th><th class="reason">Grund</th>
+                @if (allowActions) { <th class="actions"></th> }
             </tr>
             </thead>
             <tbody>
@@ -26,9 +26,9 @@ else
                 var discarded = delivery.Action == SpamLogAction.Discarded;
                 var junk = delivery.Folder == "Junk";
                 <tr>
-                    <td class="small">@Format.Time(delivery.Time)</td>
+                    <td class="small time"><span>@delivery.Time.ToLocalTime().ToString("dd.MM.yyyy")</span> <span>@delivery.Time.ToLocalTime().ToString("HH:mm")</span></td>
                     @if (showRecipient) { <td class="small">@delivery.Recipient</td> }
-                    <td class="small">@message?.HeaderFrom<div class="muted">@(message?.MailFrom != message?.HeaderFrom ? message?.MailFrom : null)</div></td>
+                    <td class="small" title="@message?.HeaderFrom">@message?.HeaderFrom<div class="muted">@(message?.MailFrom != message?.HeaderFrom ? message?.MailFrom : null)</div></td>
                     <td>@message?.Subject</td>
                     <td class="num">@Format.Score(delivery.Score)</td>
                     <td>
