@@ -111,7 +111,7 @@
 
 @if (Model.Editing)
 {
-    <form method="post" asp-page-handler="Save" class="panel" style="max-width: 760px">
+    <form method="post" asp-page-handler="Save" class="panel">
         <div class="panel-head"><h2><span class="badge-icon">@Icons.Get("at")</span> @(f.Id is null ? "Adresse hinzufügen" : "Adresse bearbeiten")</h2></div>
         <input type="hidden" name="Form.Id" value="@f.Id" />
         <div class="row">
@@ -182,7 +182,7 @@
 
 @if (Model.IsAdmin)
 {
-    <section class="panel" style="max-width: 760px">
+    <section class="panel">
         <div class="panel-head"><h2><span class="badge-icon">@Icons.Get("settings")</span> Outlook.com / Hotmail (Administrator)</h2></div>
         <p class="small muted" style="margin-top: 0">Microsoft lässt Outlook.com-, Hotmail- und Live-Adressen nur noch über eine eigene App-Registrierung zu
             (einmalig, kostenlos – Schritt für Schritt in docs/weboberflaeche.md unter „Fremde Konten“). Ist für die OneDrive-Sicherung schon eine

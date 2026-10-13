@@ -44,7 +44,7 @@
     <p class="notice warn small">In appsettings.json ist eine PFX-Datei eingetragen (Tls:PfxPath) – sie hat Vorrang. Für Let's Encrypt den
         Eintrag dort leeren.</p>
 }
-<form method="post" class="card" style="max-width: 760px">
+<form method="post" class="card">
     <label class="check"><input type="checkbox" name="Form.Enabled" value="true" checked="@Model.Form.Enabled" /> Zertifikate automatisch ausstellen und verlängern</label>
     <label class="stack">E-Mail-Adresse für Benachrichtigungen von Let's Encrypt
         <input name="Form.Email" type="email" value="@Model.Form.Email" placeholder="admin@@feicht.me" />

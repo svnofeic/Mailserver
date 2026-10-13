@@ -157,7 +157,8 @@ a:hover { color: var(--accent-2); }
     .nav-toggle:checked ~ .menu { display: flex; }
 }
 
-main { max-width: 1320px; margin: 0 auto; padding: 26px max(28px, env(safe-area-inset-right)) calc(56px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
+/* Every page uses the same width: the content area always fills the space next to the menu (up to 1320 px). */
+main { width: 100%; max-width: 1320px; margin: 0 auto; padding: 26px max(28px, env(safe-area-inset-right)) calc(56px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
 h1 { font-size: 26px; margin: 4px 0 18px; letter-spacing: -.02em; font-weight: 700; }
 h2 { font-size: 17px; margin: 30px 0 12px; letter-spacing: -.01em; font-weight: 650; }
 h3 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
@@ -243,6 +244,8 @@ details.confirm summary::-webkit-details-marker { display: none; }
 details.confirm[open] summary { margin-right: 6px; }
 label.stack { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin: 12px 0; }
 label.stack input, label.stack textarea { width: 100%; font-size: 15px; }
+/* Input fields keep a readable length on the wide pages (the mail editor uses the full width). */
+:is(.card, .panel):not(.compose) :is(input, textarea):not([type=checkbox]):not([type=radio]):not([type=hidden]) { max-width: 640px; }
 
 /* ---------- Bars and charts ---------- */
 .bars { display: grid; grid-template-columns: max-content 1fr max-content; gap: 8px 12px; align-items: center; }
