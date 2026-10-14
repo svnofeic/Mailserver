@@ -115,12 +115,17 @@ public sealed partial class RecoveryTests : IAsyncLifetime
         Assert.Contains("Zu viele Anfragen", web.LastPage);
         await TestServer.WaitUntilAsync(() => _server.Remote.Messages.Count == 3, "three reset mails");
 
-        // Only the newest link is valid.
-        var first = new Uri((await NextMailAsync(1)).Link).PathAndQuery;
-        await web.GetAsync(first);
-        Assert.Contains("ungültig oder abgelaufen", web.LastPage);
-        var newest = new Uri((await NextMailAsync(3)).Link).PathAndQuery;
-        await web.PostAsync(newest, "/Recovery/Reset", ("token", "erfunden"), ("password", "ganz-neues-passwort"),
+        // Only the newest link is valid. The three mails may arrive in any order, so each link is checked.
+        var invalid = 0;
+        for (var i = 1; i <= 3; i++)
+        {
+            await web.GetAsync(new Uri((await NextMailAsync(i)).Link).PathAndQuery);
+            invalid += web.LastPage.Contains("ungültig oder abgelaufen") ? 1 : 0;
+        }
+
+        Assert.Equal(2, invalid);
+        // A made-up token (with a valid form token from the request page) does nothing.
+        await web.PostAsync("/Recovery", "/Recovery/Reset", ("token", "erfunden"), ("password", "ganz-neues-passwort"),
             ("confirm", "ganz-neues-passwort"));
         Assert.Contains("ungültig oder abgelaufen", web.LastPage);
         Assert.NotNull(_server.HostAccounts.Authenticate("bob@example.test", TestServer.Password));
