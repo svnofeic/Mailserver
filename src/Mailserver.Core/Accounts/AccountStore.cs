@@ -283,6 +283,14 @@ public sealed class AccountStore(Database database)
                 {
                     Visit(EmailAddress.Create(current.LocalPart[..plus], current.Domain), depth);
                 }
+                else if (depth == 0 && current.LocalPart.ToLowerInvariant() is "postmaster" or "abuse" &&
+                         connection.Query($"SELECT {AccountColumns} FROM accounts a JOIN domains d ON d.id = a.domain_id WHERE a.is_admin = 1 AND a.enabled = 1",
+                             ReadAccount) is { Count: > 0 } admins)
+                {
+                    // Every domain must accept postmaster@ (RFC 5321) – it also receives the DMARC reports. Without an own
+                    // mailbox or alias it goes to the administrators.
+                    accounts.AddRange(admins.Where(a => !accounts.Contains(a)));
+                }
                 else if (catchAll && depth == 0 &&
                          connection.Scalar("SELECT catch_all FROM domains WHERE name = $name", ("$name", current.Domain)) is string target &&
                          EmailAddress.TryParse(target, out var catchAllAddress))

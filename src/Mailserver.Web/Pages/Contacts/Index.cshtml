@@ -50,7 +50,7 @@ else
                     <a class="button secondary" href="/Mail/Compose?to=@Uri.EscapeDataString(contact.Display)" title="Mail schreiben" aria-label="Mail schreiben">@Icons.Get("send")</a>
                     <a class="button secondary" href="?edit=@contact.Id" title="Bearbeiten" aria-label="Bearbeiten">@Icons.Get("pencil")</a>
                     <form method="post" asp-page-handler="Delete" asp-route-id="@contact.Id" class="inline">
-                        <button type="submit" class="secondary" title="Löschen" aria-label="Löschen">@Icons.Get("trash")</button></form>
+                        <button type="submit" class="secondary" title="Löschen" aria-label="Löschen" data-confirm="@($"{label} aus dem Adressbuch löschen?")">@Icons.Get("trash")</button></form>
                 </div>
             </li>
         }

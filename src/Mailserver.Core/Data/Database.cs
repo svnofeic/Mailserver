@@ -354,6 +354,33 @@ public sealed class Database
             account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE
         );
         """,
+        // DMARC aggregate reports from other providers: who sends in the name of our domains, and does SPF/DKIM pass.
+        """
+        CREATE TABLE dmarc_reports (
+            id           INTEGER PRIMARY KEY,
+            org          TEXT NOT NULL,
+            report_id    TEXT NOT NULL,
+            domain       TEXT NOT NULL COLLATE NOCASE,
+            begin_utc    TEXT NOT NULL,
+            end_utc      TEXT NOT NULL,
+            policy       TEXT NOT NULL,
+            received_utc TEXT NOT NULL,
+            UNIQUE (org, report_id)
+        );
+        CREATE INDEX ix_dmarc_reports_end ON dmarc_reports (end_utc);
+        CREATE TABLE dmarc_rows (
+            report      INTEGER NOT NULL REFERENCES dmarc_reports(id) ON DELETE CASCADE,
+            source_ip   TEXT NOT NULL,
+            count       INTEGER NOT NULL,
+            disposition TEXT NOT NULL,
+            dkim        TEXT NOT NULL,
+            spf         TEXT NOT NULL,
+            header_from TEXT NOT NULL,
+            dkim_domain TEXT,
+            spf_domain  TEXT
+        );
+        CREATE INDEX ix_dmarc_rows_report ON dmarc_rows (report);
+        """,
     ];
 
     private readonly string _connectionString;

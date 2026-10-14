@@ -21,7 +21,8 @@ public sealed class MessageRouter(
     AutoResponder autoResponder,
     OutgoingMessagePreparer preparer,
     ILogger<MessageRouter> logger,
-    Push.PushNotifier? push = null)
+    Push.PushNotifier? push = null,
+    Dmarc.DmarcReports? dmarc = null)
 {
     /// <param name="message">The complete message including the Received header added by this server.</param>
     /// <param name="envelopeSender">MAIL FROM; empty for bounces.</param>
@@ -68,9 +69,15 @@ public sealed class MessageRouter(
         RuleSubject? subject = null;
         MimeMessage? parsed = null;
         var replies = new List<(MimeMessage Reply, EmailAddress To)>();
+        // DMARC reports arrive daily from every large provider; they are evaluated (Verwaltung → DMARC) and filed away read.
+        var dmarcReport = localTargets.Count > 0 && LooksLikeDmarcReport(message) && dmarc?.TryImport(message) == true;
         foreach (var account in localTargets.Values)
         {
             var decision = Decide(account, message, verdict, ref subject);
+            if (dmarcReport && decision.Folder is null or MailboxStore.Inbox or "Junk")
+            {
+                decision = decision with { Folder = Dmarc.DmarcReports.Folder, Flags = [.. decision.Flags, MessageFlags.Seen] };
+            }
             if (decision.Discard || (verdict.Discard && !decision.NotSpam))
             {
                 logger.LogInformation("Discarded message for {Account} (score {Score:F1}, rules: {Rules})", account.Address, verdict.Score,
@@ -161,6 +168,23 @@ public sealed class MessageRouter(
     /// return here). Local targets get the message directly; their own forwarding does not apply again, so two mailboxes
     /// forwarding to each other cannot loop.
     /// </summary>
+    /// <summary>Cheap check on the headers before a message is parsed as a DMARC report.</summary>
+    private static bool LooksLikeDmarcReport(byte[] message)
+    {
+        try
+        {
+            var headers = HeaderList.Load(new MemoryStream(message, writable: false));
+            var subject = headers[HeaderId.Subject] ?? "";
+            var type = headers[HeaderId.ContentType] ?? "";
+            return subject.Contains("Report Domain", StringComparison.OrdinalIgnoreCase) || subject.Contains("DMARC", StringComparison.OrdinalIgnoreCase) ||
+                   type.Contains("zip", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
     private async Task ForwardAsync(byte[] message, string envelopeSender, Account account, Forwarding forwarding, InboundVerdict verdict,
         CancellationToken cancellationToken)
     {

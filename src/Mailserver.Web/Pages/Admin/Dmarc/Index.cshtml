@@ -1,0 +1,78 @@
+@page
+@model Mailserver.Web.Pages.Admin.Dmarc.IndexModel
+@{ ViewData["Title"] = "DMARC-Berichte"; }
+<div class="toolbar">
+    <h1 class="grow" style="margin: 0">DMARC-Berichte</h1>
+    <form method="get" class="row" style="align-items: center">
+        <select name="days" aria-label="Zeitraum">
+            @foreach (var (days, label) in new[] { (7, "7 Tage"), (30, "30 Tage"), (90, "90 Tage"), (365, "1 Jahr") })
+            {
+                <option value="@days" selected="@(Model.Days == days)">@label</option>
+            }
+        </select>
+        <button type="submit" class="secondary">Anzeigen</button>
+    </form>
+</div>
+<p class="small muted">Google, Microsoft, GMX, Yahoo und andere melden täglich, welche Server Mails mit Ihren Domains als Absender geschickt haben und ob SPF und
+    DKIM bestanden haben. Die Berichte gehen an <span class="mono">postmaster@@&lt;domain&gt;</span> (Eintrag <span class="mono">rua=</span> im DMARC-DNS-Eintrag),
+    werden hier ausgewertet und im Ordner „@Mailserver.Core.Dmarc.DmarcReports.Folder“ abgelegt.</p>
+
+@if (Model.Domains.Count == 0)
+{
+    <div class="card">
+        <p style="margin-top: 0">Für diesen Zeitraum liegen noch keine Berichte vor. Die ersten kommen meist einen Tag, nachdem Mails an große Anbieter gegangen sind.</p>
+        <p class="small muted" style="margin-bottom: 0">Voraussetzung: Der DMARC-Eintrag jeder Domain enthält <span class="mono">rua=mailto:postmaster@@&lt;domain&gt;</span>
+            (siehe Verwaltung → Domains → DNS-Einträge).</p>
+    </div>
+}
+
+@foreach (var domain in Model.Domains)
+{
+    var (tone, advice) = Mailserver.Web.Pages.Admin.Dmarc.IndexModel.Advice(domain);
+    <section class="panel">
+        <div class="panel-head">
+            <h2>@Icons.Get("shield") @domain.Domain</h2>
+            <span class="pill">Richtlinie p=@(domain.Policy ?? "?")</span>
+        </div>
+        <div class="dmarc-kpis">
+            <div><strong>@domain.Messages</strong><span>Mails</span></div>
+            <div><strong class="@(domain.PassRate >= 98 ? "good" : domain.PassRate >= 90 ? "warn" : "bad")">@Format.Number(Math.Round(domain.PassRate, 1)) %</strong><span>bestanden</span></div>
+            <div><strong>@domain.Failed</strong><span>nicht bestanden</span></div>
+            <div><strong>@domain.Reports</strong><span>Berichte</span></div>
+        </div>
+        <div class="notice @tone small">@advice</div>
+        <div class="table-wrap">
+            <table class="dmarc-sources">
+                <thead><tr><th>Absender (IP)</th><th class="num">Mails</th><th class="num">bestanden</th><th>DKIM / SPF für</th><th>gemeldet von</th></tr></thead>
+                <tbody>
+                @foreach (var source in domain.Sources)
+                {
+                    <tr class="@(source.Failed > 0 ? "failed" : "")">
+                        <td>
+                            <span class="mono">@source.Ip</span>
+                            @if (Model.ServerIps.Contains(source.Ip)) { <span class="pill good">dieser Server</span> }
+                            @if (Model.Names.GetValueOrDefault(source.Ip) is { } name) { <div class="small muted">@name</div> }
+                        </td>
+                        <td class="num">@source.Messages</td>
+                        <td class="num">@if (source.Failed == 0) { <span class="pill good">alle</span> } else { <span class="pill bad">@source.Passed von @source.Messages</span> }</td>
+                        <td class="small">@(source.DkimDomain ?? "–") / @(source.SpfDomain ?? "–")</td>
+                        <td class="small muted">@string.Join(", ", source.Reporters)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <p class="small muted" style="margin-bottom: 0">Letzter Bericht: @(domain.LastReport is { } last ? Format.Time(last) : "–")</p>
+    </section>
+}
+
+@if (Model.DomainsWithoutReports.Count > 0 && Model.Domains.Count > 0)
+{
+    <p class="small muted">Ohne Berichte im Zeitraum: @string.Join(", ", Model.DomainsWithoutReports)</p>
+}
+
+<h2>Vorhandene Berichte einlesen</h2>
+<form method="post" asp-page-handler="Import" asp-route-days="@Model.Days" class="card row" style="align-items: center">
+    <span class="small muted grow">Liest DMARC-Berichte, die schon in den Postfächern der Administratoren liegen (alle Ordner). Doppelte werden erkannt.</span>
+    <button type="submit" class="secondary">Einlesen</button>
+</form>

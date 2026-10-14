@@ -550,6 +550,13 @@ input[type=search] { -webkit-appearance: none; appearance: none; }
     .contact-list .actions { gap: 4px; }
     .contact-list .actions .button, .contact-list .actions button { padding: 6px 7px; }
 }
+.dmarc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 4px 0 14px; }
+.dmarc-kpis div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.dmarc-kpis strong { font-size: 20px; }
+.dmarc-kpis strong.good { color: var(--good); } .dmarc-kpis strong.warn { color: var(--warn); } .dmarc-kpis strong.bad { color: var(--bad); }
+.dmarc-kpis span { font-size: 12.5px; color: var(--muted); }
+table.dmarc-sources tr.failed td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+@media (max-width: 760px) { .dmarc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .row-actions { white-space: nowrap; }
 .row-actions form.inline { display: inline; margin-left: 10px; }
 button.link { background: none; border: 0; box-shadow: none; padding: 0; color: var(--accent, inherit); font: inherit; cursor: pointer; text-decoration: underline; }
