@@ -9,7 +9,7 @@ namespace Mailserver.Web.Pages.Mail;
 public sealed class SearchModel(WebmailStore store, SearchIndex index) : MailPageModel
 {
     public const int PageSize = 50;
-    private const int IndexBeforeSearch = 2000;
+    private const int IndexBeforeSearch = 500;
 
     public IReadOnlyList<(Folder Folder, FolderStatus Status)> Folders { get; private set; } = [];
     public IReadOnlyList<(SearchHit Hit, MessageSummary Summary)> Items { get; private set; } = [];

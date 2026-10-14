@@ -24,6 +24,8 @@ public sealed class SearchIndexer(SearchIndex index, ILogger<SearchIndexer> logg
                 {
                     indexed = await index.IndexPendingAsync(BatchSize, cancellationToken: stoppingToken);
                     total += indexed;
+                    // The first run after an update indexes every mail; short pauses keep the server responsive meanwhile.
+                    await Task.Delay(TimeSpan.FromMilliseconds(500), stoppingToken);
                 }
                 while (indexed == BatchSize && !stoppingToken.IsCancellationRequested);
 

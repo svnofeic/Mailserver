@@ -230,3 +230,89 @@
         }
     });
 })();
+// Recipient suggestions from the address book while typing in To, Cc and Bcc (the part after the last comma).
+(function () {
+    'use strict';
+    var fields = document.querySelectorAll('form.compose input[name="Form.To"], form.compose input[name="Form.Cc"], form.compose input[name="Form.Bcc"]');
+    if (!fields.length || typeof fetch !== 'function') { return; }
+    Array.prototype.forEach.call(fields, function (input) {
+        input.setAttribute('autocomplete', 'off');
+        var list = document.createElement('ul');
+        list.className = 'suggestions';
+        list.hidden = true;
+        list.setAttribute('role', 'listbox');
+        input.parentNode.appendChild(list);
+        var timer = null, items = [], active = -1, request = 0;
+
+        function current() {
+            var parts = input.value.split(',');
+            return parts[parts.length - 1].trim();
+        }
+        function close() {
+            list.hidden = true;
+            list.replaceChildren();
+            items = [];
+            active = -1;
+        }
+        function choose(item) {
+            var parts = input.value.split(',');
+            parts[parts.length - 1] = item.display;
+            input.value = parts.map(function (p) { return p.trim(); }).filter(function (p) { return p.length > 0; }).join(', ') + ', ';
+            close();
+            input.focus();
+        }
+        function highlight(index) {
+            active = index;
+            Array.prototype.forEach.call(list.children, function (li, n) {
+                li.classList.toggle('active', n === index);
+                li.setAttribute('aria-selected', n === index ? 'true' : 'false');
+            });
+        }
+        function render() {
+            list.replaceChildren();
+            items.forEach(function (item) {
+                var li = document.createElement('li');
+                li.setAttribute('role', 'option');
+                var name = document.createElement('strong');
+                name.textContent = item.name || item.address;
+                li.appendChild(name);
+                if (item.name) {
+                    var address = document.createElement('span');
+                    address.textContent = item.address;
+                    li.appendChild(address);
+                }
+                // mousedown instead of click: the field must not lose the focus first.
+                li.addEventListener('mousedown', function (e) { e.preventDefault(); choose(item); });
+                list.appendChild(li);
+            });
+            list.style.left = input.offsetLeft + 'px';
+            list.style.width = input.offsetWidth + 'px';
+            list.hidden = items.length === 0;
+            active = -1;
+        }
+        input.addEventListener('input', function () {
+            clearTimeout(timer);
+            var term = current();
+            if (term.length < 2) { close(); return; }
+            timer = setTimeout(function () {
+                var id = ++request;
+                fetch('/Contacts?handler=Suggest&q=' + encodeURIComponent(term), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { return r.ok ? r.json() : []; })
+                    .then(function (data) {
+                        if (id !== request) { return; }
+                        items = Array.isArray(data) ? data : [];
+                        render();
+                    })
+                    .catch(close);
+            }, 150);
+        });
+        input.addEventListener('keydown', function (e) {
+            if (list.hidden) { return; }
+            if (e.key === 'ArrowDown') { e.preventDefault(); highlight(Math.min(active + 1, items.length - 1)); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(Math.max(active - 1, 0)); }
+            else if ((e.key === 'Enter' || e.key === 'Tab') && active >= 0) { e.preventDefault(); choose(items[active]); }
+            else if (e.key === 'Escape') { close(); }
+        });
+        input.addEventListener('blur', function () { setTimeout(close, 150); });
+    });
+})();

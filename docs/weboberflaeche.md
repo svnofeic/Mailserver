@@ -63,6 +63,7 @@ darauf öffnet die Mail.
 | Seite | Inhalt |
 |---|---|
 | **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl („Alle“ wählt die ganze Seite), Seitenauswahl mit direkt anklickbaren Seitenzahlen und „Gehe zu Seite“, **Papierkorb/Spam leeren** mit einem Klick, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen (einzeln hinzufügen, hineinziehen, wieder entfernen; beim Weiterleiten einzelne Anhänge abwählen), Entwürfe, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
+| **Adressbuch** | gespeicherte Kontakte und alle Adressen, an die geschrieben wurde; anlegen, Namen vergeben, löschen, vCard-Import (iPhone, Outlook, Google) und -Export. Daraus kommen die **Vorschläge beim Tippen** in An/Cc/Bcc. |
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
@@ -85,7 +86,7 @@ mailadmin user admin sven@feicht.me on
 | Seite | Inhalt |
 |---|---|
 | **Admin** | Kennzahlen (Domains, Postfächer, Warteschlange; letzte 24 h: eingegangen, Spam, abgelehnt, Greylisting, versendet, Zustellfehler, Fehl-Logins), Hinweise zum Spamfilter, Zertifikat mit Ablaufwarnung |
-| **Domains** | anlegen (mit DKIM-Schlüssel), löschen, **benötigte DNS-Einträge** zum Kopieren, DKIM-Schlüsselwechsel |
+| **Domains** | anlegen (mit DKIM-Schlüssel), löschen, **benötigte DNS-Einträge** zum Kopieren, DKIM-Schlüsselwechsel, **Sammeladresse** (siehe unten) |
 | **Postfächer** | anlegen, Passwort setzen, Speicherlimit, aktivieren/deaktivieren, Admin-Recht, löschen; Ordnerübersicht; Weiterleitung und Abwesenheitsnotiz für jedes Postfach (z. B. Vertretung bei Krankheit). Die Liste zeigt „Weiterleitung“ / „abwesend“ / „Versand gesperrt“ an. Karte **Versand**: Verbrauch der letzten Stunde/24 h, eigene Limits für das Postfach (leer = Standard, 0 = ohne Limit), „Versand freigeben“ nach einer Sperre. **Als Benutzer anmelden** bzw. „Öffnen“ in der Liste: siehe unten. |
 | **Zertifikat** | Verwendetes TLS-Zertifikat (Namen, Aussteller, Ablauf). **Let's Encrypt**: automatisch ausstellen und verlängern – E-Mail, Hostnamen, Testmodus, optional Challenge-Ordner (unter Windows meist unnötig, Port 80 wird über http.sys mit dem IIS geteilt); „Jetzt ausstellen“, letzter Versuch mit Fehlermeldung. Ohne Zertifikat läuft die Weboberfläche mit einem Notfall-Zertifikat (Browser-Warnung), damit man hier eines anfordern kann. |
 | **Aliase** | Aliase und Weiterleitungen anlegen und löschen |
@@ -165,6 +166,17 @@ Automatische Erkennung für die Administratoren (wird auf der Seite für Admins 
   `https://<domain>/.well-known/autoconfig/mail/config-v1.1.xml` – auf Port 443, den der IIS belegt. Die Seite bietet die
   Datei je Domain zum Herunterladen an; in Plesk im Dateimanager der Website unter `.well-known/autoconfig/mail/` ablegen.
   Ohne die Datei probiert Thunderbird `mail.<domain>` mit den üblichen Ports durch – das klappt meist ebenfalls.
+
+## Plus-Adressen und Sammeladresse
+
+- **Plus-Adressen** gelten für jedes Postfach und jeden Alias, ohne Einstellung: Mail an `sven+amazon@feicht.me` landet bei
+  `sven@feicht.me`. So sieht man, wer eine Adresse weitergegeben hat, und kann sie mit einer Regel („An enthält +amazon“)
+  gezielt einsortieren oder abweisen. Gibt es eine Adresse mit „+“ wirklich (als Alias), hat sie Vorrang.
+- **Sammeladresse** (Catch-all), pro Domain unter *Domains → Domain*: bekommt alle Mails an Adressen der Domain, die es nicht
+  gibt (statt sie abzuweisen). Ziel muss ein Postfach oder Alias dieses Servers sein. Achtung: Spammer probieren erfundene
+  Adressen durch – mit Sammeladresse kommt mehr Spam an (er wird wie jede Mail gefiltert). Auf dem Server:
+  `mailadmin domain catchall feicht.me sven@feicht.me` bzw. `… off`. Für Weiterleitungen zählt die Sammeladresse nicht:
+  eine Weiterleitung an eine nicht vorhandene Adresse wird weiterhin abgelehnt.
 
 ## Als Benutzer anmelden (Postfach öffnen)
 
@@ -293,6 +305,14 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
   bereinigt das HTML vor dem Versand. Beim Antworten und Weiterleiten wird die Originalnachricht mit ihrer Formatierung zitiert.
   Der Editor ist ein kleines eigenes Skript, das vom Mailserver selbst kommt (keine fremden Bibliotheken, kein CDN); die
   Sicherheitsrichtlinie der Seite erlaubt nur Skripte vom eigenen Server. Ohne JavaScript bleibt ein einfaches Textfeld.
+- **Suche:** Das Suchfeld über der Liste durchsucht den Ordner; die **Suchseite** („Alle Ordner …“) alle Ordner – in Betreff,
+  Absender, Empfängern, im Text und in den Namen der Anhänge, auch Wortteile („rechnung“ findet „Stromrechnung“), mit
+  Filtern für ungelesen, markiert, mit Anhang und Zeitraum. Dafür baut der Server einen Suchindex in der Datenbank auf (im
+  Hintergrund, nach einem Update einmalig für alle vorhandenen Mails – das kann bei vielen Mails einige Minuten dauern und
+  die Datenbank merklich vergrößern; der Text jeder Mail wird bis 100.000 Zeichen erfasst). Begriffe brauchen mindestens 3 Zeichen.
+- **Empfänger-Vorschläge:** Beim Tippen in An/Cc/Bcc schlägt die Weboberfläche passende Namen und Adressen aus dem
+  **Adressbuch** vor (Pfeiltasten + Enter oder antippen). Dort landet automatisch jede Adresse, an die geschrieben wird –
+  aus der Weboberfläche und aus Mailprogrammen; beim ersten Mal werden die Empfänger aus „Gesendet“ übernommen.
 - **Signatur:** Unter *Signatur* je Absenderadresse ein Text. Er steht beim Schreiben unter dem Text, bei Antworten und
   Weiterleitungen über dem Zitat (lässt sich je Adresse abschalten). Wählt man beim Schreiben einen anderen Absender,
   tauscht der Editor die Signatur aus. Das übliche Trennzeichen „-- “ wird automatisch davorgesetzt.

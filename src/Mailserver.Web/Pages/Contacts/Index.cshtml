@@ -1,0 +1,67 @@
+@page
+@model Mailserver.Web.Pages.Contacts.IndexModel
+@{ ViewData["Title"] = "Adressbuch"; }
+<div class="toolbar">
+    <h1 class="grow" style="margin: 0">Adressbuch</h1>
+    <form method="get" class="search">
+        @Icons.Get("search")
+        <input name="q" value="@Model.Q" placeholder="Name oder Adresse" aria-label="Suche" />
+        @if (Model.SavedOnly) { <input type="hidden" name="savedOnly" value="true" /> }
+        <button type="submit" class="secondary">Suchen</button>
+    </form>
+</div>
+<p class="small muted">Beim Schreiben schlägt die Weboberfläche Adressen von hier vor. Jede Adresse, an die Sie schreiben (auch aus Outlook oder vom iPhone),
+    kommt automatisch dazu; Kontakte können Sie auch selbst anlegen und einen Namen vergeben.</p>
+
+<p class="small">@if (Model.SavedOnly) { <a href="/Contacts?q=@Uri.EscapeDataString(Model.Q ?? "")">Alle anzeigen</a> <span class="muted">· nur gespeicherte</span> }
+    else { <span class="muted">Alle ·</span> <a href="/Contacts?savedOnly=true&q=@Uri.EscapeDataString(Model.Q ?? "")">nur gespeicherte</a> }</p>
+
+<h2>@(Model.Editing is null ? "Kontakt anlegen" : "Kontakt bearbeiten")</h2>
+<form method="post" asp-page-handler="Save" class="row card">
+    @if (Model.Editing is { } editing) { <input type="hidden" name="id" value="@editing.Id" /> }
+    <label>Name<input name="name" value="@Model.Editing?.Name" maxlength="@Mailserver.Core.Accounts.Contacts.MaxNameLength" style="width: 240px" /></label>
+    <label>E-Mail-Adresse<input name="address" type="email" required value="@Model.Editing?.Address" style="width: 280px" /></label>
+    <button type="submit">Speichern</button>
+    @if (Model.Editing is not null) { <a class="button secondary" href="/Contacts">Abbrechen</a> }
+</form>
+
+@if (Model.Items.Count == 0)
+{
+    <div class="card muted">@(Model.Q is null ? "Noch keine Kontakte." : "Nichts gefunden.")</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Name</th><th>Adresse</th><th class="num">Mails</th><th>Zuletzt</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var contact in Model.Items)
+            {
+                <tr>
+                    <td>@(contact.Name ?? "")@if (contact.Saved) { <span class="pill good" style="margin-left: 6px">gespeichert</span> }</td>
+                    <td class="mono" style="overflow-wrap: anywhere">@contact.Address</td>
+                    <td class="num small">@contact.TimesUsed</td>
+                    <td class="small muted">@(contact.LastUsed is { } used ? Format.Time(used) : "")</td>
+                    <td class="row" style="flex-wrap: nowrap; justify-content: flex-end">
+                        <a class="button secondary" href="/Mail/Compose?to=@Uri.EscapeDataString(contact.Display)" title="Mail schreiben">@Icons.Get("send")</a>
+                        <a class="button secondary" href="?edit=@contact.Id" title="Bearbeiten">@Icons.Get("pencil")</a>
+                        <form method="post" asp-page-handler="Delete" asp-route-id="@contact.Id" class="inline">
+                            <button type="submit" class="secondary" title="Löschen" aria-label="Löschen">@Icons.Get("trash")</button></form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+<h2>Importieren und exportieren</h2>
+<div class="card">
+    <form method="post" asp-page-handler="Import" enctype="multipart/form-data" class="row">
+        <label class="file-pick">vCard-Datei (.vcf)<input type="file" name="file" accept=".vcf,text/vcard" required /></label>
+        <button type="submit" class="secondary">Importieren</button>
+        <a class="button secondary" href="?handler=Export">Gespeicherte Kontakte exportieren (.vcf)</a>
+    </form>
+    <p class="small muted" style="margin-bottom: 0">Export aus dem iPhone/Mac: Kontakte-App → Kontakte auswählen → Exportieren als vCard; aus Outlook oder Google
+        Kontakte ebenfalls als vCard. Übernommen werden Namen und E-Mail-Adressen.</p>
+</div>

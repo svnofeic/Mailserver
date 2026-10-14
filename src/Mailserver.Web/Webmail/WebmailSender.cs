@@ -47,7 +47,8 @@ public sealed class WebmailSender(
     Mailserver.Core.Security.SendingLimiter sendingLimiter,
     IOptions<MailserverOptions> options,
     Mailserver.Core.External.ExternalAccountStore external,
-    Mailserver.Core.External.IExternalMail externalMail)
+    Mailserver.Core.External.IExternalMail externalMail,
+    Contacts contacts)
 {
     public const int MaxRecipients = 100;
 
@@ -114,6 +115,15 @@ public sealed class WebmailSender(
         }
 
         await mailboxes.AppendAsync(account, prepared, "Sent", $"{MessageFlags.Seen}", cancellationToken: cancellationToken);
+        // For the recipient suggestions; recipients include Bcc, which is no longer in the message.
+        try
+        {
+            contacts.RecordSent(account, recipients, message.Headers, SenderAddresses(account));
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException)
+        {
+            // The mail is sent; a missing suggestion is no reason to report an error.
+        }
 
         spamLog.Write(new SpamLogEntry
         {

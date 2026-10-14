@@ -338,6 +338,22 @@ public sealed class Database
         CREATE VIRTUAL TABLE search_text USING fts5(subject, sender, recipients, body, attachments, tokenize = 'trigram');
         CREATE INDEX ix_messages_file ON messages (file_name);
         """,
+        // Address book: saved contacts and the recipients of sent mail (for suggestions while typing).
+        """
+        CREATE TABLE contacts (
+            id            INTEGER PRIMARY KEY,
+            account_id    INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            address       TEXT NOT NULL COLLATE NOCASE,
+            name          TEXT,
+            saved         INTEGER NOT NULL DEFAULT 0,
+            times_used    INTEGER NOT NULL DEFAULT 0,
+            last_used_utc TEXT,
+            UNIQUE (account_id, address)
+        );
+        CREATE TABLE contacts_seeded (
+            account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE
+        );
+        """,
     ];
 
     private readonly string _connectionString;

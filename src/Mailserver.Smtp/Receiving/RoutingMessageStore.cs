@@ -26,6 +26,7 @@ internal sealed class RoutingMessageStore(
     Mailserver.Core.Storage.SentCopies sentCopies,
     Mailserver.Core.Antivirus.MalwareFilter malwareFilter,
     Mailserver.Core.Security.SendingLimiter sendingLimiter,
+    Mailserver.Core.Accounts.Contacts contacts,
     IOptions<MailserverOptions> options,
     ILogger<RoutingMessageStore> logger,
     bool isSubmission) : IMessageStore
@@ -74,6 +75,11 @@ internal sealed class RoutingMessageStore(
                 if (!relay && options.Value.Smtp.SaveSentCopies)
                 {
                     await SaveSentCopyAsync(context, submitted, cancellationToken);
+                }
+
+                if (account is not null)
+                {
+                    RecordRecipients(account, recipients, submitted);
                 }
                 return SmtpResponse.Ok;
             }
@@ -166,6 +172,21 @@ internal sealed class RoutingMessageStore(
         .Replace("ä", "ae").Replace("ö", "oe").Replace("ü", "ue").Replace("Ä", "Ae").Replace("Ö", "Oe").Replace("Ü", "Ue").Replace("ß", "ss")
         .Replace('„', '"').Replace('“', '"').Replace('→', '>')
         .Where(c => c is >= ' ' and < (char)127).ToArray());
+
+    /// <summary>Recipients go into the address book (suggestions in the webmail); a failure there must not fail the send.</summary>
+    private void RecordRecipients(Mailserver.Core.Accounts.Account account, IReadOnlyList<EmailAddress> recipients, byte[] message)
+    {
+        try
+        {
+            using var stream = new MemoryStream(message, writable: false);
+            contacts.RecordSent(account, recipients, MimeKit.HeaderList.Load(stream),
+                accounts.ListAliases().Where(a => accounts.MaySendAs(account, a.Address)).Select(a => a.Address.ToString()));
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or FormatException)
+        {
+            logger.LogWarning(ex, "Could not record the recipients for {User}", account.Address);
+        }
+    }
 
     /// <summary>Copy in the sender's Sent folder. The message is already on its way, so a failure here must not fail the send.</summary>
     private async Task SaveSentCopyAsync(ISessionContext context, byte[] message, CancellationToken cancellationToken)

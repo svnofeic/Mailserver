@@ -63,6 +63,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Mailserver.Core.Accounts.PasswordRecovery>();
         services.AddSingleton<Mailserver.Core.Accounts.TwoFactor>();
         services.AddSingleton<Mailserver.Core.Accounts.Signatures>();
+        services.AddSingleton<Mailserver.Core.Accounts.Contacts>();
         services.AddSingleton<Mailserver.Core.Routing.RecoveryMailer>();
         services.AddSingleton<SendingLimiter>();
         services.AddSingleton<IpRules>();

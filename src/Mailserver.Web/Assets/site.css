@@ -478,6 +478,11 @@ iframe.mailbody { width: 100%; height: 70vh; border: 1px solid var(--border); bo
 .compose textarea { min-height: 320px; font-family: inherit; }
 .compose .field { display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
 .compose .field label { color: var(--muted); font-size: 14px; }
+.compose .field { position: relative; }
+.suggestions { position: absolute; top: 100%; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--surface-solid); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: 0 12px 30px rgba(0, 0, 0, .35); max-height: 280px; overflow-y: auto; }
+.suggestions li { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.suggestions li span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.suggestions li:hover, .suggestions li.active { background: var(--surface-hover); }
 .editor-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px; border: 1px solid var(--border-strong); border-bottom: 0; border-radius: 12px 12px 0 0; background: var(--surface-2); }
 .editor-toolbar button { background: var(--input); color: var(--text); border: 1px solid var(--border); padding: 4px 10px; font-size: 14px; box-shadow: none; font-weight: 500; border-radius: 8px; }
 .editor-toolbar button:hover { border-color: var(--accent); filter: none; box-shadow: none; }
