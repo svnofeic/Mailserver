@@ -45,17 +45,37 @@ public sealed class AccountStore(Database database)
         }
 
         using var connection = database.Open();
-        return connection.Query("SELECT id, name, dkim_selector FROM domains WHERE name = $name", ReadDomain, ("$name", normalized))
+        return connection.Query("SELECT id, name, dkim_selector, catch_all FROM domains WHERE name = $name", ReadDomain, ("$name", normalized))
             .SingleOrDefault();
     }
 
     public IReadOnlyList<Domain> ListDomains()
     {
         using var connection = database.Open();
-        return connection.Query("SELECT id, name, dkim_selector FROM domains ORDER BY name", ReadDomain);
+        return connection.Query("SELECT id, name, dkim_selector, catch_all FROM domains ORDER BY name", ReadDomain);
     }
 
     public bool IsLocalDomain(string domain) => GetDomain(domain) is not null;
+
+    /// <summary>
+    /// Sets the address that receives mail for unknown recipients of <paramref name="domain"/> (null switches it off). It must
+    /// be an existing mailbox or alias, so mail cannot loop or be lost.
+    /// </summary>
+    public void SetCatchAll(string domain, EmailAddress? target)
+    {
+        if (GetDomain(domain) is not { } existing)
+        {
+            throw new InvalidOperationException($"Domain {domain} is not configured.");
+        }
+
+        if (target is { } address && Resolve(address, catchAll: false).IsEmpty)
+        {
+            throw new InvalidOperationException($"{address} ist kein Postfach und keine Weiterleitung dieses Servers.");
+        }
+
+        using var connection = database.Open();
+        connection.Execute("UPDATE domains SET catch_all = $target WHERE id = $id", ("$target", target?.ToString()), ("$id", existing.Id));
+    }
 
     // ---- Accounts ----
 
@@ -209,8 +229,10 @@ public sealed class AccountStore(Database database)
 
     /// <summary>
     /// Expands aliases recursively. Returns an empty resolution if the address is not known locally.
+    /// "name+anything@domain" goes to name@domain if there is no such address itself (plus addressing); with
+    /// <paramref name="catchAll"/>, unknown addresses of a domain go to its catch-all address, if it has one.
     /// </summary>
-    public RecipientResolution Resolve(EmailAddress address)
+    public RecipientResolution Resolve(EmailAddress address, bool catchAll = true)
     {
         using var connection = database.Open();
         var accounts = new List<Account>();
@@ -256,6 +278,18 @@ public sealed class AccountStore(Database database)
             var alias = FindAlias(connection, current);
             if (alias is null)
             {
+                var plus = current.LocalPart.IndexOf('+');
+                if (plus > 0)
+                {
+                    Visit(EmailAddress.Create(current.LocalPart[..plus], current.Domain), depth);
+                }
+                else if (catchAll && depth == 0 &&
+                         connection.Scalar("SELECT catch_all FROM domains WHERE name = $name", ("$name", current.Domain)) is string target &&
+                         EmailAddress.TryParse(target, out var catchAllAddress))
+                {
+                    Visit(catchAllAddress, depth + 1);
+                }
+
                 return;
             }
 
@@ -300,7 +334,8 @@ public sealed class AccountStore(Database database)
         connection.Query("SELECT address, targets FROM aliases WHERE address = $address", ReadAlias, ("$address", address.ToString()))
             .SingleOrDefault();
 
-    private static Domain ReadDomain(SqliteDataReader r) => new(r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2));
+    private static Domain ReadDomain(SqliteDataReader r) =>
+        new(r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), r.IsDBNull(3) ? null : EmailAddress.Parse(r.GetString(3)));
 
     private static Account ReadAccount(SqliteDataReader r) =>
         new(r.GetInt64(0), EmailAddress.Create(r.GetString(1), r.GetString(2)), r.GetInt64(3), r.GetInt64(4) != 0, r.GetInt64(5) != 0);

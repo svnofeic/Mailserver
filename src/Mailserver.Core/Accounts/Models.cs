@@ -1,6 +1,7 @@
 namespace Mailserver.Core.Accounts;
 
-public sealed record Domain(long Id, string Name, string? DkimSelector);
+/// <param name="CatchAll">Receives mail for addresses of the domain that do not exist (null: such mail is rejected).</param>
+public sealed record Domain(long Id, string Name, string? DkimSelector, EmailAddress? CatchAll = null);
 
 /// <param name="IsAdmin">May use the administration area of the web interface.</param>
 public sealed record Account(long Id, EmailAddress Address, long QuotaBytes, bool Enabled, bool IsAdmin = false);

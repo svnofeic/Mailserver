@@ -65,6 +65,39 @@ public sealed class DetailsModel(AccountStore accounts, DkimKeyStore dkim, DataP
         return Redirect($"/Admin/Domains/Details?name={name}");
     }
 
+    /// <summary>Address for mail to unknown recipients of the domain; empty switches it off.</summary>
+    public IActionResult OnPostCatchAll(string name, string? target)
+    {
+        if (accounts.GetDomain(name) is null)
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                accounts.SetCatchAll(name, null);
+                Message = "Sammeladresse ausgeschaltet – Mails an unbekannte Adressen werden abgewiesen.";
+            }
+            else if (!EmailAddress.TryParse(target.Trim(), out var address))
+            {
+                ErrorMessage = "Das ist keine gültige E-Mail-Adresse.";
+            }
+            else
+            {
+                accounts.SetCatchAll(name, address);
+                Message = $"Mails an unbekannte Adressen von {name} gehen jetzt an {address}.";
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        return Redirect($"/Admin/Domains/Details?name={name}");
+    }
+
     public IActionResult OnPostDelete(string name)
     {
         if (CurrentAddress.Domain == EmailAddress.NormalizeDomain(name))

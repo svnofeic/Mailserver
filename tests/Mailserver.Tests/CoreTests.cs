@@ -109,6 +109,38 @@ public class AccountStoreTests : TestData
     }
 
     [Fact]
+    public void Plus_addresses_go_to_the_mailbox_without_the_tag()
+    {
+        Assert.Equal([Alice], Accounts.Resolve(EmailAddress.Parse("alice+amazon@example.test")).LocalAccounts.Select(a => a.Address));
+        Assert.Equal([Alice], Accounts.Resolve(EmailAddress.Parse("alice+a+b@example.test")).LocalAccounts.Select(a => a.Address));
+        Assert.True(Accounts.Resolve(EmailAddress.Parse("nobody+x@example.test")).IsEmpty);
+
+        // Through an alias as well; an address that really exists with a "+" wins.
+        Accounts.AddAlias(EmailAddress.Parse("team@example.test"), [Bob]);
+        Assert.Equal([Bob], Accounts.Resolve(EmailAddress.Parse("team+news@example.test")).LocalAccounts.Select(a => a.Address));
+        Accounts.AddAlias(EmailAddress.Parse("alice+privat@example.test"), [Bob]);
+        Assert.Equal([Bob], Accounts.Resolve(EmailAddress.Parse("alice+privat@example.test")).LocalAccounts.Select(a => a.Address));
+    }
+
+    [Fact]
+    public void Catch_all_receives_mail_for_unknown_addresses()
+    {
+        Assert.Throws<InvalidOperationException>(() => Accounts.SetCatchAll("example.test", EmailAddress.Parse("nobody@example.test")));
+        Accounts.SetCatchAll("example.test", Bob);
+        Assert.Equal(Bob, Accounts.GetDomain("example.test")!.CatchAll);
+
+        Assert.Equal([Bob], Accounts.Resolve(EmailAddress.Parse("irgendwas@example.test")).LocalAccounts.Select(a => a.Address));
+        Assert.Equal([Bob], Accounts.Resolve(EmailAddress.Parse("nobody+x@example.test")).LocalAccounts.Select(a => a.Address));
+        // Existing addresses keep going to their mailbox; forwarding checks ignore the catch-all.
+        Assert.Equal([Alice], Accounts.Resolve(Alice).LocalAccounts.Select(a => a.Address));
+        Assert.True(Accounts.Resolve(EmailAddress.Parse("irgendwas@example.test"), catchAll: false).IsEmpty);
+        Assert.True(Accounts.Resolve(EmailAddress.Parse("someone@elsewhere.test")).IsEmpty);
+
+        Accounts.SetCatchAll("example.test", null);
+        Assert.True(Accounts.Resolve(EmailAddress.Parse("irgendwas@example.test")).IsEmpty);
+    }
+
+    [Fact]
     public void Users_may_send_as_themselves_and_their_aliases_only()
     {
         Accounts.AddAlias(EmailAddress.Parse("sales@example.test"), [Alice]);

@@ -40,6 +40,20 @@
 <ul>@foreach (var account in Model.Accounts) { <li><a href="/Admin/Mailboxes/Edit?address=@account.Address">@account.Address</a></li> }</ul>
 <p><a class="button secondary" href="/Admin/Mailboxes?domain=@Model.Domain.Name">Postfach anlegen</a> <a class="button secondary" href="/Admin/Rules/?scope=@Model.Domain.Name">Regeln der Domain</a></p>
 
+<h2>Sammeladresse und Plus-Adressen</h2>
+<div class="card">
+    <p class="small muted" style="margin-top: 0"><strong>Plus-Adressen</strong> gelten immer: Mail an
+        <span class="mono">name+beliebig@@@Model.Domain.Name</span> landet bei <span class="mono">name@@@Model.Domain.Name</span>
+        (z. B. <span class="mono">sven+amazon@@@Model.Domain.Name</span>). Mit einer Regel „An enthält +amazon“ lässt sie sich gezielt einsortieren.</p>
+    <p class="small muted">Die <strong>Sammeladresse</strong> bekommt alle Mails an Adressen dieser Domain, die es nicht gibt. Ohne sie werden solche Mails
+        abgewiesen. Achtung: Spammer probieren oft erfundene Adressen aus – mit Sammeladresse kommt davon mehr an (der Spamfilter prüft sie wie jede andere Mail).</p>
+    <form method="post" asp-page-handler="CatchAll" asp-route-name="@Model.Domain.Name" class="row">
+        <label>Sammeladresse (leer = aus)<input name="target" type="email" value="@Model.Domain.CatchAll" placeholder="info@@@Model.Domain.Name" style="width: 280px" /></label>
+        <button type="submit" class="secondary">Speichern</button>
+        @if (Model.Domain.CatchAll is not null) { <span class="pill warn">aktiv</span> }
+    </form>
+</div>
+
 <h2>Domain löschen</h2>
 <div class="card">
     <p class="small">Löscht die Domain mit <strong>allen @Model.Accounts.Count Postfächern</strong>, deren Ordnern und Regeln. Die Nachrichtendateien bleiben im Datenverzeichnis liegen.</p>

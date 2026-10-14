@@ -105,10 +105,14 @@ int Run(string[] a)
         case ["domain", "list"]:
             foreach (var d in accounts.ListDomains())
             {
-                Console.WriteLine($"{d.Name,-40} DKIM: {d.DkimSelector ?? "-"}");
+                Console.WriteLine($"{d.Name,-40} DKIM: {d.DkimSelector ?? "-"}{(d.CatchAll is null ? "" : $"  Sammeladresse: {d.CatchAll}")}");
             }
 
             return 0;
+
+        case ["domain", "catchall", var name, var target]:
+            accounts.SetCatchAll(name, target == "off" ? null : EmailAddress.Parse(target));
+            return Ok(target == "off" ? "Sammeladresse ausgeschaltet." : $"Mails an unbekannte Adressen von {name} gehen jetzt an {target}.");
 
         case ["domain", "remove", var name]:
             return Confirm($"Domain {name} inkl. ALLER Postfächer löschen?") && accounts.RemoveDomain(name) ? Ok("Gelöscht.") : 1;
@@ -399,6 +403,7 @@ int Run(string[] a)
 
                   domain add <domain> [--selector <s>]    Domain anlegen (erzeugt DKIM-Schlüssel, zeigt DNS-Einträge)
                   domain list | domain remove <domain>
+                  domain catchall <domain> <adresse>|off  Sammeladresse für unbekannte Empfänger (Plus-Adressen gelten immer)
                   dns <domain>                            Benötigte DNS-Einträge anzeigen
                   dkim rotate <domain> [--selector <s>]   Neuen DKIM-Schlüssel erzeugen
                   dkim activate <domain> <selector>       DKIM-Selector umstellen

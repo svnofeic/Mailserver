@@ -50,6 +50,18 @@ public sealed class SmtpIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Plus_addresses_and_catch_all_are_delivered()
+    {
+        await SendInboundAsync("shop@remote.test", "alice+shop@example.test");
+        Assert.Single(_server.Inbox("alice"));
+        Assert.Contains("alice+shop@example.test", await _server.ReadAsync(_server.Inbox("alice").Single()));
+
+        _server.HostAccounts.SetCatchAll("example.test", Mailserver.Core.EmailAddress.Parse("bob@example.test"));
+        await SendInboundAsync("sender@remote.test", "vertipper@example.test");
+        Assert.Single(_server.Inbox("bob"));
+    }
+
+    [Fact]
     public async Task Inbound_rejects_spoofed_local_sender()
     {
         var ex = await Assert.ThrowsAsync<SmtpCommandException>(() => SendInboundAsync("alice@example.test", "bob@example.test"));

@@ -101,7 +101,7 @@ public sealed class MailboxSettingsStore(Database database, AccountStore account
             throw new ArgumentException("Ein Postfach kann nicht an sich selbst weiterleiten.");
         }
 
-        if (targets.FirstOrDefault(t => accounts.IsLocalDomain(t.Domain) && accounts.Resolve(t).IsEmpty) is { Domain: not null } unknown)
+        if (targets.FirstOrDefault(t => accounts.IsLocalDomain(t.Domain) && accounts.Resolve(t, catchAll: false).IsEmpty) is { Domain: not null } unknown)
         {
             throw new ArgumentException($"Das Postfach {unknown} gibt es nicht.");
         }

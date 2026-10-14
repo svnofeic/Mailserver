@@ -323,6 +323,10 @@ public sealed class Database
             PRIMARY KEY (account_id, address)
         ) WITHOUT ROWID;
         """,
+        // Optional address per domain that receives mail for unknown recipients ("Sammeladresse").
+        """
+        ALTER TABLE domains ADD COLUMN catch_all TEXT;
+        """,
     ];
 
     private readonly string _connectionString;
