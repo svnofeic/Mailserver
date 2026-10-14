@@ -8,6 +8,8 @@
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
     <PackageReference Include="MimeKit" Version="4.18.1" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+    <!-- MimeKit brings 10.0.0, which has known vulnerabilities. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
 </Project>
