@@ -75,14 +75,17 @@ public sealed class StatusReportTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("OK", web.LastPage);
 
-        // A message stuck in the queue for a day is a failure.
-        var queue = _server.Services.GetRequiredService<Mailserver.Core.Queue.OutboundQueue>();
-        await queue.EnqueueAsync("Subject: x\r\n\r\nx"u8.ToArray(), "alice@example.test", [EmailAddress.Parse("x@remote.invalid")]);
+        // A message stuck in the queue for a day is a failure. Written directly, with its next attempt far ahead, so the
+        // delivery service does not take it away first.
         var database = _server.Services.GetRequiredService<Mailserver.Core.Data.Database>();
         using (var connection = database.Open())
         using (var command = connection.CreateCommand())
         {
-            command.CommandText = "UPDATE queue SET created_utc = '2020-01-01T00:00:00.0000000Z'";
+            command.CommandText =
+                """
+                INSERT INTO queue (message_file, sender, recipient, recipient_domain, created_utc, next_attempt_utc)
+                VALUES ('queue/haengt.eml', 'alice@example.test', 'x@remote.test', 'remote.test', '2020-01-01T00:00:00.0000000Z', '2099-01-01T00:00:00.0000000Z')
+                """;
             command.ExecuteNonQuery();
         }
 
