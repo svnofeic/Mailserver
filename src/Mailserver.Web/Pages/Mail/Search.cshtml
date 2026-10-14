@@ -9,9 +9,9 @@
     <section>
         <h1>Suche</h1>
         <form method="get" action="/Mail/Search" class="card search-form">
-            <div class="row">
-                <label class="grow">Suchbegriffe<input name="q" value="@Model.Q" placeholder="z. B. Rechnung Telekom" autofocus /></label>
-                <label>Ordner
+            <div class="form-grid">
+                <label class="span-2">Suchbegriffe<input name="q" type="search" value="@Model.Q" placeholder="z. B. Rechnung Telekom" autofocus /></label>
+                <label class="span-2">Ordner
                     <select name="folder">
                         <option value="" selected="@string.IsNullOrEmpty(Model.FolderName)">Alle Ordner</option>
                         @foreach (var (folder, _) in Model.Folders)
@@ -19,18 +19,18 @@
                             <option value="@folder.Name" selected="@(Model.FolderName == folder.Name)">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option>
                         }
                     </select></label>
-            </div>
-            <div class="row">
                 <label>Von<input type="date" name="since" value="@Model.Since" /></label>
                 <label>Bis<input type="date" name="until" value="@Model.Until" /></label>
+            </div>
+            <div class="check-grid">
                 <label class="check"><input type="checkbox" name="unread" value="true" checked="@Model.Unread" /> ungelesen</label>
                 <label class="check"><input type="checkbox" name="flagged" value="true" checked="@Model.Flagged" /> markiert</label>
                 <label class="check"><input type="checkbox" name="attachment" value="true" checked="@Model.Attachment" /> mit Anhang</label>
                 <label class="check"><input type="checkbox" name="headersOnly" value="true" checked="@Model.HeadersOnly" /> nur Absender, Empfänger, Betreff</label>
             </div>
-            <div class="row">
+            <div class="row" style="align-items: center">
                 <button type="submit">@Icons.Get("search") Suchen</button>
-                <span class="small muted">Gesucht wird in Betreff, Absender, Empfängern, im Text und in den Namen der Anhänge – auch Wortteile
+                <span class="small muted grow">Gesucht wird in Betreff, Absender, Empfängern, im Text und in den Namen der Anhänge – auch Wortteile
                     („rechnung“ findet „Stromrechnung“). Alle Begriffe müssen vorkommen.</span>
             </div>
         </form>

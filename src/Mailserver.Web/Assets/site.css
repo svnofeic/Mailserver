@@ -523,6 +523,33 @@ iframe.mailbody { width: 100%; height: 70vh; border: 1px solid var(--border); bo
 /* Administrator working in someone else's mailbox */
 .notice.impersonation { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
 .notice.impersonation .icon { width: 16px; height: 16px; vertical-align: -3px; }
+/* Forms in a grid: every field the same height, two columns per field pair, one below 760px. */
+.form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 14px; }
+.form-grid > label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); min-width: 0; }
+.form-grid .span-2 { grid-column: span 2; }
+.form-grid :is(input, select) { width: 100%; max-width: none !important; height: 42px; box-sizing: border-box; }
+/* iOS draws an empty date field lower and centered; as a plain box it matches the others. */
+input[type=date] { -webkit-appearance: none; appearance: none; min-height: 42px; }
+input[type=date]::-webkit-date-and-time-value { text-align: left; }
+input[type=search] { -webkit-appearance: none; appearance: none; }
+.check-grid { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 16px 0; }
+.contact-list { list-style: none; margin: 0; padding: 4px 0; }
+.contact-list li { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.contact-list li:first-child { border-top: 0; }
+.contact-list .avatar { flex: none; }
+.contact-list .person { flex: 1; min-width: 0; }
+.contact-list .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contact-list .meta .pill { margin-right: 8px; padding: 1px 7px; font-size: 11.5px; }
+.contact-list .address { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contact-list .actions { display: flex; gap: 6px; flex: none; }
+.contact-list .actions .button, .contact-list .actions button { padding: 7px 9px; }
+@media (max-width: 760px) {
+    .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .contact-list li { gap: 10px; padding: 11px 12px; }
+    .contact-list .avatar { display: none; }
+    .contact-list .actions { gap: 4px; }
+    .contact-list .actions .button, .contact-list .actions button { padding: 6px 7px; }
+}
 .row-actions { white-space: nowrap; }
 .row-actions form.inline { display: inline; margin-left: 10px; }
 button.link { background: none; border: 0; box-shadow: none; padding: 0; color: var(--accent, inherit); font: inherit; cursor: pointer; text-decoration: underline; }
