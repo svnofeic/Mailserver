@@ -313,6 +313,16 @@ public sealed class Database
         );
         CREATE INDEX ix_trusted_devices_account ON trusted_devices (account_id);
         """,
+        // Webmail signatures, one per sender address (own address, aliases, other providers' accounts).
+        """
+        CREATE TABLE signatures (
+            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            address    TEXT NOT NULL COLLATE NOCASE,
+            text       TEXT NOT NULL,
+            in_replies INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (account_id, address)
+        ) WITHOUT ROWID;
+        """,
     ];
 
     private readonly string _connectionString;

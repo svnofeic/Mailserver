@@ -649,6 +649,45 @@ public sealed class WebmailEditorAndFolderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Signature_of_the_sender_is_added_and_kept_when_sending()
+    {
+        _server.HostAccounts.AddAlias(Mailserver.Core.EmailAddress.Parse("vertrieb@example.test"), [Mailserver.Core.EmailAddress.Parse("alice@example.test")]);
+        await _web.PostAsync("/Account/Signature", "/Account/Signature", ("address", "alice@example.test"), ("text", "Viele Grüße\nAlice <Chefin>"),
+            ("inReplies", "true"));
+        Assert.Contains("Signatur für alice@example.test gespeichert", _web.LastPage);
+        await _web.PostAsync("/Account/Signature", "/Account/Signature", ("address", "vertrieb@example.test"), ("text", "-- \nIhr Vertrieb"));
+        await _web.PostAsync("/Account/Signature", "/Account/Signature", ("address", "fremd@remote.test"), ("text", "x"));
+        Assert.Contains("kann das Postfach nicht senden", _web.LastPage);
+        var stored = _server.Services.GetRequiredService<Mailserver.Core.Accounts.Signatures>().List(_server.User("alice").Id);
+        Assert.Equal("Ihr Vertrieb", stored["vertrieb@example.test"].Text);
+        Assert.False(stored["vertrieb@example.test"].InReplies);
+
+        string BodyHtml() => System.Net.WebUtility.HtmlDecode(
+            System.Text.RegularExpressions.Regex.Match(_web.LastPage, "name=\"Form.BodyHtml\" value=\"([^\"]*)\"").Groups[1].Value);
+
+        // New message: below the (empty) text; the other sender's signature is ready for swapping.
+        await _web.GetAsync("/Mail/Compose");
+        Assert.Contains("<div class=\"signature\">-- <br>Viele Grüße<br>Alice &lt;Chefin&gt;</div>", BodyHtml());
+        Assert.Contains("Ihr Vertrieb", System.Net.WebUtility.HtmlDecode(_web.LastPage));
+
+        // Reply: above the quoted message; the alias signature is not meant for replies.
+        await _server.HostMailboxes.AppendAsync(_server.User("alice"),
+            Encoding.UTF8.GetBytes("From: bob@example.test\r\nTo: alice@example.test\r\nSubject: Frage\r\n\r\nHallo Alice"));
+        var original = _server.Inbox("alice").Single();
+        await _web.GetAsync($"/Mail/Compose?mode=reply&folder=INBOX&uid={original.Uid}");
+        var reply = BodyHtml();
+        Assert.True(reply.IndexOf("class=\"signature\"", StringComparison.Ordinal) < reply.IndexOf("<blockquote", StringComparison.Ordinal));
+        var data = System.Net.WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Match(_web.LastPage, "data-signatures=\"([^\"]*)\"").Groups[1].Value);
+        Assert.DoesNotContain("Ihr Vertrieb", data);
+
+        await _web.PostMultipartAsync("/Mail/Compose", "/Mail/Compose?handler=Send",
+            [("Form.From", "alice@example.test"), ("Form.To", "bob@example.test"), ("Form.Subject", "Mit Signatur"),
+             ("Form.Body", "Hallo\n\n-- \nViele Grüße"), ("Form.BodyHtml", "<p>Hallo</p><div class=\"signature\">-- <br>Viele Grüße</div>")]);
+        var sent = MimeMessage.Load(new MemoryStream(Encoding.UTF8.GetBytes(await _server.ReadAsync(_server.Inbox("bob").Single()))));
+        Assert.Contains("<div class=\"signature\">", sent.HtmlBody);
+    }
+
+    [Fact]
     public async Task Creates_renames_and_deletes_folders()
     {
         await _web.PostAsync("/Mail/Folders", "/Mail/Folders?handler=Create", ("name", "Projekte"), ("parent", ""));

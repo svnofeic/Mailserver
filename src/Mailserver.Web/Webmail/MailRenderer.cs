@@ -74,6 +74,15 @@ public static partial class MailRenderer
         }
 
         sanitizer.AllowedAttributes.Remove("id");
+        // Only the webmail's own marker for the signature (so it can be swapped when another sender is chosen).
+        sanitizer.AllowedAttributes.Add("class");
+        sanitizer.PostProcessNode += (_, e) =>
+        {
+            if (e.Node is AngleSharp.Dom.IElement element && element.HasAttribute("class") && element.GetAttribute("class") != "signature")
+            {
+                element.RemoveAttribute("class");
+            }
+        };
         sanitizer.FilterUrl += (_, e) =>
         {
             if (e.OriginalUrl.StartsWith("cid:", StringComparison.OrdinalIgnoreCase) || e.OriginalUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))

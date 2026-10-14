@@ -45,8 +45,12 @@ public sealed class ComposeModel(
     MailboxStore mailboxes,
     IOptions<MailserverOptions> options,
     Mailserver.Core.External.ExternalAccountStore external,
+    Mailserver.Core.Accounts.Signatures signatures,
     ILogger<ComposeModel> logger) : MailPageModel
 {
+    /// <summary>Signature HTML per sender address (lower case), for swapping it when another sender is chosen.</summary>
+    public string SignatureData { get; private set; } = "{}";
+
     [BindProperty]
     public ComposeForm Form { get; set; } = new();
 
@@ -107,6 +111,11 @@ public sealed class ComposeModel(
             }
 
             Prefill(mode, original);
+        }
+
+        if (mode != "draft")
+        {
+            AddSignature();
         }
 
         Prepare();
@@ -268,6 +277,36 @@ public sealed class ComposeModel(
 
     private static string Encode(string text) => System.Net.WebUtility.HtmlEncode(text);
 
+    private bool IsReply => Form.Mode is "reply" or "replyall" or "forward" || (Form.Mode == "draft" && !string.IsNullOrEmpty(Form.InReplyTo));
+
+    /// <summary>The signatures that apply to this message: all for new ones, those marked for replies otherwise.</summary>
+    private Dictionary<string, Mailserver.Core.Accounts.Signature> ApplicableSignatures() =>
+        signatures.List(CurrentAccount.Id).Values.Where(s => !IsReply || s.InReplies)
+            .ToDictionary(s => s.Address.ToLowerInvariant());
+
+    public static string SignatureHtml(string text) => $"<div class=\"signature\">-- <br>{Encode(text).Replace("\n", "<br>")}</div>";
+
+    /// <summary>Puts the sender's signature below the new text – in replies above the quoted message.</summary>
+    private void AddSignature()
+    {
+        if (!ApplicableSignatures().TryGetValue(Form.From.ToLowerInvariant(), out var signature))
+        {
+            return;
+        }
+
+        var html = SignatureHtml(signature.Text);
+        const string emptyLine = "<p><br></p>";
+        if (IsReply && Form.BodyHtml is { } quoted && quoted.StartsWith(emptyLine, StringComparison.Ordinal))
+        {
+            Form.BodyHtml = emptyLine + html + quoted[emptyLine.Length..];
+            Form.Body = "\n\n-- \n" + signature.Text + Form.Body;
+            return;
+        }
+
+        Form.BodyHtml = (string.IsNullOrEmpty(Form.Body) ? "" : $"<p>{Encode(Form.Body).Replace("\n", "<br>")}</p>") + emptyLine + html;
+        Form.Body = (Form.Body ?? "") + "\n\n-- \n" + signature.Text;
+    }
+
     /// <summary>The original message as a quoted block: its formatted HTML if it has one, otherwise its text.</summary>
     private static string Quote(MimeMessage original)
     {
@@ -309,6 +348,7 @@ public sealed class ComposeModel(
         // Posted editor content is shown again after an error; it goes back into the page only after sanitizing.
         Form.BodyHtml = string.IsNullOrWhiteSpace(Form.BodyHtml) ? null : MailRenderer.SanitizeComposed(Form.BodyHtml);
         Senders = sender.SenderAddresses(CurrentAccount);
+        SignatureData = System.Text.Json.JsonSerializer.Serialize(ApplicableSignatures().ToDictionary(s => s.Key, s => SignatureHtml(s.Value.Text)));
         if (Form.Mode is "forward" or "draft" && Original() is { } original)
         {
             CarriedAttachments.AddRange(MailAttachments.List(original).Select(a => (a.Name, a.Size)));

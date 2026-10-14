@@ -1,0 +1,19 @@
+@page
+@model Mailserver.Web.Pages.Account.SignatureModel
+@{ ViewData["Title"] = "Signatur"; }
+<h1>Signatur</h1>
+<p class="small muted">Die Signatur wird beim Schreiben in der Weboberfläche unter den Text gesetzt – je nach gewählter Absenderadresse. Wechseln Sie beim
+    Schreiben den Absender, wechselt auch die Signatur. Mailprogramme (Outlook, iPhone-Mail …) haben ihre eigene Signatur-Einstellung.</p>
+@foreach (var address in Model.Senders)
+{
+    var current = Model.Current.GetValueOrDefault(address);
+    <h2>@address</h2>
+    <form method="post" class="card">
+        <input type="hidden" name="address" value="@address" />
+        <div class="row" style="flex-direction: column; align-items: stretch">
+            <label>Signatur (leer = keine)<textarea name="text" rows="5" maxlength="@Mailserver.Core.Accounts.Signatures.MaxLength" placeholder="Viele Grüße&#10;Max Mustermann&#10;Telefon 0123 456789">@current?.Text</textarea></label>
+            <label class="check"><input type="checkbox" name="inReplies" value="true" checked="@(current?.InReplies ?? true)" /> auch bei Antworten und Weiterleitungen</label>
+            <div><button type="submit">Speichern</button></div>
+        </div>
+    </form>
+}

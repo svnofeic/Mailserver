@@ -99,6 +99,29 @@
     textarea.parentNode.insertBefore(toolbar, textarea);
     textarea.parentNode.insertBefore(editor, textarea);
 
+    // Choosing another sender swaps the signature (only the one the server put in, not one inside quoted text).
+    var from = form.querySelector('select[name="Form.From"]');
+    var signatures = {};
+    try { signatures = JSON.parse((from && from.getAttribute('data-signatures')) || '{}'); } catch (e) { signatures = {}; }
+    if (from) {
+        from.addEventListener('change', function () {
+            var current = editor.querySelector(':scope > .signature');
+            var html = signatures[from.value.toLowerCase()];
+            var replacement = null;
+            if (html) {
+                var holder = document.createElement('div');
+                holder.innerHTML = html;
+                replacement = holder.firstChild;
+            }
+            if (current && replacement) { current.replaceWith(replacement); }
+            else if (current) { current.remove(); }
+            else if (replacement) {
+                // Below the first line (where the cursor starts), above any quoted text.
+                var first = editor.firstChild;
+                editor.insertBefore(replacement, first ? first.nextSibling : null);
+            }
+        });
+    }
     form.addEventListener('submit', function () {
         htmlField.value = editor.innerHTML;
         textarea.value = editor.innerText;

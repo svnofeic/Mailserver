@@ -68,8 +68,11 @@ darauf öffnet die Mail.
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
 | **Abwesenheit** | Automatische **Weiterleitung** an bis zu 10 Adressen (wahlweise mit oder ohne Kopie im Postfach) und **Abwesenheitsnotiz** mit Zeitraum, Betreff und Text. Solange etwas davon aktiv ist, erinnert ein Hinweis auf jeder Seite daran. |
 | **Fremde Konten** | Adressen bei anderen Anbietern (GMX, eigener Provider …) einbinden: Mails abrufen und mit der Adresse senden (siehe unten) |
+| **Signatur** | eine Signatur pro Absenderadresse (eigene Adresse, Aliase, fremde Konten) – wahlweise auch bei Antworten und Weiterleitungen (siehe unten) |
 | **Benachrichtigungen** | Push-Benachrichtigungen bei neuer Mail pro Gerät ein- und ausschalten, Test senden (siehe oben) |
 | **Passwort** | Passwort ändern (gilt auch für IMAP/SMTP). Alle anderen angemeldeten Browser werden abgemeldet. **Ersatz-Adresse** für „Passwort vergessen“ eintragen (siehe unten). |
+| **Sicherheit** | **Zwei-Faktor-Anmeldung** mit Authenticator-App einrichten, Wiederherstellungscodes, vertrauenswürdige Geräte (siehe unten) |
+| **Einrichtung** | **Profil für iPhone, iPad und Mac** zum Herunterladen (richtet das Postfach mit einem Tipp ein) und die Daten für alle anderen Mailprogramme (siehe unten) |
 
 ## Für Administratoren
 
@@ -119,6 +122,49 @@ neuen Passworts geht an die **Ersatz-Adresse** des Postfachs (eine externe Adres
   Admin-Passwort setzt man auf dem Server: `mailadmin user passwd <adresse>`.
 - Die Links in den Mails zeigen auf `https://<Hostname>:<HttpsPort>`; eine andere Adresse (z. B. `https://webmail.feicht.me`)
   steht in `appsettings.json` unter `Mailserver:Web:PublicUrl`.
+
+## Angemeldet bleiben und Zwei-Faktor-Anmeldung
+
+**Angemeldet bleiben:** Mit dem Haken auf der Anmeldeseite gilt die Anmeldung **30 Tage** und verlängert sich bei jeder
+Nutzung – wer die Weboberfläche bzw. die App regelmäßig öffnet, muss sich praktisch nie neu anmelden. Ohne Haken endet die
+Sitzung nach 60 Minuten ohne Aktivität oder beim Schließen des Browsers. Eine Passwortänderung, das Ein- oder Ausschalten
+der Zwei-Faktor-Anmeldung und „Abmelden“ beenden die Anmeldung trotzdem sofort.
+
+**Zwei-Faktor-Anmeldung** (unter *Sicherheit*): Nach dem Passwort fragt die Weboberfläche einen 6-stelligen Code aus einer
+Authenticator-App ab (Passwörter-App des iPhones, Google oder Microsoft Authenticator, 1Password …). Ein gestohlenes Passwort
+allein reicht dann nicht mehr.
+
+- **Einrichten:** *Sicherheit → Einrichten*, QR-Code mit der App scannen (auf dem iPhone selbst: den Link antippen), den
+  angezeigten Code eingeben. Danach erscheinen **10 Wiederherstellungscodes** – ausdrucken oder notieren, sie werden nur
+  einmal angezeigt. Jeder ersetzt einmal den App-Code, falls das Handy fehlt.
+- **Diesem Gerät 30 Tage vertrauen:** Haken bei der Code-Abfrage – dieser Browser fragt dann 30 Tage lang keinen Code ab
+  (das Passwort bzw. „Angemeldet bleiben“ gilt weiter). Die Liste der Geräte steht unter *Sicherheit*, einzelne lassen sich
+  entfernen. Eine Passwortänderung beendet das Vertrauen für alle Geräte.
+- **Mailprogramme** (IMAP/SMTP: Outlook, Thunderbird, iPhone-Mail) sind nicht betroffen und melden sich weiter nur mit dem Passwort an.
+- **Handy verloren:** Wiederherstellungscode verwenden, oder der Administrator schaltet sie unter *Postfächer → Postfach →
+  Zurücksetzen* ab; auf dem Server: `mailadmin user 2fa <adresse> off`.
+- Falsche Codes zählen wie falsche Passwörter zur IP-Sperre und stehen im Verlauf („Web-2FA“). Jeder Code gilt nur einmal.
+  Das Geheimnis der App liegt verschlüsselt in der Datenbank (Schlüssel in `data\secrets`, Teil der Datensicherung).
+
+## Mailprogramm einrichten
+
+Unter **Einrichtung** gibt es:
+
+- **iPhone, iPad, Mac:** „Profil laden“ in **Safari** antippen (nicht in der App vom Home-Bildschirm), dann *Einstellungen →
+  Profil geladen → Installieren* und das Passwort eingeben. Das Profil enthält kein Passwort und ist mit dem Zertifikat des
+  Servers signiert („Überprüft“). Erneutes Installieren ersetzt es.
+- **Alle anderen:** Server, Ports und Benutzername zum Abtippen.
+
+Automatische Erkennung für die Administratoren (wird auf der Seite für Admins mit den passenden Werten angezeigt):
+
+- **Outlook** (klassisch) findet die Einstellungen per DNS-Eintrag je Domain:
+  `_autodiscover._tcp.<domain>  SRV  0 0 9443 mail.feicht.me`. Outlook fragt dann einmal, ob es die Einstellungen von
+  diesem Server übernehmen darf („Zulassen“, ggf. „Nicht mehr fragen“). Der Mailserver beantwortet
+  `/autodiscover/autodiscover.xml` nur für eigene Domains.
+- **Thunderbird** (und K-9/Thunderbird für Android, FairEmail) fragt `https://autoconfig.<domain>/mail/config-v1.1.xml` bzw.
+  `https://<domain>/.well-known/autoconfig/mail/config-v1.1.xml` – auf Port 443, den der IIS belegt. Die Seite bietet die
+  Datei je Domain zum Herunterladen an; in Plesk im Dateimanager der Website unter `.well-known/autoconfig/mail/` ablegen.
+  Ohne die Datei probiert Thunderbird `mail.<domain>` mit den üblichen Ports durch – das klappt meist ebenfalls.
 
 ## Als Benutzer anmelden (Postfach öffnen)
 
@@ -218,8 +264,9 @@ Auch per Kommandozeile:
 
 - Nur HTTPS; Cookies sind `Secure`, `HttpOnly`, `SameSite=Strict`, Formulare sind gegen CSRF geschützt.
 - Fehlgeschlagene Anmeldungen zählen zur gemeinsamen IP-Sperre von SMTP und IMAP und erscheinen im Verlauf.
-- Die Sitzung endet nach 60 Minuten Inaktivität (`Mailserver:Web:SessionTimeout`) und sofort, wenn Passwort,
-  Aktiv-Status oder Admin-Recht des Postfachs geändert werden.
+- Die Sitzung endet nach 60 Minuten Inaktivität (`Mailserver:Web:SessionTimeout`) – mit „Angemeldet bleiben“ nach 30 Tagen
+  ohne Nutzung – und sofort, wenn Passwort, Aktiv-Status, Admin-Recht oder Zwei-Faktor-Anmeldung des Postfachs geändert werden.
+- Optional Zwei-Faktor-Anmeldung mit Authenticator-App (siehe oben).
 - Strenge Content-Security-Policy: JavaScript nur vom eigenen Server (einzig der Mail-Editor), keine externen Ressourcen,
   Clickjacking-Schutz, HSTS.
 - Die Schlüssel für Sitzungs-Cookies liegen in `data\keys` (unter Windows zusätzlich mit DPAPI geschützt).
@@ -246,6 +293,9 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
   bereinigt das HTML vor dem Versand. Beim Antworten und Weiterleiten wird die Originalnachricht mit ihrer Formatierung zitiert.
   Der Editor ist ein kleines eigenes Skript, das vom Mailserver selbst kommt (keine fremden Bibliotheken, kein CDN); die
   Sicherheitsrichtlinie der Seite erlaubt nur Skripte vom eigenen Server. Ohne JavaScript bleibt ein einfaches Textfeld.
+- **Signatur:** Unter *Signatur* je Absenderadresse ein Text. Er steht beim Schreiben unter dem Text, bei Antworten und
+  Weiterleitungen über dem Zitat (lässt sich je Adresse abschalten). Wählt man beim Schreiben einen anderen Absender,
+  tauscht der Editor die Signatur aus. Das übliche Trennzeichen „-- “ wird automatisch davorgesetzt.
 - **Ordner verwalten** (Link unter der Ordnerliste): Ordner und Unterordner anlegen, umbenennen und löschen. Systemordner
   (Posteingang, Gesendet, Entwürfe, Papierkorb, Spam) sind geschützt. Beim Löschen wandern enthaltene Mails in den Papierkorb;
   Unterordner müssen zuerst gelöscht werden. Beim Umbenennen werden Regeln, die Mails in den Ordner verschieben, automatisch angepasst.
@@ -253,4 +303,3 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
 ## Grenzen
 
 - Bilder lassen sich nicht in den Text einfügen, nur als Anhang senden (eingefügte Bilder werden beim Senden entfernt).
-- Keine Zwei-Faktor-Anmeldung.
