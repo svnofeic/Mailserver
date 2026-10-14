@@ -327,6 +327,17 @@ public sealed class Database
         """
         ALTER TABLE domains ADD COLUMN catch_all TEXT;
         """,
+        // Full-text search for the webmail: one document per message file (copies share it), filled in the background.
+        // The trigram tokenizer also finds parts of words ("rechnung" in "Stromrechnung").
+        """
+        CREATE TABLE search_docs (
+            id             INTEGER PRIMARY KEY,
+            file_name      TEXT NOT NULL UNIQUE,
+            has_attachment INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE VIRTUAL TABLE search_text USING fts5(subject, sender, recipients, body, attachments, tokenize = 'trigram');
+        CREATE INDEX ix_messages_file ON messages (file_name);
+        """,
     ];
 
     private readonly string _connectionString;

@@ -95,6 +95,8 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<SmtpHostedService>();
         services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());
         services.AddHostedService<BackupService>();
+        services.AddSingleton<Mailserver.Core.Storage.SearchIndex>();
+        services.AddHostedService<SearchIndexer>();
         services.AddHostedService<PushService>();
         services.AddHostedService<External.ExternalFetchService>();
         return services;

@@ -1,0 +1,86 @@
+@page
+@model Mailserver.Web.Pages.Mail.SearchModel
+@{ ViewData["Title"] = "Suche"; }
+<div class="mail">
+    <aside>
+        <a class="button" href="/Mail/Compose">@Icons.Get("pencil") Neue Mail</a>
+        <partial name="_Folders" model="(Model.Folders, Model.FolderName ?? string.Empty)" />
+    </aside>
+    <section>
+        <h1>Suche</h1>
+        <form method="get" action="/Mail/Search" class="card search-form">
+            <div class="row">
+                <label class="grow">Suchbegriffe<input name="q" value="@Model.Q" placeholder="z. B. Rechnung Telekom" autofocus /></label>
+                <label>Ordner
+                    <select name="folder">
+                        <option value="" selected="@string.IsNullOrEmpty(Model.FolderName)">Alle Ordner</option>
+                        @foreach (var (folder, _) in Model.Folders)
+                        {
+                            <option value="@folder.Name" selected="@(Model.FolderName == folder.Name)">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option>
+                        }
+                    </select></label>
+            </div>
+            <div class="row">
+                <label>Von<input type="date" name="since" value="@Model.Since" /></label>
+                <label>Bis<input type="date" name="until" value="@Model.Until" /></label>
+                <label class="check"><input type="checkbox" name="unread" value="true" checked="@Model.Unread" /> ungelesen</label>
+                <label class="check"><input type="checkbox" name="flagged" value="true" checked="@Model.Flagged" /> markiert</label>
+                <label class="check"><input type="checkbox" name="attachment" value="true" checked="@Model.Attachment" /> mit Anhang</label>
+                <label class="check"><input type="checkbox" name="headersOnly" value="true" checked="@Model.HeadersOnly" /> nur Absender, Empfänger, Betreff</label>
+            </div>
+            <div class="row">
+                <button type="submit">@Icons.Get("search") Suchen</button>
+                <span class="small muted">Gesucht wird in Betreff, Absender, Empfängern, im Text und in den Namen der Anhänge – auch Wortteile
+                    („rechnung“ findet „Stromrechnung“). Alle Begriffe müssen vorkommen.</span>
+            </div>
+        </form>
+
+        @if (Model.IgnoredWords.Count > 0)
+        {
+            <div class="notice warn small">Nicht berücksichtigt (zu kurz, mindestens @Mailserver.Core.Storage.MailSearch.MinWordLength Zeichen): @string.Join(", ", Model.IgnoredWords)</div>
+        }
+        @if (Model.NotYetIndexed > 0)
+        {
+            <div class="notice small">Der Suchindex wird noch aufgebaut – @Model.NotYetIndexed ältere Nachrichten fehlen noch. Das läuft im Hintergrund weiter.</div>
+        }
+
+        @if (Model.Searched)
+        {
+            <p class="muted small">@Model.Total Nachricht(en) gefunden</p>
+            @if (Model.Items.Count > 0)
+            {
+                <div class="table-wrap">
+                    <table class="messages search-results">
+                        <tbody>
+                        @foreach (var (hit, summary) in Model.Items)
+                        {
+                            var seen = hit.Message.HasFlag(Mailserver.Core.Storage.MessageFlags.Seen);
+                            var person = hit.Folder is "Sent" or "Drafts" ? summary.To : summary.From;
+                            <tr class="@(seen ? "" : "unread")">
+                                <td class="from"><span class="sender"><span class="avatar @Avatars.Class(person)">@Avatars.Initials(person)</span><span>@person</span></span></td>
+                                <td class="subject">
+                                    <a href="/Mail/Read?folder=@Uri.EscapeDataString(hit.Folder)&uid=@hit.Message.Uid">
+                                        @if (hit.Message.HasFlag(Mailserver.Core.Storage.MessageFlags.Flagged)) { <span class="mark" title="markiert">@Icons.Get("star", "star")</span> }
+                                        <span class="text">@summary.Subject</span>
+                                        @if (summary.HasAttachments) { <span title="Anhang">@Icons.Get("paperclip")</span> }
+                                    </a>
+                                </td>
+                                <td class="folder small"><span class="pill">@Mailserver.Web.Webmail.FolderDisplay.Leaf(hit.Folder)</span></td>
+                                <td class="date small muted">@Format.Time(hit.Message.InternalDate)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (Model.PageCount > 1)
+            {
+                <nav class="pager" aria-label="Seiten">
+                    @if (Model.PageNumber > 0) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber - 1)" rel="prev">← Neuere</a> }
+                    <span class="muted small">Seite @(Model.PageNumber + 1) von @Model.PageCount</span>
+                    @if (Model.PageNumber + 1 < Model.PageCount) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber + 1)" rel="next">Ältere →</a> }
+                </nav>
+            }
+        }
+    </section>
+</div>

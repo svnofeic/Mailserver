@@ -114,7 +114,7 @@ public sealed class MailboxStore(Database database, DataPaths paths)
     }
 
     private const string FolderColumns = "id, account_id, name, uid_validity, uid_next, subscribed, change_counter";
-    private const string MessageColumns = "id, folder_id, uid, flags, internal_date_utc, size, file_name";
+    internal const string MessageColumns = "id, folder_id, uid, flags, internal_date_utc, size, file_name";
 
     /// <summary>Raised after messages in a folder were added, removed or changed. The argument is the folder id.</summary>
     public event Action<long>? FolderChanged;
@@ -585,7 +585,7 @@ public sealed class MailboxStore(Database database, DataPaths paths)
     private static Folder ReadFolder(SqliteDataReader r) =>
         new(r.GetInt64(0), r.GetInt64(1), r.GetString(2), r.GetInt64(3), r.GetInt64(4), r.GetInt64(5) != 0, r.GetInt64(6));
 
-    private static StoredMessage ReadMessage(SqliteDataReader r) =>
+    internal static StoredMessage ReadMessage(SqliteDataReader r) =>
         new(r.GetInt64(0), r.GetInt64(1), r.GetInt64(2), r.GetString(3), r.GetDbTime(4), r.GetInt64(5), r.GetString(6));
 
     // IMAP treats INBOX case-insensitively; every other name is case-sensitive.

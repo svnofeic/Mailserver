@@ -10,11 +10,12 @@
     <section>
         <div class="toolbar">
             <h1 style="margin: 0" class="grow">@Mailserver.Web.Webmail.FolderDisplay.Path(Model.Folder.Name)</h1>
-            <form method="get" action="/Mail" class="search">
+            <form method="get" action="/Mail/Search" class="search">
                 <input type="hidden" name="folder" value="@Model.Folder.Name" />
                 @Icons.Get("search")
-                <input name="q" value="@Model.Search" placeholder="Absender, Empfänger, Betreff suchen" aria-label="Suche" />
+                <input name="q" value="@Model.Search" placeholder="In diesem Ordner suchen" aria-label="Suche" />
                 <button type="submit" class="secondary">Suchen</button>
+                <a class="small" href="/Mail/Search">Alle Ordner …</a>
             </form>
         </div>
 
