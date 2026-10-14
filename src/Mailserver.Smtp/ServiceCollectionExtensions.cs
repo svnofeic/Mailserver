@@ -99,6 +99,10 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<BackupService>();
         services.AddSingleton<Mailserver.Core.Storage.SearchIndex>();
         services.AddHostedService<SearchIndexer>();
+        services.AddSingleton<Mailserver.Core.Data.AppState>();
+        services.AddSingleton<Mailserver.AntiSpam.Diagnostics.StatusReport>();
+        services.AddSingleton<WeeklyReportService>();
+        services.AddHostedService(sp => sp.GetRequiredService<WeeklyReportService>());
         services.AddHostedService<PushService>();
         services.AddHostedService<External.ExternalFetchService>();
         return services;

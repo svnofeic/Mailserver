@@ -43,7 +43,7 @@
         <div class="notice @tone small">@advice</div>
         <div class="table-wrap">
             <table class="dmarc-sources">
-                <thead><tr><th>Absender (IP)</th><th class="num">Mails</th><th class="num">bestanden</th><th>DKIM / SPF für</th><th>gemeldet von</th></tr></thead>
+                <thead><tr><th>Absender (IP)</th><th class="num">Mails</th><th class="num">bestanden</th><th class="wide-only">DKIM / SPF für</th><th class="wide-only">gemeldet von</th></tr></thead>
                 <tbody>
                 @foreach (var source in domain.Sources)
                 {
@@ -51,12 +51,13 @@
                         <td>
                             <span class="mono">@source.Ip</span>
                             @if (Model.ServerIps.Contains(source.Ip)) { <span class="pill good">dieser Server</span> }
-                            @if (Model.Names.GetValueOrDefault(source.Ip) is { } name) { <div class="small muted">@name</div> }
+                            @if (Model.Names.GetValueOrDefault(source.Ip) is { } name) { <div class="small muted" style="overflow-wrap: anywhere">@name</div> }
+                            <div class="small muted narrow-only">DKIM/SPF: @(source.DkimDomain ?? "–") / @(source.SpfDomain ?? "–") · @string.Join(", ", source.Reporters)</div>
                         </td>
                         <td class="num">@source.Messages</td>
                         <td class="num">@if (source.Failed == 0) { <span class="pill good">alle</span> } else { <span class="pill bad">@source.Passed von @source.Messages</span> }</td>
-                        <td class="small">@(source.DkimDomain ?? "–") / @(source.SpfDomain ?? "–")</td>
-                        <td class="small muted">@string.Join(", ", source.Reporters)</td>
+                        <td class="small wide-only">@(source.DkimDomain ?? "–") / @(source.SpfDomain ?? "–")</td>
+                        <td class="small muted wide-only">@string.Join(", ", source.Reporters)</td>
                     </tr>
                 }
                 </tbody>

@@ -196,6 +196,20 @@ public static class WebHosting
 
         MapProgressiveWebApp(app);
         ClientSetup.Map(app);
+        // Status address for outside monitoring (UptimeRobot …): "OK" or "STÖRUNG" with 503; details only with the key.
+        app.MapGet("/status", (HttpContext context, string? key, Mailserver.AntiSpam.Diagnostics.StatusReport report,
+            Microsoft.Extensions.Options.IOptions<MailserverOptions> settings) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            var problems = report.QuickProblems();
+            var secret = settings.Value.Reports.StatusKey;
+            var details = !string.IsNullOrEmpty(secret) && key is not null &&
+                          System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                              System.Text.Encoding.UTF8.GetBytes(key), System.Text.Encoding.UTF8.GetBytes(secret));
+            return problems.Count == 0
+                ? Results.Text("OK", "text/plain; charset=utf-8")
+                : Results.Text(details ? "STÖRUNG: " + string.Join(", ", problems) : "STÖRUNG", "text/plain; charset=utf-8", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }).AllowAnonymous();
 
         // Light or dark design, remembered in a cookie (works without JavaScript).
         app.MapGet("/theme", (HttpContext context, string? mode, string? returnUrl) =>

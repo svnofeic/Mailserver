@@ -381,6 +381,13 @@ public sealed class Database
         );
         CREATE INDEX ix_dmarc_rows_report ON dmarc_rows (report);
         """,
+        // Small values the server remembers between starts (e.g. when the weekly report was sent).
+        """
+        CREATE TABLE app_state (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        ) WITHOUT ROWID;
+        """,
     ];
 
     private readonly string _connectionString;

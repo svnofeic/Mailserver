@@ -97,6 +97,8 @@ mailadmin user admin sven@feicht.me on
 | **IP-Sperren** | Adressen, die gerade wegen Fehl-Logins gesperrt sind (freigeben oder dauerhaft sperren), die Adressen mit den meisten Fehl-Logins der letzten 24 Stunden samt versuchten Benutzernamen, dauerhafte bzw. befristete Sperren und Ausnahmen („nie sperren“). Die eigene Adresse lässt sich nicht sperren. |
 | **Datensicherung** | nächtliche Sicherung einrichten (Zielordner, Netzwerkfreigabe mit Anmeldung, **Microsoft OneDrive** oder **pCloud** mit „Verbinden“; Uhrzeit, Aufbewahrung), „Jetzt sichern“, Verlauf und vorhandene Sicherungen – siehe [datensicherung.md](datensicherung.md) |
 | **Diagnose** | prüft auf einen Blick, ob alles für eine zuverlässige Zustellung stimmt: MX, SPF, DKIM und DMARC jeder Domain, Reverse DNS und Blacklists (Spamhaus, SpamCop, Barracuda, PSBL) der Server-IP, offene Ports, ausgehender Port 25, Zertifikat, Warteschlange, Speicherplatz, Datensicherung, Virenscanner und neue Versionen – jeweils mit Hinweis, was zu tun ist. Gleiches auf der Kommandozeile: `mailadmin diagnose` |
+| **DMARC-Berichte** | Auswertung der DMARC-Berichte von Google, Microsoft, GMX & Co. (siehe unten) |
+| **Statusbericht** | wöchentliche Mail an die Administratoren, Vorschau, „Jetzt senden“, Statusadresse für UptimeRobot (siehe unten) |
 | **Einstellungen** | Spamfilter (Schwellen, DMARC, SPF, vertrauenswürdige Netze, Blacklists), Greylisting, Verlauf (Aufbewahrung, Betreffzeilen), **Virenschutz** (Scanner, blockierte Dateitypen, Umgang mit Makro-Dokumenten und Scanner-Ausfall, Knopf „EICAR-Testdatei scannen“), **Versandlimits**, Login-Sperren inkl. automatischer Sperre für mehrere Tage, Zustellung inkl. Relay-Server. **Gilt nach wenigen Sekunden ohne Neustart.** |
 
 Einstellungen aus der Weboberfläche werden in `data\settings.json` gespeichert und haben Vorrang vor `appsettings.json`.
@@ -166,6 +168,33 @@ Automatische Erkennung für die Administratoren (wird auf der Seite für Admins 
   `https://<domain>/.well-known/autoconfig/mail/config-v1.1.xml` – auf Port 443, den der IIS belegt. Die Seite bietet die
   Datei je Domain zum Herunterladen an; in Plesk im Dateimanager der Website unter `.well-known/autoconfig/mail/` ablegen.
   Ohne die Datei probiert Thunderbird `mail.<domain>` mit den üblichen Ports durch – das klappt meist ebenfalls.
+
+## DMARC-Berichte
+
+Große Anbieter schicken täglich Berichte an die Adresse im `rua=` des DMARC-Eintrags (vorgeschlagen: `postmaster@<domain>`).
+Der Mailserver erkennt sie beim Empfang (auch als .gz oder .zip), wertet sie aus und legt die Mail gelesen im Ordner
+„DMARC-Berichte“ ab – der Posteingang bleibt frei.
+
+- `postmaster@` und `abuse@` jeder Domain kommen immer an: ohne eigenes Postfach oder Alias bei allen Administratoren.
+- *Verwaltung → DMARC-Berichte* zeigt je Domain die Zahl der Mails, den Anteil, der SPF/DKIM bestanden hat, und jede
+  sendende IP (mit Namen, „dieser Server“ für den eigenen). Rot markierte Absender bestehen nicht: entweder ein eigener
+  Dienst (Newsletter, Shop, Kontaktformular), der in den SPF-Eintrag gehört oder DKIM signieren muss – oder jemand, der
+  Ihre Adresse fälscht.
+- Die Seite sagt, wann der DMARC-Eintrag verschärft werden kann: erst `p=quarantine` (Fälschungen landen im Spam), nach
+  einigen ruhigen Wochen `p=reject` (Fälschungen werden abgewiesen). „Einlesen“ übernimmt Berichte, die schon in den
+  Postfächern der Administratoren liegen. Berichte werden 400 Tage aufbewahrt.
+
+## Statusbericht und Überwachung
+
+- **Wochenbericht:** jeden Montag ab 8 Uhr eine Mail an alle Administratoren: zuerst alles, was die Diagnose bemängelt
+  (Sperrlisten der Server-IP, Zertifikat, DNS, Ports, Speicherplatz, Sicherung), dann Mailverkehr der Woche, Warteschlange,
+  DMARC, Speicherbelegung und die letzte Sicherung. Tag und Uhrzeit in `appsettings.json` unter `Mailserver:Reports`
+  (`WeeklyDay`, `WeeklyHour`, `WeeklyEnabled`). War der Server zum Termin aus, kommt der Bericht nach dem Start.
+- **Statusadresse** `https://mail.feicht.me:9443/status` für einen kostenlosen Überwachungsdienst wie UptimeRobot: antwortet
+  „OK“ oder „STÖRUNG“ (HTTP 503) bei hängender Warteschlange, ablaufendem Zertifikat, weniger als 1 GB freiem Platz,
+  überfälliger Sicherung oder nicht erreichbarer Datenbank. Antwortet sie gar nicht, ist der Server aus oder nicht
+  erreichbar – genau der Fall, in dem er selbst keine Mail mehr schicken kann. Die Gründe stehen nur dabei, wenn
+  `Mailserver:Reports:StatusKey` gesetzt ist und die Adresse `?key=…` enthält. Anleitung auf der Seite *Statusbericht*.
 
 ## Plus-Adressen und Sammeladresse
 
@@ -316,6 +345,7 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
 - **Signatur:** Unter *Signatur* je Absenderadresse ein Text. Er steht beim Schreiben unter dem Text, bei Antworten und
   Weiterleitungen über dem Zitat (lässt sich je Adresse abschalten). Wählt man beim Schreiben einen anderen Absender,
   tauscht der Editor die Signatur aus. Das übliche Trennzeichen „-- “ wird automatisch davorgesetzt.
+- **Adressbuch:** Löschen eines Kontakts fragt vorher nach.
 - **Ordner verwalten** (Link unter der Ordnerliste): Ordner und Unterordner anlegen, umbenennen und löschen. Systemordner
   (Posteingang, Gesendet, Entwürfe, Papierkorb, Spam) sind geschützt. Beim Löschen wandern enthaltene Mails in den Papierkorb;
   Unterordner müssen zuerst gelöscht werden. Beim Umbenennen werden Regeln, die Mails in den Ordner verschieben, automatisch angepasst.

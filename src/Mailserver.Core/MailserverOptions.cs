@@ -34,6 +34,8 @@ public sealed class MailserverOptions
     public BackupOptions Backup { get; set; } = new();
 
     public ExternalMailOptions External { get; set; } = new();
+
+    public ReportOptions Reports { get; set; } = new();
 }
 
 /// <summary>Addresses at other providers (Fremde Konten).</summary>
@@ -103,6 +105,24 @@ public sealed record BackupOptions
     public string? Username { get; set; }
 
     public string? Password { get; set; }
+}
+
+/// <summary>Weekly status mail to the administrators and the status address for outside monitoring.</summary>
+public sealed class ReportOptions
+{
+    /// <summary>Weekly report to all administrators.</summary>
+    public bool WeeklyEnabled { get; set; } = true;
+
+    public DayOfWeek WeeklyDay { get; set; } = DayOfWeek.Monday;
+
+    /// <summary>Local hour (0–23) from which the report is sent on <see cref="WeeklyDay"/>.</summary>
+    public int WeeklyHour { get; set; } = 8;
+
+    /// <summary>
+    /// If set, /status shows the details of problems only with ?key=… (without it, just "OK" or "STÖRUNG"); a monitoring
+    /// service such as UptimeRobot checks the address every few minutes.
+    /// </summary>
+    public string? StatusKey { get; set; }
 }
 
 public sealed class AntivirusOptions

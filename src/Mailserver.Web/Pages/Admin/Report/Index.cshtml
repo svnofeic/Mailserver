@@ -1,0 +1,48 @@
+@page
+@model Mailserver.Web.Pages.Admin.Report.IndexModel
+@{ ViewData["Title"] = "Statusbericht und Überwachung"; }
+<h1>Statusbericht und Überwachung</h1>
+
+<h2>@Icons.Get("mail") Wöchentlicher Statusbericht</h2>
+<div class="card">
+    @if (Model.Settings.WeeklyEnabled)
+    {
+        <p style="margin-top: 0">Jeden <strong>@Mailserver.Web.Pages.Admin.Report.IndexModel.DayName(Model.Settings.WeeklyDay)</strong> ab
+            <strong>@Model.Settings.WeeklyHour Uhr</strong> bekommen alle Administratoren eine Mail mit dem Wichtigsten der Woche: Probleme aus der
+            Diagnose (Sperrlisten, Zertifikat, DNS, Speicherplatz, Sicherung), Mailverkehr, Warteschlange, DMARC und Speicherbelegung.</p>
+    }
+    else
+    {
+        <p style="margin-top: 0"><span class="pill">aus</span> Der Wochenbericht ist ausgeschaltet (<span class="mono">Mailserver:Reports:WeeklyEnabled</span>).</p>
+    }
+    <p class="small muted">Zuletzt gesendet: @(Model.LastSent is { } last ? Format.Time(last) : "noch nie"). Tag und Uhrzeit:
+        <span class="mono">Mailserver:Reports:WeeklyDay</span> und <span class="mono">WeeklyHour</span> in appsettings.json.</p>
+    <form method="post" class="row">
+        <button type="submit" asp-page-handler="Preview" class="secondary">Vorschau</button>
+        <button type="submit" asp-page-handler="Send">Jetzt senden</button>
+    </form>
+    @if (Model.Preview is { } preview)
+    {
+        <h3>@preview.Subject</h3>
+        <pre class="report-preview">@preview.Text</pre>
+    }
+</div>
+
+<h2>@Icons.Get("pulse") Überwachung von außen</h2>
+<div class="card">
+    <p style="margin-top: 0">Fällt der Server ganz aus, kann er selbst keine Mail mehr schicken. Ein kostenloser Dienst wie
+        <strong>UptimeRobot</strong> (uptimerobot.com) ruft dafür alle 5 Minuten diese Adresse ab und meldet sich per App, Mail oder SMS, wenn sie nicht antwortet
+        oder eine Störung meldet:</p>
+    <p class="mono" style="overflow-wrap: anywhere"><a href="@Model.StatusUrl" target="_blank" rel="noopener">@Model.StatusUrl</a></p>
+    <p>Aktueller Stand:
+        @if (Model.Problems.Count == 0) { <span class="pill good">OK</span> }
+        else { <span class="pill bad">STÖRUNG</span> <span class="small">@string.Join(", ", Model.Problems)</span> }</p>
+    <ol class="small" style="padding-left: 20px; margin-bottom: 0">
+        <li>Bei UptimeRobot kostenlos registrieren, „Add New Monitor“.</li>
+        <li>Typ <strong>Keyword</strong>, URL wie oben, Schlüsselwort <span class="mono">OK</span> („Alert when keyword not exists“), Intervall 5 Minuten.</li>
+        <li>Optional einen zweiten Monitor vom Typ <strong>Port</strong> für <span class="mono">mail.feicht.me</span>, Port 25 (Mailempfang).</li>
+    </ol>
+    <p class="small muted" style="margin-bottom: 0">Die Adresse antwortet mit „OK“ oder „STÖRUNG“ (HTTP 503): Warteschlange hängt, Zertifikat läuft ab, weniger als 1 GB frei,
+        Sicherung überfällig, Datenbank nicht erreichbar. Die Gründe stehen nur dabei, wenn <span class="mono">Mailserver:Reports:StatusKey</span> gesetzt ist
+        und die Adresse den Schlüssel enthält.</p>
+</div>
