@@ -1,8 +1,6 @@
 using Mailserver.Core.Accounts;
 using Mailserver.Core.Security;
 using Mailserver.Core.SpamLogging;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -14,6 +12,7 @@ public sealed class LoginModel(AccountStore accounts, Mailserver.Core.Storage.Ma
     public string? Error { get; private set; }
     public string? Email { get; private set; }
     public string? ReturnUrl { get; private set; }
+    public bool Remember { get; private set; }
 
     public IActionResult OnGet(string? returnUrl)
     {
@@ -26,9 +25,10 @@ public sealed class LoginModel(AccountStore accounts, Mailserver.Core.Storage.Ma
         return Page();
     }
 
-    public async Task<IActionResult> OnPostAsync(string email, string password, string? returnUrl)
+    public async Task<IActionResult> OnPostAsync(string email, string password, string? returnUrl, bool remember = false)
     {
         Email = email;
+        Remember = remember;
         ReturnUrl = returnUrl;
         var ip = HttpContext.Connection.RemoteIpAddress;
         if (ip is { IsIPv4MappedToIPv6: true })
@@ -59,8 +59,11 @@ public sealed class LoginModel(AccountStore accounts, Mailserver.Core.Storage.Ma
             logger.LogInformation("Merged folder {Alias} of {Account} into {Target} ({Moved} messages)", alias, account.Address, target, moved);
         }
 
-        var principal = WebHosting.CreatePrincipal(account, accounts.GetSecurityStamp(account.Id)!);
-        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+        if (!await WebSignIn.PasswordAcceptedAsync(HttpContext, account, remember, returnUrl))
+        {
+            return Redirect("/Login/Code");
+        }
+
         logger.LogInformation("Web login {User} from {Ip}", account.Address, ip);
         return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/Mail");
     }

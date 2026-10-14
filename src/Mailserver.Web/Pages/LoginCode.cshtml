@@ -1,0 +1,20 @@
+@page "/Login/Code"
+@model Mailserver.Web.Pages.LoginCodeModel
+@{ ViewData["Title"] = "Bestätigungscode"; }
+<div class="login">
+    <div class="brand"><span class="logo">@Icons.Get("mail")</span><span>Mailserver<small>@HttpContext.Request.Host.Host</small></span></div>
+    <h1>Bestätigungscode</h1>
+    @if (Model.Error is not null)
+    {
+        <div class="notice bad" role="alert">@Model.Error</div>
+    }
+    <p class="small muted">Für <strong>@Model.Address</strong> ist die Zwei-Faktor-Anmeldung eingeschaltet. Geben Sie den 6-stelligen Code
+        aus Ihrer Authenticator-App ein – oder einen Ihrer Wiederherstellungscodes.</p>
+    <form method="post">
+        <label>Code<input name="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required autofocus
+                          maxlength="20" placeholder="123456" /></label>
+        <label class="check"><input type="checkbox" name="trust" value="true" /> Diesem Gerät 30 Tage vertrauen (kein Code nötig)</label>
+        <button type="submit">Anmelden</button>
+    </form>
+    <p class="small"><a href="/Login">Zurück zur Anmeldung</a></p>
+</div>

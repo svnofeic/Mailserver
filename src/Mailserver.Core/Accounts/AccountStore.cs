@@ -94,8 +94,11 @@ public sealed class AccountStore(Database database)
     public string? GetSecurityStamp(long accountId)
     {
         using var connection = database.Open();
-        var row = connection.Query("SELECT password_hash, enabled, is_admin FROM accounts WHERE id = $id",
-            r => $"{r.GetString(0)}|{r.GetInt64(1)}|{r.GetInt64(2)}", ("$id", accountId)).SingleOrDefault();
+        // Switching two-factor sign-in on or off also ends the other sessions; without it the stamp stays as it always was.
+        var row = connection.Query(
+            "SELECT password_hash, enabled, is_admin, (SELECT enabled_utc FROM totp WHERE account_id = accounts.id) FROM accounts WHERE id = $id",
+            r => $"{r.GetString(0)}|{r.GetInt64(1)}|{r.GetInt64(2)}" + (r.IsDBNull(3) ? "" : $"|totp:{r.GetValue(3)}"), ("$id", accountId))
+            .SingleOrDefault();
         return row is null
             ? null
             : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(row)))[..32];

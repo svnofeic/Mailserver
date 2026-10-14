@@ -287,6 +287,32 @@ public sealed class Database
         """
         ALTER TABLE external_accounts ADD COLUMN auth TEXT NOT NULL DEFAULT 'Password';
         """,
+        // Two-factor sign-in for the web interface: TOTP secret (encrypted), one-time recovery codes and devices that may
+        // skip the code for a while. Only hashes of recovery codes and device tokens are stored.
+        """
+        CREATE TABLE totp (
+            account_id  INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+            secret      TEXT NOT NULL,
+            enabled_utc TEXT NOT NULL,
+            last_step   INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE recovery_codes (
+            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            code_hash  TEXT NOT NULL,
+            PRIMARY KEY (account_id, code_hash)
+        ) WITHOUT ROWID;
+        CREATE TABLE trusted_devices (
+            id            INTEGER PRIMARY KEY,
+            account_id    INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            token_hash    TEXT NOT NULL UNIQUE,
+            stamp         TEXT NOT NULL,
+            device        TEXT NOT NULL,
+            created_utc   TEXT NOT NULL,
+            last_used_utc TEXT NOT NULL,
+            expires_utc   TEXT NOT NULL
+        );
+        CREATE INDEX ix_trusted_devices_account ON trusted_devices (account_id);
+        """,
     ];
 
     private readonly string _connectionString;

@@ -1,0 +1,61 @@
+@page
+@model Mailserver.Web.Pages.Account.SetupModel
+@{
+    ViewData["Title"] = "Mailprogramm einrichten";
+    var s = Model.Settings;
+    var submission = s.Smtp.SubmissionPort > 0 ? $"Port {s.Smtp.SubmissionPort} · STARTTLS" : $"Port {s.Smtp.SubmissionTlsPort} · SSL/TLS";
+}
+<h1>Mailprogramm einrichten</h1>
+
+<h2>@Icons.Get("smartphone") iPhone, iPad und Mac</h2>
+<div class="card">
+    <p style="margin-top: 0"><a class="button" href="?handler=Profile">Profil für @Model.CurrentAddress laden</a></p>
+    <ol class="small" style="padding-left: 20px; margin-bottom: 0">
+        <li>Diese Seite in <strong>Safari</strong> öffnen (nicht in der App vom Home-Bildschirm) und auf den Knopf tippen → „Zulassen“.</li>
+        <li><strong>Einstellungen</strong> öffnen → oben „Profil geladen“ (bzw. Allgemein → VPN und Geräteverwaltung) → <strong>Installieren</strong>.</li>
+        <li>Das Passwort des Postfachs eingeben – fertig. Das Postfach erscheint in der Mail-App.</li>
+    </ol>
+    <p class="small muted" style="margin-bottom: 0">Auf dem Mac: Datei doppelklicken, dann Systemeinstellungen → Allgemein → Geräteverwaltung (bzw. Profile).
+        Das Profil enthält kein Passwort; erneutes Installieren ersetzt es.</p>
+</div>
+
+<h2>@Icons.Get("server") Andere Programme</h2>
+<div class="card">
+    <p class="small muted" style="margin-top: 0">Outlook, Thunderbird und die meisten Android-Apps finden die Einstellungen nach Eingabe von Adresse und Passwort
+        meist selbst. Sonst diese Daten eintragen:</p>
+    <dl class="headers">
+        <dt>Posteingang</dt><dd><strong>@s.Hostname</strong> · IMAP · Port @s.Imap.TlsPort · SSL/TLS</dd>
+        <dt>Postausgang</dt><dd><strong>@s.Hostname</strong> · SMTP · @submission@(s.Smtp.SubmissionPort > 0 && s.Smtp.SubmissionTlsPort > 0 ? $" (oder {s.Smtp.SubmissionTlsPort} · SSL/TLS)" : "")</dd>
+        <dt>Benutzername</dt><dd><strong>@Model.CurrentAddress</strong> (für Posteingang und Postausgang)</dd>
+        <dt>Passwort</dt><dd>das Passwort dieses Postfachs</dd>
+    </dl>
+    <p class="small muted" style="margin-bottom: 0">Die Zwei-Faktor-Anmeldung gilt nur für diese Weboberfläche – Mailprogramme melden sich weiter mit dem Passwort an.</p>
+</div>
+
+@if (Model.IsAdmin)
+{
+    <h2>@Icons.Get("globe") Für Administratoren: automatische Erkennung</h2>
+    <div class="card small">
+        <p style="margin-top: 0"><strong>Outlook</strong> findet die Einstellungen über diesen DNS-Eintrag (je Domain):</p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Name</th><th>Typ</th><th>Wert</th></tr></thead>
+                <tbody>
+                    @foreach (var domain in Model.Domains)
+                    {
+                        <tr><td class="mono">_autodiscover._tcp.@domain</td><td>SRV</td><td class="mono">0 0 @s.Web.HttpsPort @s.Hostname</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p><strong>Thunderbird</strong> (und K-9/FairEmail) fragt <span class="mono">https://autoconfig.&lt;domain&gt;/mail/config-v1.1.xml</span> bzw.
+            <span class="mono">https://&lt;domain&gt;/.well-known/autoconfig/mail/config-v1.1.xml</span> – auf Port 443, den hier der IIS belegt.
+            Legen Sie dafür die Datei der Domain in deren Website (Plesk: Dateimanager, Ordner <span class="mono">.well-known/autoconfig/mail</span>):</p>
+        <p style="margin-bottom: 0">
+            @foreach (var domain in Model.Domains)
+            {
+                <a class="button secondary" href="/mail/config-v1.1.xml?emailaddress=info%40@domain" download="config-v1.1.xml">@domain</a>
+            }
+        </p>
+    </div>
+}

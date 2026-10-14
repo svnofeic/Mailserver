@@ -1,0 +1,115 @@
+@page
+@model Mailserver.Web.Pages.Account.SecurityModel
+@inject Microsoft.Extensions.Options.IOptions<Mailserver.Core.MailserverOptions> Settings
+@{ ViewData["Title"] = "Sicherheit"; }
+@section Head {
+    <style>
+        .qr { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+        .qr svg { width: 220px; height: 220px; border-radius: 12px; background: #fff; flex: none; }
+        .codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 16px; font-size: 1.05rem; }
+    </style>
+}
+<h1>Sicherheit</h1>
+
+@if (Model.RecoveryCodes is { } codes)
+{
+    <section class="panel">
+        <h2 style="margin-top: 0">Ihre Wiederherstellungscodes</h2>
+        <p class="small">Wenn das Handy weg ist, meldet jeder dieser Codes einmal anstelle des App-Codes an. <strong>Jetzt notieren oder
+            ausdrucken</strong> – sie werden nur dieses eine Mal angezeigt. Ältere Codes gelten nicht mehr.</p>
+        <div class="codes mono">
+            @foreach (var code in codes)
+            {
+                <span>@code</span>
+            }
+        </div>
+    </section>
+}
+
+<h2>Zwei-Faktor-Anmeldung</h2>
+<div class="card">
+    @if (Model.Enabled)
+    {
+        <p style="margin-top: 0"><span class="pill good">eingeschaltet</span> seit @Format.Time(Model.EnabledSince!.Value)</p>
+        <p class="small muted">Bei der Anmeldung in dieser Weboberfläche wird nach dem Passwort ein Code aus der Authenticator-App abgefragt.
+            Mailprogramme (IMAP/SMTP) und die Mail-App des iPhones melden sich weiter nur mit dem Passwort an.</p>
+        <p class="small">Noch <strong>@Model.CodesLeft</strong> von @Mailserver.Core.Accounts.TwoFactor.RecoveryCodeCount Wiederherstellungscodes übrig.</p>
+        <form method="post" class="row">
+            <label>Aktuelles Passwort<input name="current" type="password" autocomplete="current-password" required /></label>
+            <button type="submit" asp-page-handler="Codes" class="secondary">Neue Wiederherstellungscodes</button>
+            <button type="submit" asp-page-handler="Disable" class="danger">Ausschalten</button>
+        </form>
+    }
+    else if (Model.Secret is not null)
+    {
+        <ol class="small" style="padding-left: 20px; margin-top: 0">
+            <li>Authenticator-App öffnen – z. B. die <strong>Passwörter</strong>-App des iPhones, Google oder Microsoft Authenticator.</li>
+            <li>QR-Code scannen. Auf dem iPhone selbst: <a href="@Model.SetupUri">Hier tippen, um den Code einzurichten</a>, oder den Schlüssel von Hand eingeben.</li>
+            <li>Den 6-stelligen Code, den die App anzeigt, unten eingeben.</li>
+        </ol>
+        <div class="qr">
+            @Html.Raw(Model.QrSvg)
+            <div>
+                <div class="small muted">Schlüssel zum Abtippen</div>
+                <div class="mono" style="font-size: 1.05rem; margin-bottom: 12px">@Model.Secret</div>
+                @if (Model.SetupError is not null)
+                {
+                    <div class="notice bad" role="alert">@Model.SetupError</div>
+                }
+                <form method="post" asp-page-handler="Enable" class="row">
+                    <input type="hidden" name="secret" value="@Model.ProtectedSecret" />
+                    <label>Code aus der App<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus /></label>
+                    <button type="submit">Einschalten</button>
+                </form>
+            </div>
+        </div>
+    }
+    else
+    {
+        <p style="margin-top: 0"><span class="pill">aus</span></p>
+        <p class="small muted">Mit der Zwei-Faktor-Anmeldung reicht ein gestohlenes Passwort nicht mehr für die Weboberfläche: Zusätzlich ist ein
+            Code aus einer App auf Ihrem Handy nötig, der sich alle 30 Sekunden ändert. Damit Sie ihn nicht ständig eingeben müssen, können Sie
+            einem Gerät 30 Tage lang vertrauen.</p>
+        <a class="button" href="?handler=Setup">Einrichten</a>
+    }
+</div>
+
+@if (Model.Enabled)
+{
+    <h2>Vertrauenswürdige Geräte</h2>
+    <div class="card">
+        <p class="small muted" style="margin-top: 0">Diese Geräte brauchen bis zum angegebenen Datum keinen Code. Eine Passwortänderung beendet das
+            für alle.</p>
+        @if (Model.Devices.Count == 0)
+        {
+            <p class="small" style="margin-bottom: 0">Keine.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Gerät</th><th>Zuletzt</th><th>Gültig bis</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var device in Model.Devices)
+                        {
+                            <tr>
+                                <td>@device.Device</td>
+                                <td class="small">@Format.Time(device.LastUsed)</td>
+                                <td class="small">@Format.Time(device.Expires)</td>
+                                <td><form method="post" asp-page-handler="Forget" asp-route-id="@device.Id"><button type="submit" class="secondary">Entfernen</button></form></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <form method="post" asp-page-handler="ForgetAll" style="margin-top: 12px"><button type="submit" class="secondary">Alle entfernen</button></form>
+        }
+    </div>
+}
+
+<h2>Angemeldet bleiben</h2>
+<div class="card">
+    <p class="small muted" style="margin: 0">Wählen Sie bei der Anmeldung „Angemeldet bleiben“, gilt die Anmeldung 30 Tage und verlängert sich bei jeder
+        Nutzung – praktisch für die App auf dem Handy. Ohne Haken endet sie nach @((int)Settings.Value.Web.SessionTimeout.TotalMinutes) Minuten ohne Aktivität
+        bzw. beim Schließen des Browsers. Mit „Abmelden“ endet sie sofort.</p>
+</div>

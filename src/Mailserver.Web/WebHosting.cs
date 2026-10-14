@@ -103,6 +103,7 @@ public static class WebHosting
         {
             pages.Conventions.AuthorizeFolder("/");
             pages.Conventions.AllowAnonymousToPage("/Login");
+            pages.Conventions.AllowAnonymousToPage("/LoginCode");
             pages.Conventions.AllowAnonymousToPage("/Fehler");
             pages.Conventions.AllowAnonymousToFolder("/Recovery");
             pages.Conventions.AuthorizeFolder("/Admin", AdminPolicy);
@@ -194,6 +195,7 @@ public static class WebHosting
         }).AllowAnonymous();
 
         MapProgressiveWebApp(app);
+        ClientSetup.Map(app);
 
         // Light or dark design, remembered in a cookie (works without JavaScript).
         app.MapGet("/theme", (HttpContext context, string? mode, string? returnUrl) =>

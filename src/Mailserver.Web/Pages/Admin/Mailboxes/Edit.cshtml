@@ -86,6 +86,22 @@
     }
 </div>
 
+<h2>Zwei-Faktor-Anmeldung</h2>
+<div class="card">
+    @if (Model.TwoFactorSince is { } since)
+    {
+        <form method="post" asp-page-handler="ResetTwoFactor" asp-route-address="@Model.Account.Address" class="row">
+            <span><span class="pill good">eingeschaltet</span> seit @since.ToLocalTime().ToString("dd.MM.yyyy")</span>
+            <button type="submit" class="secondary">Zurücksetzen (Handy verloren)</button>
+            <span class="small muted">Danach reicht wieder das Passwort; der Benutzer kann sie unter „Sicherheit“ neu einrichten.</span>
+        </form>
+    }
+    else
+    {
+        <p class="small muted" style="margin: 0"><span class="pill">aus</span> Der Benutzer kann sie selbst unter „Sicherheit“ einschalten.</p>
+    }
+</div>
+
 <h2>Passwort setzen</h2>
 <form method="post" asp-page-handler="Password" asp-route-address="@Model.Account.Address" class="row card">
     <label>Neues Passwort (mind. @PasswordRules.MinLength Zeichen)<input name="password" type="password" autocomplete="new-password" required /></label>

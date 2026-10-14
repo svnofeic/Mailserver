@@ -10,8 +10,24 @@ namespace Mailserver.Web.Pages.Admin.Mailboxes;
 
 public sealed class EditModel(AccountStore accounts, MailboxStore mailboxes, RuleStore rules, MailboxSettingsStore settings,
     Mailserver.Core.Security.SendingLimiter sendingLimiter, Microsoft.Extensions.Options.IOptions<MailserverOptions> options,
-    Mailserver.Core.SpamLogging.SpamLog log, Microsoft.Extensions.Logging.ILogger<EditModel> logger, PasswordRecovery recovery) : MailPageModel
+    Mailserver.Core.SpamLogging.SpamLog log, Microsoft.Extensions.Logging.ILogger<EditModel> logger, PasswordRecovery recovery, TwoFactor twoFactor) : MailPageModel
 {
+    public DateTimeOffset? TwoFactorSince => twoFactor.EnabledSince(Account.Id);
+
+    /// <summary>For a lost phone: switches two-factor sign-in off, so the password alone signs in again.</summary>
+    public IActionResult OnPostResetTwoFactor(string address)
+    {
+        if (!Load(address))
+        {
+            return NotFound();
+        }
+
+        twoFactor.Disable(Account.Id);
+        logger.LogWarning("Administrator {Admin} switched off two-factor sign-in of {Account}", CurrentAccount.Address, Account.Address);
+        Message = $"Zwei-Faktor-Anmeldung für {Account.Address} ausgeschaltet.";
+        return Redirect($"/Admin/Mailboxes/Edit?address={Account.Address}");
+    }
+
     public RecoveryAddress? Recovery => recovery.Get(Account.Id);
 
     /// <summary>Sets (as confirmed – the administrator vouches for it) or removes the address for "Passwort vergessen".</summary>

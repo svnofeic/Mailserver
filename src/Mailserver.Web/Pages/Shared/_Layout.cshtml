@@ -52,6 +52,8 @@
             <a class="@Active("/Account/External")" href="/Account/External">@Icons.Get("at") Fremde Konten</a>
             <a class="@Active("/Account/Notifications")" href="/Account/Notifications">@Icons.Get("bell") Benachrichtigungen</a>
             <a class="@Active("/Account/Password")" href="/Account/Password">@Icons.Get("key") Passwort</a>
+            <a class="@Active("/Account/Security")" href="/Account/Security">@Icons.Get("lock") Sicherheit</a>
+            <a class="@Active("/Account/Setup")" href="/Account/Setup">@Icons.Get("smartphone") Einrichtung</a>
             @if (isAdmin)
             {
                 <details open="@(path.StartsWith("/Admin", StringComparison.OrdinalIgnoreCase))">

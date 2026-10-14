@@ -193,6 +193,13 @@ int Run(string[] a)
                 ? Ok(a[3] == "on" ? $"{address} darf jetzt den Admin-Bereich der Weboberfläche nutzen." : "Admin-Recht entzogen.")
                 : Fail("Postfach nicht gefunden.");
 
+        case ["user", "2fa", var address, "off"]:
+        {
+            var account = accounts.FindAccount(EmailAddress.Parse(address)) ?? throw new InvalidOperationException($"Postfach {address} gibt es nicht.");
+            new TwoFactor(database, accounts, new Mailserver.Core.Security.SecretProtector(paths), TimeProvider.System).Disable(account.Id);
+            return Ok($"Zwei-Faktor-Anmeldung für {account.Address} ausgeschaltet – Anmeldung wieder nur mit Passwort.");
+        }
+
         case ["user", "disable" or "enable", var address]:
             return accounts.SetEnabled(EmailAddress.Parse(address), a[1] == "enable") ? Ok("Gespeichert.") : Fail("Postfach nicht gefunden.");
 
@@ -402,6 +409,7 @@ int Run(string[] a)
                   user enable|disable|remove <adresse>
                   user unblock <adresse>                  Versand nach Überschreiten des Versandlimits wieder freigeben
                   user admin <adresse> on|off             Zugang zum Admin-Bereich der Weboberfläche
+                  user 2fa <adresse> off                  Zwei-Faktor-Anmeldung abschalten (Handy verloren)
                   user list [domain]
 
                   ip list                                 dauerhafte IP-Sperren und Ausnahmen
