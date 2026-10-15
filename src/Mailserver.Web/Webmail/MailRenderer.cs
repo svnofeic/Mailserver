@@ -60,14 +60,24 @@ public static partial class MailRenderer
         return Regex.Replace(WebUtility.HtmlDecode(html), @"\n{3,}", "\n\n", RegexOptions.None, TimeSpan.FromSeconds(2)).Trim();
     }
 
+    /// <summary>Images that may be embedded in a written mail (as data: URL in the editor, as cid: part when sent).</summary>
+    public static readonly IReadOnlySet<string> EmbeddableImageTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/png", "image/jpeg", "image/gif", "image/webp",
+    };
+
+    private static readonly Regex DataImage = new(@"^data:(image/[a-z+.-]+);base64,[A-Za-z0-9+/=\s]+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
     /// <summary>
     /// HTML written in the webmail editor (or quoted from another mail) before it is sent: formatting only, no scripts, styles
-    /// blocks, forms or embedded data: images.
+    /// blocks or forms. Pictures in the text are allowed as data: URLs of common image types, only in &lt;img&gt;.
     /// </summary>
     public static string SanitizeComposed(string html)
     {
         var sanitizer = new HtmlSanitizer();
         sanitizer.AllowedSchemes.Add("mailto");
+        sanitizer.AllowedSchemes.Add("data");
         foreach (var tag in new[] { "form", "input", "button", "textarea", "select", "option", "style" })
         {
             sanitizer.AllowedTags.Remove(tag);
@@ -85,12 +95,100 @@ public static partial class MailRenderer
         };
         sanitizer.FilterUrl += (_, e) =>
         {
-            if (e.OriginalUrl.StartsWith("cid:", StringComparison.OrdinalIgnoreCase) || e.OriginalUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            if (e.OriginalUrl.StartsWith("cid:", StringComparison.OrdinalIgnoreCase))
             {
                 e.SanitizedUrl = null;
             }
+            else if (e.OriginalUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                var match = DataImage.Match(e.OriginalUrl);
+                var isImage = e.Tag?.TagName.Equals("img", StringComparison.OrdinalIgnoreCase) == true;
+                e.SanitizedUrl = isImage && match.Success && EmbeddableImageTypes.Contains(match.Groups[1].Value) ? e.OriginalUrl : null;
+            }
         };
         return sanitizer.Sanitize(html);
+    }
+
+    /// <summary>
+    /// Replaces cid: references of <paramref name="html"/> with data: URLs of the message's embedded pictures, so they stay
+    /// visible when a draft is opened again or a mail is quoted. Pictures beyond <paramref name="maxBytes"/> in total are left out.
+    /// </summary>
+    public static string EmbedPictures(MimeMessage message, string html, long maxBytes = 8 * 1024 * 1024)
+    {
+        var parts = message.BodyParts.OfType<MimePart>()
+            .Where(p => !string.IsNullOrEmpty(p.ContentId) && EmbeddableImageTypes.Contains(p.ContentType.MimeType) && p.Content is not null)
+            .GroupBy(p => p.ContentId!.Trim('<', '>'), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        if (parts.Count == 0)
+        {
+            return html;
+        }
+
+        var used = 0L;
+        var urls = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        return Regex.Replace(html, @"cid:([^""'\s>)]+)", match =>
+        {
+            var id = Uri.UnescapeDataString(match.Groups[1].Value).Trim('<', '>');
+            if (!urls.TryGetValue(id, out var url))
+            {
+                url = null;
+                if (parts.TryGetValue(id, out var part))
+                {
+                    using var decoded = new MemoryStream();
+                    part.Content!.DecodeTo(decoded);
+                    if (used + decoded.Length <= maxBytes)
+                    {
+                        used += decoded.Length;
+                        url = $"data:{part.ContentType.MimeType.ToLowerInvariant()};base64,{Convert.ToBase64String(decoded.ToArray())}";
+                    }
+                }
+
+                urls[id] = url;
+            }
+
+            return url ?? match.Value;
+        }, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
+    /// For sending: the pictures written into the text (data: URLs) become parts of the message, referenced as cid: – the way
+    /// mail programs show them, and much smaller than base64 in the HTML.
+    /// </summary>
+    public static string ExtractPictures(string html, BodyBuilder builder, string hostname)
+    {
+        var known = new Dictionary<string, string>(StringComparer.Ordinal);
+        var number = 0;
+        return Regex.Replace(html, @"(<img\b[^>]*?\ssrc=)(""|')(data:(image/[a-z+.-]+);base64,([A-Za-z0-9+/=\s]+))\2", match =>
+        {
+            var type = match.Groups[4].Value.ToLowerInvariant();
+            if (!EmbeddableImageTypes.Contains(type))
+            {
+                return match.Value;
+            }
+
+            var data = match.Groups[5].Value;
+            if (!known.TryGetValue(data, out var id))
+            {
+                byte[] bytes;
+                try
+                {
+                    bytes = Convert.FromBase64String(data);
+                }
+                catch (FormatException)
+                {
+                    return match.Value;
+                }
+
+                number++;
+                var extension = type.Split('/')[1].Replace("jpeg", "jpg");
+                var part = builder.LinkedResources.Add($"bild{number}.{extension}", bytes, ContentType.Parse(type));
+                id = MimeKit.Utils.MimeUtils.GenerateMessageId(hostname);
+                part.ContentId = id;
+                known[data] = id;
+            }
+
+            return $"{match.Groups[1].Value}{match.Groups[2].Value}cid:{id}{match.Groups[2].Value}";
+        }, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(10));
     }
 
     /// <summary>Plain text for an HTML fragment (used for the text part of HTML mails).</summary>

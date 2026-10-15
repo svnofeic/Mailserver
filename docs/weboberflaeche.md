@@ -342,6 +342,10 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
 - **Empfänger-Vorschläge:** Beim Tippen in An/Cc/Bcc schlägt die Weboberfläche passende Namen und Adressen aus dem
   **Adressbuch** vor (Pfeiltasten + Enter oder antippen). Dort landet automatisch jede Adresse, an die geschrieben wird –
   aus der Weboberfläche und aus Mailprogrammen; beim ersten Mal werden die Empfänger aus „Gesendet“ übernommen.
+- **Bilder im Text:** Knopf „🖼 Bild“ im Editor, Bild einfügen (Strg+V, z. B. ein Screenshot) oder auf den Text ziehen.
+  Große Fotos werden dabei auf 1600 Pixel verkleinert (höchstens 5 MB je Bild). Beim Senden werden sie als eingebettete
+  Bilder mitgeschickt (wie bei Outlook oder Apple Mail); in Entwürfen, Antworten und Weiterleitungen bleiben sie
+  sichtbar. Dateien, die auf die Felder darunter gezogen werden, werden wie bisher Anhänge.
 - **Signatur:** Unter *Signatur* je Absenderadresse ein Text. Er steht beim Schreiben unter dem Text, bei Antworten und
   Weiterleitungen über dem Zitat (lässt sich je Adresse abschalten). Wählt man beim Schreiben einen anderen Absender,
   tauscht der Editor die Signatur aus. Das übliche Trennzeichen „-- “ wird automatisch davorgesetzt.
@@ -352,4 +356,3 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
 
 ## Grenzen
 
-- Bilder lassen sich nicht in den Text einfügen, nur als Anhang senden (eingefügte Bilder werden beim Senden entfernt).

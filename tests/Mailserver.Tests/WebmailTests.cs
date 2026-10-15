@@ -39,6 +39,30 @@ public class MailRendererTests
     }
 
     [Fact]
+    public void Written_mails_keep_pictures_but_no_other_data_urls()
+    {
+        const string png = "data:image/png;base64,iVBORw0KGgo=";
+        var html = MailRenderer.SanitizeComposed($"<p>Hallo</p><img src=\"{png}\"><img src=\"data:image/svg+xml;base64,PHN2Zz4=\">" +
+                                                 "<a href=\"data:text/html;base64,PHNjcmlwdD4=\">x</a><img src=\"cid:a@b\">");
+        Assert.Contains(png, html);
+        Assert.DoesNotContain("svg", html);
+        Assert.DoesNotContain("text/html", html);
+        Assert.DoesNotContain("cid:", html);
+
+        var builder = new BodyBuilder();
+        var extracted = MailRenderer.ExtractPictures($"<img src=\"{png}\"><img alt=\"x\" src=\"{png}\">", builder, "mail.example.test");
+        var part = Assert.Single(builder.LinkedResources.OfType<MimePart>());
+        Assert.Equal("image/png", part.ContentType.MimeType);
+        Assert.DoesNotContain("data:", extracted);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(extracted, "cid:" + System.Text.RegularExpressions.Regex.Escape(part.ContentId)).Count);
+
+        // And back: an opened draft shows the picture again.
+        var message = new MimeMessage { Body = new BodyBuilder { HtmlBody = extracted, LinkedResources = { part } }.ToMessageBody() };
+        Assert.Contains(png, MailRenderer.EmbedPictures(message, extracted));
+        Assert.DoesNotContain(png, MailRenderer.EmbedPictures(message, extracted, maxBytes: 2));
+    }
+
+    [Fact]
     public void Keeps_formatting_links_and_styles()
     {
         var rendered = MailRenderer.Render(Html("<style>p{color:red}</style><p style=\"font-weight:bold\"><a href=\"https://shop.test/a\">Shop</a></p>"));
@@ -646,6 +670,29 @@ public sealed class WebmailEditorAndFolderTests : IAsyncLifetime
         Assert.Contains("<i>kursiv</i>", html);
         Assert.DoesNotContain("<style", html);
         Assert.Contains("schrieb", html);
+    }
+
+    [Fact]
+    public async Task Pictures_in_the_text_are_sent_embedded_and_kept_in_drafts()
+    {
+        var png = Convert.ToBase64String(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4 });
+        var html = $"<p>Hier das Foto:</p><p><img src=\"data:image/png;base64,{png}\" style=\"max-width: 100%\"></p>";
+        await _web.PostMultipartAsync("/Mail/Compose", "/Mail/Compose?handler=Draft",
+            [("Form.From", "alice@example.test"), ("Form.To", "bob@example.test"), ("Form.Subject", "Foto"), ("Form.Body", "Hier das Foto:"),
+             ("Form.BodyHtml", html)]);
+        Assert.Contains("Entwurf gespeichert", _web.LastPage);
+        // The opened draft shows the picture again (as data: URL in the editor).
+        Assert.Contains($"data:image/png;base64,{png}", System.Net.WebUtility.HtmlDecode(_web.LastPage));
+
+        await _web.PostMultipartAsync("/Mail/Compose", "/Mail/Compose?handler=Send",
+            [("Form.From", "alice@example.test"), ("Form.To", "bob@example.test"), ("Form.Subject", "Foto"), ("Form.Body", "Hier das Foto:"),
+             ("Form.BodyHtml", html)]);
+        var sent = MimeMessage.Load(new MemoryStream(Encoding.UTF8.GetBytes(await _server.ReadAsync(_server.Inbox("bob").Single()))));
+        Assert.DoesNotContain("data:image", sent.HtmlBody);
+        var picture = Assert.Single(sent.BodyParts.OfType<MimePart>(), p => p.ContentType.MimeType == "image/png");
+        Assert.Contains($"cid:{picture.ContentId}", sent.HtmlBody);
+        Assert.NotNull(sent.Body as Multipart);
+        Assert.Contains(sent.BodyParts, p => p.ContentType.IsMimeType("text", "plain"));
     }
 
     [Fact]

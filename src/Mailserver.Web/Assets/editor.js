@@ -70,6 +70,7 @@
         if (url && /^(https?:\/\/|mailto:)/i.test(url.trim())) { run('createLink', url.trim()); }
     });
     button('Link entfernen', 'Link entfernen', function () { run('unlink'); });
+    button('🖼 Bild', 'Bild in den Text einfügen', function () { saveSelection(); picturePicker.click(); });
 
     var colors = document.createElement('select');
     colors.title = 'Textfarbe';
@@ -94,6 +95,104 @@
     button('Formatierung entfernen', 'Formatierung entfernen', function () { run('removeFormat'); run('formatBlock', '<p>'); });
     button('↶', 'Rückgängig (Strg+Z)', function () { run('undo'); });
     button('↷', 'Wiederholen (Strg+Y)', function () { run('redo'); });
+
+    // Pictures in the text: chosen with the button, pasted or dragged in. Large photos are scaled down (longest side
+    // 1600 px) so the mail stays small; the server turns them into embedded parts when sending.
+    var maxSide = 1600;
+    var maxBytes = 5 * 1024 * 1024;
+    var savedRange = null;
+    function saveSelection() {
+        var selection = window.getSelection();
+        if (selection.rangeCount > 0 && editor.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+            savedRange = selection.getRangeAt(0).cloneRange();
+        }
+    }
+    function restoreSelection() {
+        editor.focus();
+        if (savedRange) {
+            var selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(savedRange);
+            savedRange = null;
+        }
+    }
+    function insertPicture(url) {
+        restoreSelection();
+        document.execCommand('insertHTML', false, '<img src="' + url + '" alt="" style="max-width: 100%; height: auto;">');
+    }
+    function readPicture(file) {
+        if (!/^image\/(png|jpeg|gif|webp)$/i.test(file.type)) {
+            window.alert('„' + file.name + '“ ist kein Bild im Format JPEG, PNG, GIF oder WebP. Andere Dateien bitte als Anhang hinzufügen.');
+            return;
+        }
+        var reader = new FileReader();
+        reader.onload = function () {
+            var url = reader.result;
+            // GIFs keep their animation; everything else is scaled down if it is big.
+            if (file.type === 'image/gif') { finish(url); return; }
+            var image = new Image();
+            image.onload = function () {
+                var scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+                if (scale === 1 && file.size <= 600 * 1024) { finish(url); return; }
+                var canvas = document.createElement('canvas');
+                canvas.width = Math.round(image.width * scale);
+                canvas.height = Math.round(image.height * scale);
+                canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+                // PNG stays PNG (screenshots, transparency) if that is not much bigger; photos become JPEG.
+                var png = file.type === 'image/png' ? canvas.toDataURL('image/png') : null;
+                var jpeg = canvas.toDataURL('image/jpeg', 0.85);
+                finish(png && png.length < jpeg.length * 1.5 ? png : jpeg);
+            };
+            image.onerror = function () { finish(url); };
+            image.src = url;
+        };
+        function finish(url) {
+            if (url.length * 0.75 > maxBytes) {
+                window.alert('„' + file.name + '“ ist zu groß für den Text (höchstens 5 MB). Bitte als Anhang hinzufügen.');
+                return;
+            }
+            insertPicture(url);
+        }
+        reader.readAsDataURL(file);
+    }
+    var picturePicker = document.createElement('input');
+    picturePicker.type = 'file';
+    picturePicker.accept = 'image/png,image/jpeg,image/gif,image/webp';
+    picturePicker.multiple = true;
+    picturePicker.hidden = true;
+    picturePicker.addEventListener('change', function () {
+        Array.prototype.forEach.call(picturePicker.files, readPicture);
+        picturePicker.value = '';
+    });
+    form.appendChild(picturePicker);
+    editor.addEventListener('paste', function (event) {
+        var items = event.clipboardData ? Array.prototype.slice.call(event.clipboardData.items || []) : [];
+        var pictures = items.filter(function (item) { return item.kind === 'file' && /^image\//.test(item.type); });
+        if (pictures.length > 0) {
+            event.preventDefault();
+            saveSelection();
+            pictures.forEach(function (item) { var file = item.getAsFile(); if (file) { readPicture(file); } });
+        }
+    });
+    editor.addEventListener('dragover', function (event) {
+        if (event.dataTransfer && Array.prototype.indexOf.call(event.dataTransfer.types, 'Files') >= 0) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    });
+    editor.addEventListener('drop', function (event) {
+        var files = event.dataTransfer ? Array.prototype.slice.call(event.dataTransfer.files || []) : [];
+        var pictures = files.filter(function (file) { return /^image\/(png|jpeg|gif|webp)$/i.test(file.type); });
+        if (pictures.length === 0) { return; }
+        // Pictures dropped onto the text go into the text; other files (and drops beside it) become attachments.
+        event.preventDefault();
+        event.stopPropagation();
+        if (document.caretRangeFromPoint) {
+            var range = document.caretRangeFromPoint(event.clientX, event.clientY);
+            if (range) { savedRange = range; }
+        }
+        pictures.forEach(readPicture);
+    });
 
     textarea.style.display = 'none';
     textarea.parentNode.insertBefore(toolbar, textarea);

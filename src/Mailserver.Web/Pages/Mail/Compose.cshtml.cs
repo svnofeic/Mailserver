@@ -268,7 +268,7 @@ public sealed class ComposeModel(
                 Form.Bcc = original.Bcc.ToString();
                 Form.Subject = subject;
                 Form.Body = original.TextBody ?? MailRenderer.PlainText(original);
-                Form.BodyHtml = original.HtmlBody is { } draftHtml ? MailRenderer.SanitizeComposed(BodyContent(draftHtml)) : null;
+                Form.BodyHtml = original.HtmlBody is { } draftHtml ? MailRenderer.SanitizeComposed(MailRenderer.EmbedPictures(original, BodyContent(draftHtml))) : null;
                 Form.InReplyTo = original.InReplyTo;
                 Form.References = string.Join(' ', original.References);
                 break;
@@ -310,8 +310,9 @@ public sealed class ComposeModel(
     /// <summary>The original message as a quoted block: its formatted HTML if it has one, otherwise its text.</summary>
     private static string Quote(MimeMessage original)
     {
+        // Pictures of the original stay in the quote (up to a few MB, so a newsletter does not blow up the reply).
         var content = original.HtmlBody is { } html
-            ? MailRenderer.SanitizeComposed(BodyContent(html))
+            ? MailRenderer.SanitizeComposed(MailRenderer.EmbedPictures(original, BodyContent(html), 4 * 1024 * 1024))
             : Encode(original.TextBody ?? "").Replace("\r\n", "\n").Replace("\n", "<br>");
         return $"<blockquote style=\"margin:0 0 0 .8ex;border-left:2px solid #ccc;padding-left:1ex\">{content}</blockquote>";
     }

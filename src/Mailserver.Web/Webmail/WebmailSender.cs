@@ -195,7 +195,8 @@ public sealed class WebmailSender(
         {
             // Formatted mail: HTML plus a plain text alternative for clients that prefer text.
             builder.HtmlBody = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head>" +
-                               "<body style=\"font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5;\">" + html + "</body></html>";
+                               "<body style=\"font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5;\">" +
+                               MailRenderer.ExtractPictures(html, builder, options.Value.Hostname) + "</body></html>";
         }
         foreach (var attachment in draft.Attachments)
         {
