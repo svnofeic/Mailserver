@@ -16,6 +16,22 @@ public sealed class IndexModel(DmarcReports reports, AccountStore accounts, Mail
     private static readonly ConcurrentDictionary<string, string?> HostNames = new();
 
     public IReadOnlyList<DmarcDomainSummary> Domains { get; private set; } = [];
+    public IReadOnlyList<TlsDomainSummary> Tls { get; private set; } = [];
+
+    /// <summary>German explanation of a TLS-RPT result type (RFC 8460 section 4.3).</summary>
+    public static string TlsResult(string type) => type switch
+    {
+        "starttls-not-supported" => "STARTTLS nicht angeboten",
+        "certificate-host-mismatch" => "Zertifikat passt nicht zum Namen",
+        "certificate-expired" => "Zertifikat abgelaufen",
+        "certificate-not-trusted" => "Zertifikat nicht vertrauenswürdig",
+        "validation-failure" => "Prüfung fehlgeschlagen",
+        "sts-policy-fetch-error" => "MTA-STS-Datei nicht abrufbar",
+        "sts-policy-invalid" => "MTA-STS-Datei ungültig",
+        "sts-webpki-invalid" => "Zertifikat von mta-sts.<domain> ungültig",
+        "tlsa-invalid" or "dnssec-invalid" or "dane-required" => "DANE/DNSSEC-Fehler",
+        _ => type,
+    };
     public IReadOnlyList<string> DomainsWithoutReports { get; private set; } = [];
     public IReadOnlySet<string> ServerIps { get; private set; } = new HashSet<string>();
     public IReadOnlyDictionary<string, string?> Names { get; private set; } = new Dictionary<string, string?>();
@@ -25,6 +41,7 @@ public sealed class IndexModel(DmarcReports reports, AccountStore accounts, Mail
     {
         Days = Days is 7 or 30 or 90 or 365 ? Days : 30;
         Domains = reports.Summary(DateTimeOffset.UtcNow.AddDays(-Days));
+        Tls = reports.TlsSummary(DateTimeOffset.UtcNow.AddDays(-Days));
         DomainsWithoutReports = accounts.ListDomains().Select(d => d.Name)
             .Where(d => !Domains.Any(s => s.Domain.Equals(d, StringComparison.OrdinalIgnoreCase))).ToList();
         try

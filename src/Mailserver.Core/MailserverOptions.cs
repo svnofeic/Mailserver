@@ -36,6 +36,8 @@ public sealed class MailserverOptions
     public ExternalMailOptions External { get; set; } = new();
 
     public ReportOptions Reports { get; set; } = new();
+
+    public MtaStsOptions MtaSts { get; set; } = new();
 }
 
 /// <summary>Addresses at other providers (Fremde Konten).</summary>
@@ -105,6 +107,16 @@ public sealed record BackupOptions
     public string? Username { get; set; }
 
     public string? Password { get; set; }
+}
+
+/// <summary>MTA-STS (RFC 8461): the policy this server publishes for its domains.</summary>
+public sealed class MtaStsOptions
+{
+    /// <summary>"testing" (other servers only report problems) or "enforce" (they deliver only over verified TLS); "none" withdraws it.</summary>
+    public string Mode { get; set; } = "testing";
+
+    /// <summary>How long other servers may remember the policy.</summary>
+    public int MaxAgeDays { get; set; } = 7;
 }
 
 /// <summary>Weekly status mail to the administrators and the status address for outside monitoring.</summary>

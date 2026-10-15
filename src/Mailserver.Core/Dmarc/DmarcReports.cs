@@ -25,6 +25,10 @@ public sealed record DmarcSource(string Ip, int Messages, int Passed, string Hea
     public int Failed => Messages - Passed;
 }
 
+/// <summary>TLS report figures of a domain (RFC 8460): sessions other servers opened to us, and the reasons for failures.</summary>
+public sealed record TlsDomainSummary(string Domain, int Reports, long Successful, long Failed, IReadOnlyList<string> PolicyTypes,
+    IReadOnlyList<(string Type, long Count, string? Mx)> Failures, IReadOnlyList<string> Reporters, DateTimeOffset? LastReport);
+
 public sealed record DmarcDomainSummary(string Domain, int Reports, int Messages, int Passed, string? Policy, DateTimeOffset? LastReport,
     IReadOnlyList<DmarcSource> Sources)
 {
@@ -64,6 +68,22 @@ public sealed class DmarcReports(Database database, ILogger<DmarcReports> logger
         var added = 0;
         foreach (var part in message.BodyParts.OfType<MimePart>())
         {
+            if (TlsJson(part) is { } json)
+            {
+                try
+                {
+                    var tls = ParseTls(json);
+                    found |= tls.Count > 0;
+                    added += tls.Count(StoreTls);
+                }
+                catch (Exception ex) when (ex is System.Text.Json.JsonException or FormatException or InvalidOperationException or KeyNotFoundException)
+                {
+                    logger.LogDebug(ex, "Attachment {Name} of {Subject} is no readable TLS report", part.FileName, message.Subject);
+                }
+
+                continue;
+            }
+
             if (Xml(part) is not { } xml)
             {
                 continue;
@@ -84,6 +104,141 @@ public sealed class DmarcReports(Database database, ILogger<DmarcReports> logger
         }
 
         return (found, added);
+    }
+
+    /// <summary>The JSON of a TLS report attachment (application/tlsrpt+gzip or +json, .json or .json.gz), or null.</summary>
+    private static string? TlsJson(MimePart part)
+    {
+        var name = (part.FileName ?? "").ToLowerInvariant();
+        var type = part.ContentType.MimeType.ToLowerInvariant();
+        var gzip = type == "application/tlsrpt+gzip" || name.EndsWith(".json.gz");
+        if (!gzip && type != "application/tlsrpt+json" && !name.EndsWith(".json") || part.Content is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var decoded = new MemoryStream();
+            part.Content.DecodeTo(decoded);
+            decoded.Position = 0;
+            using Stream source = gzip ? new GZipStream(decoded, CompressionMode.Decompress) : decoded;
+            using var limited = new MemoryStream();
+            var buffer = new byte[81920];
+            int read;
+            while ((read = source.Read(buffer)) > 0)
+            {
+                if (limited.Length + read > MaxXmlBytes)
+                {
+                    return null;
+                }
+
+                limited.Write(buffer, 0, read);
+            }
+
+            return System.Text.Encoding.UTF8.GetString(limited.ToArray());
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            return null;
+        }
+    }
+
+    public sealed record TlsReport(string Organization, string ReportId, string Domain, string PolicyType, DateTimeOffset Begin, DateTimeOffset End,
+        long Successful, long Failed, IReadOnlyList<(string Type, string? SendingIp, string? ReceivingMx, long Count)> Failures);
+
+    /// <summary>One report per policy domain in the JSON (RFC 8460 section 4.4).</summary>
+    public static IReadOnlyList<TlsReport> ParseTls(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json, new System.Text.Json.JsonDocumentOptions { MaxDepth = 16 });
+        var root = document.RootElement;
+        string Text(System.Text.Json.JsonElement element, string name) =>
+            element.TryGetProperty(name, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String ? value.GetString() ?? "" : "";
+        long Number(System.Text.Json.JsonElement element, string name) =>
+            element.TryGetProperty(name, out var value) && value.TryGetInt64(out var number) ? number : 0;
+
+        var organization = Text(root, "organization-name");
+        var reportId = Text(root, "report-id");
+        var range = root.GetProperty("date-range");
+        var begin = DateTimeOffset.Parse(Text(range, "start-datetime"), System.Globalization.CultureInfo.InvariantCulture);
+        var end = DateTimeOffset.Parse(Text(range, "end-datetime"), System.Globalization.CultureInfo.InvariantCulture);
+        var reports = new List<TlsReport>();
+        foreach (var entry in root.GetProperty("policies").EnumerateArray())
+        {
+            var policy = entry.GetProperty("policy");
+            var summary = entry.GetProperty("summary");
+            var failures = new List<(string, string?, string?, long)>();
+            if (entry.TryGetProperty("failure-details", out var details) && details.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var detail in details.EnumerateArray())
+                {
+                    failures.Add((Text(detail, "result-type"), Text(detail, "sending-mta-ip") is { Length: > 0 } ip ? ip : null,
+                        Text(detail, "receiving-mx-hostname") is { Length: > 0 } mx ? mx.TrimEnd('.') : null, Number(detail, "failed-session-count")));
+                }
+            }
+
+            var domain = Text(policy, "policy-domain").ToLowerInvariant();
+            if (domain.Length > 0)
+            {
+                reports.Add(new TlsReport(organization, reportId, domain, Text(policy, "policy-type"), begin, end,
+                    Number(summary, "total-successful-session-count"), Number(summary, "total-failure-session-count"), failures));
+            }
+        }
+
+        return reports;
+    }
+
+    public bool StoreTls(TlsReport report)
+    {
+        using var connection = database.Open();
+        using var transaction = connection.BeginTransaction();
+        if (connection.Execute(
+                """
+                INSERT OR IGNORE INTO tls_reports (org, report_id, domain, policy_type, begin_utc, end_utc, successful, failed, received_utc)
+                VALUES ($org, $id, $domain, $type, $begin, $end, $ok, $failed, $now)
+                """,
+                transaction, ("$org", report.Organization), ("$id", report.ReportId), ("$domain", report.Domain), ("$type", report.PolicyType),
+                ("$begin", report.Begin.ToDbTime()), ("$end", report.End.ToDbTime()), ("$ok", report.Successful), ("$failed", report.Failed),
+                ("$now", DateTimeOffset.UtcNow.ToDbTime())) == 0)
+        {
+            return false;
+        }
+
+        var id = connection.Scalar("SELECT last_insert_rowid()", transaction);
+        foreach (var (type, ip, mx, count) in report.Failures)
+        {
+            connection.Execute("INSERT INTO tls_failures (report, result_type, sending_ip, receiving_mx, count) VALUES ($report, $type, $ip, $mx, $count)",
+                transaction, ("$report", id), ("$type", type), ("$ip", ip), ("$mx", mx), ("$count", count));
+        }
+
+        transaction.Commit();
+        logger.LogInformation("TLS report {Id} from {Org} for {Domain}: {Ok} ok, {Failed} failed", report.ReportId, report.Organization,
+            report.Domain, report.Successful, report.Failed);
+        return true;
+    }
+
+    public IReadOnlyList<TlsDomainSummary> TlsSummary(DateTimeOffset since)
+    {
+        using var connection = database.Open();
+        var reports = connection.Query(
+            "SELECT id, org, domain, policy_type, successful, failed, end_utc FROM tls_reports WHERE end_utc >= $since ORDER BY end_utc",
+            r => (Id: r.GetInt64(0), Org: r.GetString(1), Domain: r.GetString(2), Type: r.GetString(3), Ok: r.GetInt64(4), Failed: r.GetInt64(5),
+                End: r.GetDbTime(6)), ("$since", since.ToDbTime()));
+        var failures = connection.Query(
+            """
+            SELECT f.report, f.result_type, f.receiving_mx, f.count FROM tls_failures f JOIN tls_reports r ON r.id = f.report
+            WHERE r.end_utc >= $since
+            """, r => (Report: r.GetInt64(0), Type: r.GetString(1), Mx: r.IsDBNull(2) ? null : r.GetString(2), Count: r.GetInt64(3)),
+            ("$since", since.ToDbTime()));
+        return reports.GroupBy(r => r.Domain).OrderBy(g => g.Key).Select(domain =>
+        {
+            var ids = domain.Select(r => r.Id).ToHashSet();
+            return new TlsDomainSummary(domain.Key, domain.Count(), domain.Sum(r => r.Ok), domain.Sum(r => r.Failed),
+                domain.Select(r => r.Type).Distinct().Order().ToList(),
+                failures.Where(f => ids.Contains(f.Report)).GroupBy(f => f.Type)
+                    .Select(g => (g.Key, g.Sum(f => f.Count), g.Select(f => f.Mx).FirstOrDefault(m => m is not null))).OrderByDescending(f => f.Item2).ToList(),
+                domain.Select(r => r.Org).Distinct().Order().ToList(), domain.Last().End);
+        }).ToList();
     }
 
     /// <summary>The XML of a report attachment (plain, .gz or .zip), or null.</summary>
@@ -269,6 +424,7 @@ public sealed class DmarcReports(Database database, ILogger<DmarcReports> logger
     public int Cleanup(DateTimeOffset before)
     {
         using var connection = database.Open();
+        connection.Execute("DELETE FROM tls_reports WHERE end_utc < $before", ("$before", before.ToDbTime()));
         return connection.Execute("DELETE FROM dmarc_reports WHERE end_utc < $before", ("$before", before.ToDbTime()));
     }
 }

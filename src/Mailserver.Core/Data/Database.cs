@@ -388,6 +388,31 @@ public sealed class Database
             value TEXT NOT NULL
         ) WITHOUT ROWID;
         """,
+        // TLS reports (RFC 8460): could the other servers deliver to us over TLS, and if not, why.
+        """
+        CREATE TABLE tls_reports (
+            id           INTEGER PRIMARY KEY,
+            org          TEXT NOT NULL,
+            report_id    TEXT NOT NULL,
+            domain       TEXT NOT NULL COLLATE NOCASE,
+            policy_type  TEXT NOT NULL,
+            begin_utc    TEXT NOT NULL,
+            end_utc      TEXT NOT NULL,
+            successful   INTEGER NOT NULL,
+            failed       INTEGER NOT NULL,
+            received_utc TEXT NOT NULL,
+            UNIQUE (org, report_id, domain)
+        );
+        CREATE INDEX ix_tls_reports_end ON tls_reports (end_utc);
+        CREATE TABLE tls_failures (
+            report       INTEGER NOT NULL REFERENCES tls_reports(id) ON DELETE CASCADE,
+            result_type  TEXT NOT NULL,
+            sending_ip   TEXT,
+            receiving_mx TEXT,
+            count        INTEGER NOT NULL
+        );
+        CREATE INDEX ix_tls_failures_report ON tls_failures (report);
+        """,
     ];
 
     private readonly string _connectionString;

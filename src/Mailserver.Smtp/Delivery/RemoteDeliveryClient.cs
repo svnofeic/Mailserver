@@ -6,6 +6,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using Mailserver.Core;
 using Mailserver.Core.Queue;
+using Mailserver.Core.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
@@ -24,7 +25,8 @@ public sealed record RecipientResult(QueueEntry Entry, DeliveryOutcome Outcome, 
 /// <summary>
 /// Delivers one batch (one message, one destination domain) via MX lookup or the configured smart host.
 /// </summary>
-public sealed class RemoteDeliveryClient(IOptions<MailserverOptions> options, ILookupClient dns, ILogger<RemoteDeliveryClient> logger)
+public sealed class RemoteDeliveryClient(IOptions<MailserverOptions> options, ILookupClient dns, ILogger<RemoteDeliveryClient> logger,
+    MtaStsPolicies? mtaSts = null)
 {
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(5);
 
@@ -32,6 +34,7 @@ public sealed class RemoteDeliveryClient(IOptions<MailserverOptions> options, IL
     {
         var smartHost = options.Value.Delivery.SmartHost;
         IReadOnlyList<string> hosts;
+        MtaStsPolicy? policy = null;
         if (smartHost is { Host.Length: > 0 })
         {
             hosts = [smartHost.Host];
@@ -45,6 +48,24 @@ public sealed class RemoteDeliveryClient(IOptions<MailserverOptions> options, IL
             }
 
             hosts = resolution.Hosts;
+            policy = mtaSts is null ? null : await mtaSts.GetAsync(batch.Domain, cancellationToken);
+            if (policy is { Enforce: true })
+            {
+                // Only the MX hosts the policy names; a forged MX record pointing elsewhere is ignored.
+                var allowed = hosts.Where(policy.Allows).ToList();
+                if (allowed.Count == 0)
+                {
+                    return AllFailed(batch, DeliveryOutcome.TemporaryFailure,
+                        $"MTA-STS: no MX host of {batch.Domain} matches its policy ({string.Join(", ", policy.Mx)})");
+                }
+
+                hosts = allowed;
+            }
+            else if (policy is not null && hosts.Any(h => !policy.Allows(h)))
+            {
+                logger.LogInformation("MTA-STS (testing) of {Domain}: MX {Hosts} not all in the policy ({Mx})", batch.Domain,
+                    string.Join(", ", hosts), string.Join(", ", policy.Mx));
+            }
         }
 
         var lastError = "No mail host reachable";
@@ -52,7 +73,7 @@ public sealed class RemoteDeliveryClient(IOptions<MailserverOptions> options, IL
         {
             try
             {
-                return await DeliverToHostAsync(host, batch, message, cancellationToken);
+                return await DeliverToHostAsync(host, batch, message, policy?.Enforce == true, cancellationToken);
             }
             catch (SmtpCommandException ex) when ((int)ex.StatusCode >= 500)
             {
@@ -71,7 +92,7 @@ public sealed class RemoteDeliveryClient(IOptions<MailserverOptions> options, IL
     }
 
     private async Task<IReadOnlyList<RecipientResult>> DeliverToHostAsync(string host, DeliveryBatch batch, MimeMessage message,
-        CancellationToken cancellationToken)
+        bool requireValidTls, CancellationToken cancellationToken)
     {
         var settings = options.Value;
         var smartHost = settings.Delivery.SmartHost is { Host.Length: > 0 } configured ? configured : null;
@@ -82,12 +103,17 @@ public sealed class RemoteDeliveryClient(IOptions<MailserverOptions> options, IL
         if (smartHost is null)
         {
             // MX servers commonly present certificates that do not match their name; opportunistic TLS still protects against
-            // passive eavesdropping, which is the state of the art for server-to-server SMTP without DANE/MTA-STS.
-            client.ServerCertificateValidationCallback = (_, _, _, _) => true;
+            // passive eavesdropping, which is the state of the art for server-to-server SMTP without DANE/MTA-STS. A domain
+            // with an enforced MTA-STS policy gets TLS with a valid certificate for the MX name, or nothing.
+            client.ServerCertificateValidationCallback = requireValidTls
+                ? (_, _, _, errors) => errors == System.Net.Security.SslPolicyErrors.None
+                : (_, _, _, _) => true;
         }
 
         var port = smartHost?.Port ?? settings.Delivery.RemotePort;
-        var security = smartHost is null ? SecureSocketOptions.StartTlsWhenAvailable : ParseSecurity(smartHost.Security);
+        var security = smartHost is not null ? ParseSecurity(smartHost.Security)
+            : requireValidTls ? SecureSocketOptions.StartTls
+            : SecureSocketOptions.StartTlsWhenAvailable;
         await client.ConnectAsync(host, port, security, cancellationToken);
 
         if (smartHost?.Username is { Length: > 0 } username)

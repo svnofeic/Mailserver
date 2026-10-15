@@ -1,8 +1,8 @@
 @page
 @model Mailserver.Web.Pages.Admin.Dmarc.IndexModel
-@{ ViewData["Title"] = "DMARC-Berichte"; }
+@{ ViewData["Title"] = "DMARC- und TLS-Berichte"; }
 <div class="toolbar">
-    <h1 class="grow" style="margin: 0">DMARC-Berichte</h1>
+    <h1 class="grow" style="margin: 0">DMARC- und TLS-Berichte</h1>
     <form method="get" class="row" style="align-items: center">
         <select name="days" aria-label="Zeitraum">
             @foreach (var (days, label) in new[] { (7, "7 Tage"), (30, "30 Tage"), (90, "90 Tage"), (365, "1 Jahr") })
@@ -70,6 +70,38 @@
 @if (Model.DomainsWithoutReports.Count > 0 && Model.Domains.Count > 0)
 {
     <p class="small muted">Ohne Berichte im Zeitraum: @string.Join(", ", Model.DomainsWithoutReports)</p>
+}
+
+<h2>@Icons.Get("lock") TLS-Berichte (MTA-STS)</h2>
+@if (Model.Tls.Count == 0)
+{
+    <div class="card small muted">Keine TLS-Berichte im Zeitraum. Sie kommen, sobald der DNS-Eintrag <span class="mono">_smtp._tls.&lt;domain&gt;</span> gesetzt ist
+        (Verwaltung → Domains → Domain → MTA-STS) – von Google und Microsoft meist täglich.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Domain</th><th class="num">verschlüsselt zugestellt</th><th class="num">fehlgeschlagen</th><th>Gründe</th><th>gemeldet von</th></tr></thead>
+            <tbody>
+            @foreach (var tls in Model.Tls)
+            {
+                <tr class="@(tls.Failed > 0 ? "failed" : "")">
+                    <td><strong>@tls.Domain</strong><div class="small muted">@string.Join(", ", tls.PolicyTypes)</div></td>
+                    <td class="num">@tls.Successful</td>
+                    <td class="num">@if (tls.Failed == 0) { <span class="pill good">0</span> } else { <span class="pill bad">@tls.Failed</span> }</td>
+                    <td class="small">@if (tls.Failures.Count == 0) { <span class="muted">–</span> }
+                        @foreach (var (type, count, mx) in tls.Failures)
+                        {
+                            <div>@Mailserver.Web.Pages.Admin.Dmarc.IndexModel.TlsResult(type): @count@(mx is null ? "" : $" ({mx})")</div>
+                        }</td>
+                    <td class="small muted">@string.Join(", ", tls.Reporters)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <p class="small muted">Fehler bei „mode: testing“ verhindern keine Zustellung. Erst wenn hier über Wochen nichts Rotes steht, MTA-STS auf „enforce“ stellen.</p>
 }
 
 <h2>Vorhandene Berichte einlesen</h2>

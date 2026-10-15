@@ -83,6 +83,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Mailserver.Core.Security.Acme.AcmeCertificateManager>();
         services.AddSingleton<CertificateProvider>();
         services.AddSingleton<ILookupClient>(_ => new LookupClient(new LookupClientOptions { UseCache = true, Timeout = TimeSpan.FromSeconds(10) }));
+        services.AddSingleton<MtaStsPolicies>();
         services.AddSingleton<RemoteDeliveryClient>();
         services.AddSingleton<DeliveryService>();
         services.AddAntiSpam();

@@ -94,6 +94,17 @@ public sealed class StatusReport(
                             (foreign > 0 ? $", {foreign} nicht bestanden" : "") + $" (p={domain.Policy})");
         }
 
+        var tls = dmarc.TlsSummary(since);
+        if (tls.Count > 0)
+        {
+            text.AppendLine().AppendLine("TLS-Berichte (MTA-STS):");
+            foreach (var domain in tls)
+            {
+                text.AppendLine($"  {domain.Domain}: {domain.Successful} verschlüsselt zugestellt, {domain.Failed} fehlgeschlagen" +
+                                (domain.Failures.Count > 0 ? $" ({string.Join(", ", domain.Failures.Select(f => $"{f.Type} {f.Count}"))})" : ""));
+            }
+        }
+
         // Storage
         var usage = accounts.ListAccounts().Select(a => (a.Address, Used: mailboxes.GetUsage(a.Id), a.QuotaBytes)).OrderByDescending(a => a.Used).ToList();
         text.AppendLine().AppendLine($"Speicher: {BackupManager.Format(usage.Sum(u => u.Used))} in {usage.Count} Postfächern");

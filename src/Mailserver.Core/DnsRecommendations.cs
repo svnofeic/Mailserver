@@ -18,4 +18,13 @@ public static class DnsRecommendations
             : [],
         new("<IPv4 des Servers>", "PTR", hostname, "Reverse DNS – beim VPS-Anbieter einzutragen"),
     ];
+
+    /// <summary>Optional: MTA-STS and TLS reports (see Verwaltung → Domains → Domain).</summary>
+    public static IReadOnlyList<DnsRecord> MtaSts(string domain, MailserverOptions options) =>
+    [
+        new($"mta-sts.{domain}", "A", "<IPv4 der Website (Plesk/IIS)>", "Subdomain für die Richtliniendatei, mit gültigem HTTPS-Zertifikat"),
+        new($"_mta-sts.{domain}", "TXT", Security.MtaStsPublisher.TxtRecord(options),
+            "die id ändert sich, wenn sich die Richtlinie ändert – dann den Eintrag anpassen"),
+        new($"_smtp._tls.{domain}", "TXT", Security.MtaStsPublisher.TlsRptRecord(domain), "TLS-Berichte der anderen Server an postmaster@"),
+    ];
 }

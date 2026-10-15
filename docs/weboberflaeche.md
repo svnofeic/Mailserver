@@ -97,7 +97,7 @@ mailadmin user admin sven@feicht.me on
 | **IP-Sperren** | Adressen, die gerade wegen Fehl-Logins gesperrt sind (freigeben oder dauerhaft sperren), die Adressen mit den meisten Fehl-Logins der letzten 24 Stunden samt versuchten Benutzernamen, dauerhafte bzw. befristete Sperren und Ausnahmen („nie sperren“). Die eigene Adresse lässt sich nicht sperren. |
 | **Datensicherung** | nächtliche Sicherung einrichten (Zielordner, Netzwerkfreigabe mit Anmeldung, **Microsoft OneDrive** oder **pCloud** mit „Verbinden“; Uhrzeit, Aufbewahrung), „Jetzt sichern“, Verlauf und vorhandene Sicherungen – siehe [datensicherung.md](datensicherung.md) |
 | **Diagnose** | prüft auf einen Blick, ob alles für eine zuverlässige Zustellung stimmt: MX, SPF, DKIM und DMARC jeder Domain, Reverse DNS und Blacklists (Spamhaus, SpamCop, Barracuda, PSBL) der Server-IP, offene Ports, ausgehender Port 25, Zertifikat, Warteschlange, Speicherplatz, Datensicherung, Virenscanner und neue Versionen – jeweils mit Hinweis, was zu tun ist. Gleiches auf der Kommandozeile: `mailadmin diagnose` |
-| **DMARC-Berichte** | Auswertung der DMARC-Berichte von Google, Microsoft, GMX & Co. (siehe unten) |
+| **DMARC/TLS-Berichte** | Auswertung der DMARC- und TLS-Berichte von Google, Microsoft, GMX & Co. (siehe unten) |
 | **Statusbericht** | wöchentliche Mail an die Administratoren, Vorschau, „Jetzt senden“, Statusadresse für UptimeRobot (siehe unten) |
 | **Einstellungen** | Spamfilter (Schwellen, DMARC, SPF, vertrauenswürdige Netze, Blacklists), Greylisting, Verlauf (Aufbewahrung, Betreffzeilen), **Virenschutz** (Scanner, blockierte Dateitypen, Umgang mit Makro-Dokumenten und Scanner-Ausfall, Knopf „EICAR-Testdatei scannen“), **Versandlimits**, Login-Sperren inkl. automatischer Sperre für mehrere Tage, Zustellung inkl. Relay-Server. **Gilt nach wenigen Sekunden ohne Neustart.** |
 
@@ -183,6 +183,27 @@ Der Mailserver erkennt sie beim Empfang (auch als .gz oder .zip), wertet sie aus
 - Die Seite sagt, wann der DMARC-Eintrag verschärft werden kann: erst `p=quarantine` (Fälschungen landen im Spam), nach
   einigen ruhigen Wochen `p=reject` (Fälschungen werden abgewiesen). „Einlesen“ übernimmt Berichte, die schon in den
   Postfächern der Administratoren liegen. Berichte werden 400 Tage aufbewahrt.
+
+## MTA-STS und TLS-Berichte
+
+**In beide Richtungen:**
+
+- **Ausgehend** hält sich der Server an die MTA-STS-Richtlinien anderer Domains (Gmail, Outlook.com, GMX, Web.de … haben
+  welche): Steht dort `mode: enforce`, geht die Mail nur an die genannten MX-Server und nur über TLS mit gültigem
+  Zertifikat – sonst bleibt sie in der Warteschlange und wird später erneut versucht. Ohne Richtlinie bleibt es beim
+  üblichen „TLS, wenn angeboten“. Bekannte Richtlinien merkt sich der Server für ihre Gültigkeitsdauer.
+- **Eingehend** (optional, pro Domain unter *Verwaltung → Domains → Domain → MTA-STS*): eine Richtliniendatei
+  `https://mta-sts.<domain>/.well-known/mta-sts.txt` und zwei TXT-Einträge (`_mta-sts` und `_smtp._tls`). Weil der IIS
+  Port 443 belegt, kommt die Datei auf eine Website in Plesk: Subdomain `mta-sts.<domain>` mit Let's-Encrypt-Zertifikat
+  anlegen, im Dateimanager den Ordner `.well-known` anlegen und dort die Datei ablegen (Knopf „mta-sts.txt
+  herunterladen“). Die Diagnose prüft, ob Datei, TXT-Eintrag und Server zusammenpassen.
+- **Stufe:** `Mailserver:MtaSts:Mode` in `appsettings.json` – `testing` (Standard: andere Server melden Probleme nur) oder
+  `enforce` (sie liefern nur noch verschlüsselt an diesen Server). Nach einer Änderung die neue Datei hochladen und die
+  `id` im TXT-Eintrag anpassen (die Seite zeigt den neuen Wert). Erst auf `enforce` stellen, wenn die TLS-Berichte einige
+  Wochen ohne Fehler sind.
+- **TLS-Berichte** (an `postmaster@<domain>`) werden wie die DMARC-Berichte erkannt, gespeichert und im Ordner
+  „DMARC-Berichte“ abgelegt; *Verwaltung → DMARC/TLS-Berichte* zeigt je Domain die erfolgreichen und fehlgeschlagenen
+  Verbindungen mit Grund (z. B. „Zertifikat abgelaufen“). Auch der Wochenbericht nennt sie.
 
 ## Statusbericht und Überwachung
 
@@ -353,6 +374,3 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
 - **Ordner verwalten** (Link unter der Ordnerliste): Ordner und Unterordner anlegen, umbenennen und löschen. Systemordner
   (Posteingang, Gesendet, Entwürfe, Papierkorb, Spam) sind geschützt. Beim Löschen wandern enthaltene Mails in den Papierkorb;
   Unterordner müssen zuerst gelöscht werden. Beim Umbenennen werden Regeln, die Mails in den Ordner verschieben, automatisch angepasst.
-
-## Grenzen
-

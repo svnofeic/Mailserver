@@ -13,6 +13,15 @@ public sealed class DetailsModel(AccountStore accounts, DkimKeyStore dkim, DataP
     public IReadOnlyList<Mailserver.Core.Accounts.Account> Accounts { get; private set; } = [];
     public List<string> InactiveSelectors { get; } = [];
     public Dictionary<string, string> DkimRecords { get; } = [];
+    public IReadOnlyList<DnsRecord> MtaStsRecords { get; private set; } = [];
+    public string MtaStsPolicy => Mailserver.Core.Security.MtaStsPublisher.PolicyText(options.Value);
+    public string MtaStsMode => options.Value.MtaSts.Mode;
+    public string MxHost => options.Value.Hostname;
+
+    /// <summary>The policy file for the website mta-sts.&lt;domain&gt; (Plesk/IIS), as download.</summary>
+    public IActionResult OnGetMtaStsFile(string name) =>
+        accounts.GetDomain(name) is null ? NotFound()
+            : File(System.Text.Encoding.UTF8.GetBytes(MtaStsPolicy), "text/plain", "mta-sts.txt");
 
     public IActionResult OnGet(string name)
     {
@@ -25,6 +34,7 @@ public sealed class DetailsModel(AccountStore accounts, DkimKeyStore dkim, DataP
         var selector = domain.DkimSelector is { } s && dkim.HasKey(domain.Name, s) ? s : null;
         Records = DnsRecommendations.For(domain.Name, options.Value.Hostname, selector, selector is null ? null : dkim.GetDnsRecord(domain.Name, selector));
         Accounts = accounts.ListAccounts(domain.Name);
+        MtaStsRecords = DnsRecommendations.MtaSts(domain.Name, options.Value);
 
         // Keys that exist on disk but are not active yet (after "Rotate").
         foreach (var file in Directory.EnumerateFiles(paths.DkimRoot, $"{domain.Name}.*.pem"))

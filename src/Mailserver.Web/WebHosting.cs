@@ -196,6 +196,10 @@ public static class WebHosting
 
         MapProgressiveWebApp(app);
         ClientSetup.Map(app);
+        // MTA-STS policy (RFC 8461), for when mta-sts.<domain> on port 443 is forwarded to this server; otherwise the same
+        // file is put into the website of mta-sts.<domain> (Verwaltung → Domains).
+        app.MapGet("/.well-known/mta-sts.txt", (Microsoft.Extensions.Options.IOptions<MailserverOptions> settings) =>
+            Results.Text(Mailserver.Core.Security.MtaStsPublisher.PolicyText(settings.Value), "text/plain; charset=utf-8")).AllowAnonymous();
         // Status address for outside monitoring (UptimeRobot …): "OK" or "STÖRUNG" with 503; details only with the key.
         app.MapGet("/status", (HttpContext context, string? key, Mailserver.AntiSpam.Diagnostics.StatusReport report,
             Microsoft.Extensions.Options.IOptions<MailserverOptions> settings) =>

@@ -414,7 +414,64 @@ public sealed class ServerDiagnostics(
                 ? new(group, "DMARC", CheckStatus.Ok, dmarc)
                 : new(group, "DMARC", CheckStatus.Info, dmarc, "Wenn alles stabil läuft, auf p=quarantine oder p=reject verschärfen – das schützt vor gefälschten Absendern."));
 
+        checks.Add(await CheckMtaStsAsync(domain, group, cancellationToken));
         return checks;
+    }
+
+    /// <summary>Loads https://mta-sts.&lt;domain&gt;/.well-known/mta-sts.txt; null if it cannot be fetched. Replaceable in tests.</summary>
+    public Func<string, CancellationToken, Task<string?>> FetchMtaStsPolicy { get; set; } = FetchPolicyAsync;
+
+    /// <summary>MTA-STS is optional; once a record exists, record, file and this server must fit together.</summary>
+    private async Task<DiagnosticCheck> CheckMtaStsAsync(Domain domain, string group, CancellationToken cancellationToken)
+    {
+        var settings = options.Value;
+        var record = (await dns.GetTxtAsync($"_mta-sts.{domain.Name}", cancellationToken)).Records
+            .FirstOrDefault(t => t.StartsWith("v=STSv1", StringComparison.Ordinal));
+        if (record is null)
+        {
+            return new(group, "MTA-STS", CheckStatus.Info, "nicht eingerichtet (optional)",
+                "Verhindert, dass Mails an Sie unverschlüsselt umgeleitet werden. Anleitung: Verwaltung → Domains → " + domain.Name);
+        }
+
+        var text = await FetchMtaStsPolicy(domain.Name, cancellationToken);
+        if (text is null || Mailserver.Core.Security.MtaStsPolicy.Parse(text) is not { } policy)
+        {
+            return new(group, "MTA-STS", CheckStatus.Error, $"{record}, aber https://mta-sts.{domain.Name}/.well-known/mta-sts.txt ist nicht abrufbar oder ungültig",
+                "Andere Server finden die Richtlinie nicht. Datei auf die Website mta-sts." + domain.Name + " legen (mit gültigem HTTPS-Zertifikat) oder den TXT-Eintrag entfernen.");
+        }
+
+        if (policy.Mode != "none" && !policy.Allows(settings.Hostname))
+        {
+            return new(group, "MTA-STS", CheckStatus.Error, $"Die Richtlinie nennt {string.Join(", ", policy.Mx)}, nicht {settings.Hostname}",
+                "Mit mode: enforce würden andere Server die Zustellung verweigern. Die Datei aus Verwaltung → Domains neu hochladen.");
+        }
+
+        var expected = Mailserver.Core.Security.MtaStsPublisher.TxtRecord(settings);
+        if (!record.Replace(" ", "").Equals(expected.Replace(" ", ""), StringComparison.Ordinal) || text.Replace("\r", "") != Mailserver.Core.Security.MtaStsPublisher.PolicyText(settings).Replace("\r", ""))
+        {
+            return new(group, "MTA-STS", CheckStatus.Warning, $"{record}, mode: {policy.Mode} – Datei oder id weicht von der aktuellen Einstellung ab",
+                $"Aktuelle Datei hochladen und den TXT-Eintrag auf „{expected}“ setzen (sonst holen andere Server die neue Richtlinie nicht ab).");
+        }
+
+        return new(group, "MTA-STS", policy.Enforce ? CheckStatus.Ok : CheckStatus.Info, $"mode: {policy.Mode}, mx: {string.Join(", ", policy.Mx)}",
+            policy.Enforce ? null : "Wenn die TLS-Berichte einige Wochen ohne Fehler sind, auf mode: enforce stellen (Mailserver:MtaSts:Mode).");
+    }
+
+    private static readonly HttpClient PolicyClient = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10) };
+
+    private static async Task<string?> FetchPolicyAsync(string domain, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await PolicyClient.GetAsync($"https://mta-sts.{domain}/.well-known/mta-sts.txt", cancellationToken);
+            return response.IsSuccessStatusCode && response.Content.Headers.ContentType?.MediaType == "text/plain"
+                ? await response.Content.ReadAsStringAsync(cancellationToken)
+                : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private static string? PublicKey(string record) =>

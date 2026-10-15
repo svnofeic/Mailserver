@@ -19,6 +19,40 @@
     </table>
 </div>
 
+<h2>MTA-STS und TLS-Berichte (optional)</h2>
+<div class="card">
+    <p class="small muted" style="margin-top: 0">Mit MTA-STS verlangen Sie von anderen Servern, Mails an @Model.Domain.Name nur verschlüsselt und nur an
+        <span class="mono">@Model.MxHost</span> zu liefern – ein Angreifer kann die Verschlüsselung dann
+        nicht unbemerkt abschalten. Über die TLS-Berichte melden Google, Microsoft &amp; Co., ob das geklappt hat (Verwaltung → DMARC-/TLS-Berichte).
+        Aktuelle Stufe: <strong>@Model.MtaStsMode</strong> (<span class="mono">Mailserver:MtaSts:Mode</span>; „testing“ meldet nur, „enforce“ setzt durch).</p>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Name</th><th>Typ</th><th>Wert</th></tr></thead>
+            <tbody>
+            @foreach (var record in Model.MtaStsRecords)
+            {
+                <tr>
+                    <td class="mono">@record.Name</td><td>@record.Type</td>
+                    <td><div class="mono">@record.Value</div>@if (record.Hint is not null) { <div class="small muted">@record.Hint</div> }</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <p class="small" style="margin-bottom: 4px">Richtliniendatei – muss unter <span class="mono">https://mta-sts.@Model.Domain.Name/.well-known/mta-sts.txt</span>
+        abrufbar sein (Port 443, gültiges Zertifikat):</p>
+    <pre class="report-preview">@Model.MtaStsPolicy</pre>
+    <ol class="small" style="padding-left: 20px">
+        <li>In Plesk bei @Model.Domain.Name eine Subdomain <span class="mono">mta-sts</span> anlegen und ihr ein Let's-Encrypt-Zertifikat geben.</li>
+        <li>Im Dateimanager der Subdomain den Ordner <span class="mono">.well-known</span> anlegen und dort die Datei <span class="mono">mta-sts.txt</span>
+            ablegen (Knopf unten).</li>
+        <li>Die beiden TXT-Einträge oben beim DNS-Anbieter eintragen. Die Diagnose prüft danach, ob alles zusammenpasst.</li>
+        <li>Nach einigen Wochen ohne Fehler in den TLS-Berichten <span class="mono">Mailserver:MtaSts:Mode</span> auf <span class="mono">enforce</span> stellen,
+            die neue Datei hochladen und die <span class="mono">id</span> im TXT-Eintrag anpassen.</li>
+    </ol>
+    <a class="button secondary" href="?handler=MtaStsFile&amp;name=@Model.Domain.Name">mta-sts.txt herunterladen</a>
+</div>
+
 <h2>DKIM</h2>
 <div class="card">
     <p>Aktiver Selector: <strong class="mono">@(Model.Domain.DkimSelector ?? "keiner")</strong></p>

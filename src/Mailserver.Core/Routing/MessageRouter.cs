@@ -177,7 +177,8 @@ public sealed class MessageRouter(
             var subject = headers[HeaderId.Subject] ?? "";
             var type = headers[HeaderId.ContentType] ?? "";
             return subject.Contains("Report Domain", StringComparison.OrdinalIgnoreCase) || subject.Contains("DMARC", StringComparison.OrdinalIgnoreCase) ||
-                   type.Contains("zip", StringComparison.OrdinalIgnoreCase);
+                   type.Contains("zip", StringComparison.OrdinalIgnoreCase) || type.Contains("tlsrpt", StringComparison.OrdinalIgnoreCase) ||
+                   headers.Contains("TLS-Report-Domain");
         }
         catch (FormatException)
         {
