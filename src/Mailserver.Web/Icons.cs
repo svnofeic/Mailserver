@@ -40,6 +40,8 @@ public static class Icons
         ["star"] = """<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>""",
         ["paperclip"] = """<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>""",
         ["reply"] = """<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/>""",
+        ["reply-all"] = """<path d="M12 14 7 9l5-5"/><path d="M7 14 2 9l5-5"/><path d="M7 9h8a5 5 0 0 1 5 5v6"/>""",
+        ["mail-unread"] = """<path d="M21 11.5V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9"/><path d="m3.5 7.5 8.5 6 3.2-2.3"/><circle cx="19" cy="6" r="3"/>""",
         ["forward"] = """<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0-5 5v6"/>""",
         ["search"] = """<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>""",
         ["trend-up"] = """<path d="m3 17 6-6 4 4 8-8M15 7h6v6"/>""",

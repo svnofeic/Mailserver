@@ -97,7 +97,18 @@ public sealed class MicrosoftSignInTests : IAsyncLifetime
         Assert.Equal("access-1", _mail.TestedWith);
         Assert.Contains("client_id=11111111-2222-3333-4444-555555555555", _login.Requests.First());
 
-        await web.GetAsync("/Account/External");
+        // The account is stored before the first fetch; the result message only follows after it.
+        for (var i = 0; i < 50; i++)
+        {
+            await web.GetAsync("/Account/External");
+            if (web.LastPage.Contains("eingerichtet"))
+            {
+                break;
+            }
+
+            await Task.Delay(200);
+        }
+
         Assert.Contains("eingerichtet", web.LastPage);
         Assert.Contains("über Microsoft angemeldet", web.LastPage);
 

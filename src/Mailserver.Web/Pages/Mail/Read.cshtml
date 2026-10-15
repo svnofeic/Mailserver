@@ -7,34 +7,38 @@
         <partial name="_Folders" model="(Model.Folders, Model.Folder.Name)" />
     </aside>
     <section>
-        <div class="toolbar small">
-            <a class="button secondary" href="/Mail?folder=@f">← @Format.FolderName(Model.Folder.Name)</a>
+        <div class="toolbar small read-toolbar">
+            <a class="button secondary icon-button" href="/Mail?folder=@f" title="Zurück zu „@Format.FolderName(Model.Folder.Name)“" aria-label="Zurück zu @Format.FolderName(Model.Folder.Name)">←</a>
+            <span class="toolbar-sep" aria-hidden="true"></span>
             @if (Model.Folder.Name is "Drafts" or Mailserver.Core.Storage.FollowUps.ScheduledFolder)
             {
-                <a class="button" href="/Mail/Compose?mode=draft&folder=@f&uid=@uid">@(Model.Folder.Name == "Drafts" ? "Entwurf bearbeiten" : "Geplante Mail bearbeiten")</a>
+                <a class="button" href="/Mail/Compose?mode=draft&folder=@f&uid=@uid">@Icons.Get("pencil") @(Model.Folder.Name == "Drafts" ? "Entwurf bearbeiten" : "Geplante Mail bearbeiten")</a>
             }
             else
             {
-                <a class="button" href="/Mail/Compose?mode=reply&folder=@f&uid=@uid">@Icons.Get("reply") Antworten</a>
-                <a class="button secondary" href="/Mail/Compose?mode=replyall&folder=@f&uid=@uid">Allen antworten</a>
-                <a class="button secondary" href="/Mail/Compose?mode=forward&folder=@f&uid=@uid">@Icons.Get("forward") Weiterleiten</a>
+                <a class="button icon-button" href="/Mail/Compose?mode=reply&folder=@f&uid=@uid" title="Antworten" aria-label="Antworten">@Icons.Get("reply")</a>
+                <a class="button secondary icon-button" href="/Mail/Compose?mode=replyall&folder=@f&uid=@uid" title="Allen antworten" aria-label="Allen antworten">@Icons.Get("reply-all")</a>
+                <a class="button secondary icon-button" href="/Mail/Compose?mode=forward&folder=@f&uid=@uid" title="Weiterleiten" aria-label="Weiterleiten">@Icons.Get("forward")</a>
+            }
+            <span class="toolbar-sep" aria-hidden="true"></span>
+            @{
+                var deleteLabel = Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen";
+                var flagged = Model.Stored.HasFlag("\\Flagged");
+                var flagLabel = flagged ? "Markierung entfernen" : "Markieren";
             }
             <form method="post" asp-page="/Mail/Read" asp-page-handler="Action" asp-route-folder="@Model.Folder.Name" asp-route-uid="@uid" class="row">
-                <button type="submit" name="op" value="delete" class="secondary">@Icons.Get("trash") @(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
-                @if (Model.Folder.Name == "Junk") { <button type="submit" name="op" value="notspam" class="secondary">Kein Spam</button> }
-                else { <button type="submit" name="op" value="spam" class="secondary">Spam</button> }
-                <button type="submit" name="op" value="unread" class="secondary">Ungelesen</button>
-                <button type="submit" name="op" value="@(Model.Stored.HasFlag("\\Flagged") ? "unflag" : "flag")" class="secondary">@(Model.Stored.HasFlag("\\Flagged") ? "Markierung entfernen" : "Markieren")</button>
-                <select name="target" aria-label="Zielordner">
-                    @foreach (var (folder, _) in Model.Folders.Where(x => x.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
-                </select>
-                <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
+                <button type="submit" name="op" value="delete" class="secondary icon-button" title="@deleteLabel" aria-label="@deleteLabel">@Icons.Get("trash")</button>
+                @if (Model.Folder.Name == "Junk") { <button type="submit" name="op" value="notspam" class="secondary icon-button" title="Kein Spam" aria-label="Kein Spam">@Icons.Get("shield")</button> }
+                else { <button type="submit" name="op" value="spam" class="secondary icon-button" title="Spam" aria-label="Spam">@Icons.Get("shield-alert")</button> }
+                <button type="submit" name="op" value="unread" class="secondary icon-button" title="Als ungelesen markieren" aria-label="Ungelesen">@Icons.Get("mail-unread")</button>
+                <button type="submit" name="op" value="@(flagged ? "unflag" : "flag")" class="secondary icon-button@(flagged ? " active" : "")" title="@flagLabel" aria-label="@flagLabel">@Icons.Get("star")</button>
             </form>
             @if (Model.Folder.Name is not ("Drafts" or "Sent" or "Trash" or "Junk" or Mailserver.Core.Storage.FollowUps.ScheduledFolder))
             {
                 <details class="send-later">
-                    <summary class="button secondary">@Icons.Get("clock") Wiedervorlage</summary>
+                    <summary class="button secondary icon-button" title="Wiedervorlage" aria-label="Wiedervorlage">@Icons.Get("clock")</summary>
                     <form method="post" asp-page="/Mail/Read" asp-page-handler="FollowUp" asp-route-folder="@Model.Folder.Name" asp-route-uid="@uid" class="send-later-panel">
+                        <strong>Wiedervorlage</strong>
                         <label>Wieder anzeigen
                             <select name="choice">
                                 @foreach (var (key, label) in Model.FollowUpChoices) { <option value="@key" selected="@(key == "tomorrow8")">@label</option> }
@@ -45,6 +49,13 @@
                     </form>
                 </details>
             }
+            <span class="toolbar-sep" aria-hidden="true"></span>
+            <form method="post" asp-page="/Mail/Read" asp-page-handler="Action" asp-route-folder="@Model.Folder.Name" asp-route-uid="@uid" class="row move-form">
+                <select name="target" aria-label="Zielordner">
+                    @foreach (var (folder, _) in Model.Folders.Where(x => x.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
+                </select>
+                <button type="submit" name="op" value="move" class="secondary icon-button" title="In den gewählten Ordner verschieben" aria-label="Verschieben">@Icons.Get("folder")</button>
+            </form>
         </div>
 
         <div class="card">
