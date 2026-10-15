@@ -22,27 +22,32 @@
         <form method="post" asp-page-handler="Bulk">
             <input type="hidden" name="folder" value="@Model.Folder.Name" />
             <input type="hidden" name="page" value="@Model.PageNumber" />
-            <div class="toolbar small">
+            <div class="toolbar small icon-toolbar">
                 @if (Model.Items.Count > 0)
                 {
                     <label class="check select-all" title="Alle Nachrichten auf dieser Seite auswählen"><input type="checkbox" data-select-all /> Alle</label>
+                    <span class="toolbar-sep" aria-hidden="true"></span>
                 }
-                <button type="submit" name="op" value="read" class="secondary">Gelesen</button>
-                <button type="submit" name="op" value="unread" class="secondary">Ungelesen</button>
-                <button type="submit" name="op" value="flag" class="secondary">Markieren</button>
+                @{ var deleteLabel = Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen"; }
+                <button type="submit" name="op" value="read" class="secondary icon-button" title="Als gelesen markieren" aria-label="Gelesen">@Icons.Get("mail-open")</button>
+                <button type="submit" name="op" value="unread" class="secondary icon-button" title="Als ungelesen markieren" aria-label="Ungelesen">@Icons.Get("mail-unread")</button>
+                <button type="submit" name="op" value="flag" class="secondary icon-button" title="Markieren" aria-label="Markieren">@Icons.Get("star")</button>
                 @if (Model.Folder.Name == "Junk")
                 {
-                    <button type="submit" name="op" value="notspam" class="secondary">Kein Spam</button>
+                    <button type="submit" name="op" value="notspam" class="secondary icon-button" title="Kein Spam" aria-label="Kein Spam">@Icons.Get("shield")</button>
                 }
                 else
                 {
-                    <button type="submit" name="op" value="spam" class="secondary">Spam</button>
+                    <button type="submit" name="op" value="spam" class="secondary icon-button" title="Spam" aria-label="Spam">@Icons.Get("shield-alert")</button>
                 }
-                <button type="submit" name="op" value="delete" class="secondary">@Icons.Get("trash") @(Model.Folder.Name == "Trash" ? "Endgültig löschen" : "Löschen")</button>
-                <select name="target" aria-label="Zielordner">
-                    @foreach (var (folder, _) in Model.Folders.Where(f => f.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
-                </select>
-                <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
+                <button type="submit" name="op" value="delete" class="secondary icon-button" title="@deleteLabel" aria-label="@deleteLabel">@Icons.Get("trash")</button>
+                <span class="toolbar-sep" aria-hidden="true"></span>
+                <span class="row move-form">
+                    <select name="target" aria-label="Zielordner">
+                        @foreach (var (folder, _) in Model.Folders.Where(f => f.Folder.Name != Model.Folder.Name)) { <option value="@folder.Name">@Mailserver.Web.Webmail.FolderDisplay.Path(folder.Name)</option> }
+                    </select>
+                    <button type="submit" name="op" value="move" class="secondary icon-button" title="In den gewählten Ordner verschieben" aria-label="Verschieben">@Icons.Get("folder")</button>
+                </span>
                 @if (Mailserver.Web.Webmail.MailActions.CanEmpty(Model.Folder) && Model.Total > 0 && Model.Search is null)
                 {
                     var name = Model.Folder.Name == "Trash" ? "Papierkorb" : "Spam-Ordner";

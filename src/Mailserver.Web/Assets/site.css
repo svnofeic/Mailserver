@@ -391,7 +391,7 @@ ul.hints { margin: 0; padding-left: 20px; }
 .toolbar .move-form select { max-width: 180px; }
 .icon-button.active { color: #f5b301; border-color: #f5b301; }
 .toolbar-sep { width: 1px; height: 22px; background: var(--border-strong); margin: 0 2px; }
-@media (max-width: 760px) { .toolbar-sep { display: none; } .read-toolbar { gap: 6px; } }
+@media (max-width: 760px) { .toolbar-sep { display: none; } .icon-toolbar { gap: 6px; } }
 /* Pull to reload in the installed app (app.js). */
 .pull-refresh { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; z-index: 100; width: 40px; height: 40px;
     margin-top: -48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none;

@@ -7,7 +7,7 @@
         <partial name="_Folders" model="(Model.Folders, Model.Folder.Name)" />
     </aside>
     <section>
-        <div class="toolbar small read-toolbar">
+        <div class="toolbar small icon-toolbar">
             <a class="button secondary icon-button" href="/Mail?folder=@f" title="Zurück zu „@Format.FolderName(Model.Folder.Name)“" aria-label="Zurück zu @Format.FolderName(Model.Folder.Name)">←</a>
             <span class="toolbar-sep" aria-hidden="true"></span>
             @if (Model.Folder.Name is "Drafts" or Mailserver.Core.Storage.FollowUps.ScheduledFolder)
@@ -16,7 +16,7 @@
             }
             else
             {
-                <a class="button icon-button" href="/Mail/Compose?mode=reply&folder=@f&uid=@uid" title="Antworten" aria-label="Antworten">@Icons.Get("reply")</a>
+                <a class="button secondary icon-button" href="/Mail/Compose?mode=reply&folder=@f&uid=@uid" title="Antworten" aria-label="Antworten">@Icons.Get("reply")</a>
                 <a class="button secondary icon-button" href="/Mail/Compose?mode=replyall&folder=@f&uid=@uid" title="Allen antworten" aria-label="Allen antworten">@Icons.Get("reply-all")</a>
                 <a class="button secondary icon-button" href="/Mail/Compose?mode=forward&folder=@f&uid=@uid" title="Weiterleiten" aria-label="Weiterleiten">@Icons.Get("forward")</a>
             }
