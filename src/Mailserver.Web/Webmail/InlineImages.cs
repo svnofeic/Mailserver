@@ -33,7 +33,7 @@ public sealed class InlineImages(MailboxStore mailboxes, TimeProvider timeProvid
             if (part.ContentId is { Length: > 0 } id && Types.Contains(part.ContentType.MimeType))
             {
                 var cid = id.Trim('<', '>');
-                result.TryAdd(cid, $"{Path}?m={stored.Id}&c={Uri.EscapeDataString(cid)}&e={expires}&s={Sign(stored.Id, cid, expires)}");
+                result.TryAdd(cid, $"{Path}?m={stored.Id}&c={Uri.EscapeDataString(cid)}&e={expires}&s={Sign(stored.Id, stored.FileName, cid, expires)}");
             }
         }
 
@@ -45,8 +45,9 @@ public sealed class InlineImages(MailboxStore mailboxes, TimeProvider timeProvid
     {
         if (c is null || e is null || s is null || !long.TryParse(e, NumberStyles.None, CultureInfo.InvariantCulture, out var expires) ||
             expires < timeProvider.GetUtcNow().ToUnixTimeSeconds() ||
-            !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Sign(m, c, e)), Encoding.ASCII.GetBytes(s)) ||
-            mailboxes.GetMessageById(m) is not { } stored)
+            mailboxes.GetMessageById(m) is not { } stored ||
+            // The file is part of the signature: a reused id (after deleting the newest message) cannot serve another mail's image.
+            !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Sign(m, stored.FileName, c, e)), Encoding.ASCII.GetBytes(s)))
         {
             return Results.NotFound();
         }
@@ -73,6 +74,6 @@ public sealed class InlineImages(MailboxStore mailboxes, TimeProvider timeProvid
         return Results.Stream(buffer, part.ContentType.MimeType.ToLowerInvariant());
     }
 
-    private string Sign(long messageId, string cid, string expires) =>
-        Convert.ToHexString(HMACSHA256.HashData(_key, Encoding.UTF8.GetBytes($"{messageId}\n{cid}\n{expires}")));
+    private string Sign(long messageId, string file, string cid, string expires) =>
+        Convert.ToHexString(HMACSHA256.HashData(_key, Encoding.UTF8.GetBytes($"{messageId}\n{file}\n{cid}\n{expires}")));
 }

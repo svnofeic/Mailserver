@@ -18,7 +18,9 @@ public sealed record MessageListItem(StoredMessage Message, MessageSummary Summa
 public sealed class WebmailStore(MailboxStore mailboxes)
 {
     private const int MaxCachedSummaries = 50_000;
-    private readonly ConcurrentDictionary<long, MessageSummary> _summaries = new();
+    // Keyed by the message file, not the id: SQLite hands the id of a deleted newest message to the next one, which would
+    // then show the old sender and subject in the list. The file name is unique and its content never changes.
+    private readonly ConcurrentDictionary<string, MessageSummary> _summaries = new(StringComparer.Ordinal);
 
     public static readonly IReadOnlyList<string> FolderOrder = MailboxStore.DefaultFolders;
 
@@ -76,7 +78,7 @@ public sealed class WebmailStore(MailboxStore mailboxes)
 
     public MessageSummary Summary(StoredMessage message)
     {
-        if (_summaries.TryGetValue(message.Id, out var cached))
+        if (_summaries.TryGetValue(message.FileName, out var cached))
         {
             return cached;
         }
@@ -108,7 +110,7 @@ public sealed class WebmailStore(MailboxStore mailboxes)
             _summaries.Clear();
         }
 
-        _summaries[message.Id] = summary;
+        _summaries[message.FileName] = summary;
         return summary;
     }
 }

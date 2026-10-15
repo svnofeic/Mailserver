@@ -673,6 +673,29 @@ public sealed class WebmailEditorAndFolderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task List_shows_the_new_message_when_its_id_was_used_before()
+    {
+        var alice = _server.User("alice");
+        var first = await _server.HostMailboxes.AppendAsync(alice,
+            Encoding.UTF8.GetBytes("From: Alter Absender <alt@remote.test>\r\nSubject: Alter Betreff\r\n\r\nText"));
+        await _web.GetAsync("/Mail");
+        Assert.Contains("Alter Betreff", _web.LastPage);
+
+        // Deleting the newest message frees its id; SQLite gives it to the next one.
+        var inbox = _server.HostMailboxes.GetFolder(alice.Id, Mailserver.Core.Storage.MailboxStore.Inbox)!;
+        _server.HostMailboxes.UpdateFlags(inbox.Id, [first.Uid], Mailserver.Core.Storage.FlagOperation.Add, [Mailserver.Core.Storage.MessageFlags.Deleted]);
+        _server.HostMailboxes.Expunge(inbox.Id, [first.Uid]);
+        var second = await _server.HostMailboxes.AppendAsync(alice,
+            Encoding.UTF8.GetBytes("From: Neuer Absender <neu@remote.test>\r\nSubject: Neuer Betreff\r\n\r\nText"));
+        Assert.Equal(first.Id, second.Id);
+
+        await _web.GetAsync("/Mail");
+        Assert.Contains("Neuer Betreff", _web.LastPage);
+        Assert.Contains("Neuer Absender", _web.LastPage);
+        Assert.DoesNotContain("Alter Betreff", _web.LastPage);
+    }
+
+    [Fact]
     public async Task Pictures_in_the_text_are_sent_embedded_and_kept_in_drafts()
     {
         var png = Convert.ToBase64String(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4 });
