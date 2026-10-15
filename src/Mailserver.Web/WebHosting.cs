@@ -93,6 +93,7 @@ public static class WebHosting
         services.AddSingleton<Webmail.WebmailSender>();
         services.AddSingleton<Webmail.MailActions>();
         services.AddSingleton<Webmail.FolderManager>();
+        services.AddSingleton<Dav.DavHandler>();
         services.AddSingleton<Webmail.ScheduledMailService>();
         services.AddHostedService(sp => sp.GetRequiredService<Webmail.ScheduledMailService>());
         services.AddAuthorizationBuilder().AddPolicy(AdminPolicy, policy => policy.RequireClaim(AdminClaim, "true"));
@@ -168,6 +169,13 @@ public static class WebHosting
                 var maxMessageSize = context.RequestServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<MailserverOptions>>().Value.MaxMessageSizeBytes;
                 limit.MaxRequestBodySize = maxMessageSize + 1024 * 1024;
             }
+            else if (HttpMethods.IsPost(context.Request.Method) &&
+                     (context.Request.Path.StartsWithSegments("/Calendar/Calendars") || context.Request.Path.StartsWithSegments("/Contacts")) &&
+                     context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } importLimit)
+            {
+                // Calendar and contacts files to import.
+                importLimit.MaxRequestBodySize = 21 * 1024 * 1024;
+            }
 
             await next();
         });
@@ -197,6 +205,7 @@ public static class WebHosting
         }).AllowAnonymous();
 
         MapProgressiveWebApp(app);
+        MapDav(app);
         ClientSetup.Map(app);
         // MTA-STS policy (RFC 8461), for when mta-sts.<domain> on port 443 is forwarded to this server; otherwise the same
         // file is put into the website of mta-sts.<domain> (Verwaltung → Domains).
@@ -228,6 +237,27 @@ public static class WebHosting
             return Results.Redirect(target);
         }).AllowAnonymous();
         return app;
+    }
+
+    /// <summary>
+    /// Calendars and contacts (CalDAV/CardDAV) under /dav, with the addresses clients try first (RFC 6764): the well-known
+    /// paths and PROPFIND on "/".
+    /// </summary>
+    private static void MapDav(WebApplication app)
+    {
+        static Task Handle(HttpContext context) => context.RequestServices.GetRequiredService<Dav.DavHandler>().HandleAsync(context);
+        app.MapMethods("/dav/{**path}", Dav.DavHandler.Methods, Handle).AllowAnonymous().DisableAntiforgery();
+        app.MapMethods("/dav", Dav.DavHandler.Methods, Handle).AllowAnonymous().DisableAntiforgery();
+        app.MapMethods("/", ["PROPFIND", "OPTIONS", "REPORT"], Handle).AllowAnonymous().DisableAntiforgery();
+        foreach (var wellKnown in new[] { "/.well-known/caldav", "/.well-known/carddav" })
+        {
+            app.MapMethods(wellKnown, ["GET", "HEAD", "PROPFIND", "OPTIONS"], (HttpContext context) =>
+            {
+                context.Response.StatusCode = StatusCodes.Status301MovedPermanently;
+                context.Response.Headers.Location = Dav.DavHandler.Root;
+                return Task.CompletedTask;
+            }).AllowAnonymous().DisableAntiforgery();
+        }
     }
 
     /// <summary>

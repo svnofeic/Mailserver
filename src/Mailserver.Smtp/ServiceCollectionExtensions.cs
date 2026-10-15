@@ -102,6 +102,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Mailserver.Core.Storage.SearchIndex>();
         services.AddSingleton<Mailserver.Core.Storage.Conversations>();
         services.AddSingleton<Mailserver.Core.Accounts.AccountPrefs>();
+        services.AddSingleton<Mailserver.Core.Dav.DavStore>();
         services.AddHostedService<SearchIndexer>();
         services.AddSingleton<Mailserver.Core.Data.AppState>();
         services.AddSingleton<Mailserver.AntiSpam.Diagnostics.StatusReport>();

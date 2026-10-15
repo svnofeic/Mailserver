@@ -1,0 +1,52 @@
+@page
+@model Mailserver.Web.Pages.Calendar.EventModel
+@{ ViewData["Title"] = Model.IsNew ? "Neuer Termin" : "Termin bearbeiten"; }
+<div class="toolbar">
+    <h1 class="grow" style="margin: 0">@(Model.IsNew ? "Neuer Termin" : "Termin bearbeiten")</h1>
+    <a class="button secondary" href="/Calendar@(Model.Form.StartDate.Length >= 7 ? $"?y={Model.Form.StartDate[..4]}&m={int.Parse(Model.Form.StartDate[5..7])}" : "")">← Kalender</a>
+</div>
+
+<form method="post" class="card event-form">
+    <input type="hidden" asp-for="OriginalCalendar" />
+    <input type="hidden" asp-for="OriginalHref" />
+    <div class="form-grid">
+        <label class="span-2">Titel<input asp-for="Form.Title" required maxlength="300" autocomplete="off" /></label>
+        <label class="span-2">Kalender
+            <select asp-for="Form.CalendarId">
+                @foreach (var calendar in Model.Calendars) { <option value="@calendar.Id">@calendar.Name</option> }
+            </select></label>
+        <label class="check span-2"><input type="checkbox" asp-for="Form.AllDay" /> Ganztägig</label>
+        <label>Beginn<input type="date" asp-for="Form.StartDate" required /></label>
+        <label class="time">Uhrzeit<input type="time" asp-for="Form.StartTime" /></label>
+        <label>Ende<input type="date" asp-for="Form.EndDate" /></label>
+        <label class="time">Uhrzeit<input type="time" asp-for="Form.EndTime" /></label>
+        <label class="span-2">Ort<input asp-for="Form.Location" maxlength="300" /></label>
+        <label>Wiederholen
+            <select asp-for="Form.Repeat">
+                @foreach (var (value, label) in Mailserver.Web.Pages.Calendar.EventModel.RepeatChoices) { <option value="@value">@label</option> }
+            </select></label>
+        <label>Bis (leer: ohne Ende)<input type="date" asp-for="Form.Until" /></label>
+        <label class="span-2">Erinnerung
+            <select asp-for="Form.Reminder">
+                @foreach (var (value, label) in Mailserver.Web.Pages.Calendar.EventModel.ReminderChoices) { <option value="@value">@label</option> }
+                @if (Model.ExtraReminder is { } extra) { <option value="@extra">@extra Minuten vorher</option> }
+            </select></label>
+        <label class="span-2">Notizen<textarea asp-for="Form.Description" rows="4"></textarea></label>
+    </div>
+    @if (!Model.IsNew && !string.IsNullOrEmpty(Model.Form.Repeat))
+    {
+        <p class="small muted">Änderungen gelten für die ganze Serie.@if (Model.HasExceptions) { <text> Einzeln geänderte oder abgesagte Termine der Serie (z. B. vom iPhone) bleiben erhalten.</text> }</p>
+    }
+    <p class="small muted">Bei ganztägigen Terminen zählen nur die Tage. Uhrzeiten gelten in der Zeitzone des Servers; das Handy zeigt sie in seiner eigenen an.
+        Erinnerungen zeigen iPhone, Mac und Thunderbird an.</p>
+    <div class="row" style="margin-top: 14px">
+        <button type="submit" asp-page-handler="Save">Speichern</button>
+        <a class="button secondary" href="/Calendar">Abbrechen</a>
+        @if (!Model.IsNew)
+        {
+            <span class="grow"></span>
+            <button type="submit" asp-page-handler="Delete" formnovalidate class="danger"
+                    data-confirm="@(!string.IsNullOrEmpty(Model.Form.Repeat) ? "Die ganze Serie löschen?" : "Diesen Termin löschen?")">@Icons.Get("trash") Löschen</button>
+        }
+    </div>
+</form>

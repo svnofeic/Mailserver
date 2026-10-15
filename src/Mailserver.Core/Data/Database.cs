@@ -461,6 +461,43 @@ public sealed class Database
             PRIMARY KEY (account_id, name)
         ) WITHOUT ROWID;
         """,
+        // Calendars and address books (CalDAV/CardDAV): collections, their objects (iCalendar/vCard text) and deleted ones for sync.
+        """
+        CREATE TABLE dav_collections (
+            id          INTEGER PRIMARY KEY,
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            kind        TEXT NOT NULL,
+            slug        TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            color       TEXT,
+            description TEXT,
+            sync_rev    INTEGER NOT NULL DEFAULT 0,
+            created_utc TEXT NOT NULL,
+            UNIQUE (account_id, kind, slug)
+        );
+        CREATE TABLE dav_objects (
+            id            INTEGER PRIMARY KEY,
+            collection_id INTEGER NOT NULL REFERENCES dav_collections(id) ON DELETE CASCADE,
+            href          TEXT NOT NULL,
+            uid           TEXT NOT NULL,
+            etag          TEXT NOT NULL,
+            data          TEXT NOT NULL,
+            component     TEXT,
+            start_utc     TEXT,
+            end_utc       TEXT,
+            rev           INTEGER NOT NULL,
+            modified_utc  TEXT NOT NULL,
+            UNIQUE (collection_id, href)
+        );
+        CREATE INDEX ix_dav_objects_uid ON dav_objects (collection_id, uid);
+        CREATE INDEX ix_dav_objects_rev ON dav_objects (collection_id, rev);
+        CREATE TABLE dav_tombstones (
+            collection_id INTEGER NOT NULL REFERENCES dav_collections(id) ON DELETE CASCADE,
+            href          TEXT NOT NULL,
+            rev           INTEGER NOT NULL,
+            PRIMARY KEY (collection_id, href)
+        ) WITHOUT ROWID;
+        """,
     ];
 
     private readonly string _connectionString;

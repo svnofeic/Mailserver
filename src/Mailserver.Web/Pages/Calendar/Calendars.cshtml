@@ -1,0 +1,83 @@
+@page
+@model Mailserver.Web.Pages.Calendar.CalendarsModel
+@{ ViewData["Title"] = "Kalender verwalten"; }
+<div class="toolbar">
+    <h1 class="grow" style="margin: 0">Kalender verwalten</h1>
+    <a class="button secondary" href="/Calendar">← Kalender</a>
+</div>
+
+@if (Model.Items.Count == 0)
+{
+    <div class="card muted">Noch kein Kalender.</div>
+}
+else
+{
+    <ul class="contact-list panel">
+        @foreach (var (calendar, events) in Model.Items)
+        {
+            <li>
+                <span class="avatar" style="background: @(calendar.Color ?? "var(--accent)")">@Icons.Get("calendar")</span>
+                <div class="person">
+                    <div class="name">@calendar.Name</div>
+                    <div class="meta small muted">@(events == 1 ? "1 Termin" : $"{events} Termine")</div>
+                    <details class="cal-edit">
+                        <summary class="small">Ändern</summary>
+                        <form method="post" asp-page-handler="Update" asp-route-id="@calendar.Id" class="row">
+                            <label>Name<input name="name" value="@calendar.Name" maxlength="100" required /></label>
+                            <label>Farbe<select name="color">
+                                @foreach (var (value, label) in Mailserver.Web.Pages.Calendar.CalendarsModel.Colors) { <option value="@value" selected="@(value == calendar.Color)">@label</option> }
+                            </select></label>
+                            <button type="submit" class="secondary">Speichern</button>
+                        </form>
+                    </details>
+                </div>
+                <div class="actions">
+                    <a class="button secondary" href="?handler=Export&id=@calendar.Id" title="Als .ics-Datei herunterladen" aria-label="Exportieren">@Icons.Get("drive")</a>
+                    <form method="post" asp-page-handler="Delete" asp-route-id="@calendar.Id" class="inline">
+                        <button type="submit" class="secondary" title="Löschen" aria-label="Löschen"
+                                data-confirm="@($"Kalender „{calendar.Name}“ mit {events} Termin(en) löschen? Das lässt sich nicht rückgängig machen.")">@Icons.Get("trash")</button></form>
+                </div>
+            </li>
+        }
+    </ul>
+}
+
+<h2>Neuer Kalender</h2>
+<form method="post" asp-page-handler="Create" class="card row">
+    <label class="grow">Name<input name="name" maxlength="100" required placeholder="z. B. Arbeit" /></label>
+    <label>Farbe<select name="color">
+        @foreach (var (value, label) in Mailserver.Web.Pages.Calendar.CalendarsModel.Colors) { <option value="@value">@label</option> }
+    </select></label>
+    <button type="submit">Anlegen</button>
+</form>
+
+@if (Model.Items.Count > 0)
+{
+    <h2>Importieren</h2>
+    <form method="post" asp-page-handler="Import" enctype="multipart/form-data" class="card">
+        <div class="row">
+            <label class="file-pick grow">Kalenderdatei (.ics)<input type="file" name="file" accept=".ics,text/calendar" required /></label>
+            <label>in<select name="id">@foreach (var (calendar, _) in Model.Items) { <option value="@calendar.Id">@calendar.Name</option> }</select></label>
+            <button type="submit" class="secondary">Importieren</button>
+        </div>
+        <p class="small muted" style="margin-bottom: 0">Export aus Google Kalender: Einstellungen → Importieren und exportieren; aus Outlook: Kalender speichern als .ics;
+            vom Mac: Kalender-App → Ablage → Exportieren. Wird dieselbe Datei noch einmal importiert, werden die Termine ersetzt, nicht verdoppelt.</p>
+    </form>
+}
+
+<h2>Am Handy und am Computer</h2>
+<div class="card">
+    <p style="margin-top: 0">Die Kalender lassen sich mit dem iPhone, dem Mac, Thunderbird und Android (DAVx⁵) abgleichen – in beide Richtungen.</p>
+    <dl class="headers">
+        <dt>Server</dt><dd><code>@Model.ServerUrl</code></dd>
+        <dt>Benutzer</dt><dd><code>@Model.CurrentAddress</code></dd>
+        <dt>Passwort</dt><dd>das Passwort dieses Postfachs</dd>
+    </dl>
+    <ul class="small">
+        <li><strong>iPhone, iPad, Mac:</strong> am einfachsten über das Profil unter <a href="/Account/Setup">Einrichtung</a> – es richtet Mail, Kalender und Kontakte auf einmal ein.
+            Von Hand: Einstellungen → Kalender → Accounts → Account hinzufügen → Andere → CalDAV-Account, Server <code>@Model.ServerUrl</code>.</li>
+        <li><strong>Thunderbird:</strong> Kalender → Neuer Kalender → Im Netzwerk → Benutzer <code>@Model.CurrentAddress</code>, Adresse <code>@Model.ServerUrl</code>.</li>
+        <li><strong>Android:</strong> App DAVx⁵ → Konto hinzufügen → Mit URL und Benutzername anmelden.</li>
+        <li><strong>Outlook (Windows):</strong> kann CalDAV nur mit einem Zusatzprogramm (z. B. CalDav Synchronizer); ein .ics-Export lässt sich aber jederzeit importieren.</li>
+    </ul>
+</div>

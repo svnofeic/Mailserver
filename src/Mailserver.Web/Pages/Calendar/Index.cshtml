@@ -1,0 +1,71 @@
+@page
+@model Mailserver.Web.Pages.Calendar.IndexModel
+@{ ViewData["Title"] = "Kalender"; }
+<div class="toolbar">
+    <h1 class="grow" style="margin: 0">@Model.Title</h1>
+    <div class="row cal-nav">
+        <a class="button secondary icon-button" href="@Model.MonthUrl(Model.Month.AddMonths(-1))" title="Voriger Monat" aria-label="Voriger Monat">‹</a>
+        <a class="button secondary" href="/Calendar">Heute</a>
+        <a class="button secondary icon-button" href="@Model.MonthUrl(Model.Month.AddMonths(1))" title="Nächster Monat" aria-label="Nächster Monat">›</a>
+        <a class="button" href="/Calendar/Event?date=@(Model.Month.Year == Model.Today.Year && Model.Month.Month == Model.Today.Month ? Model.Today.ToString("yyyy-MM-dd") : Model.Month.ToString("yyyy-MM-dd"))">@Icons.Get("plus") Termin</a>
+    </div>
+</div>
+
+<div class="cal-legend small">
+    @foreach (var calendar in Model.Calendars)
+    {
+        <span class="cal-chip"><span class="dot" style="background: @(calendar.Color ?? "var(--accent)")"></span>@calendar.Name</span>
+    }
+    <a class="small" href="/Calendar/Calendars">Kalender verwalten · Einrichtung am Handy</a>
+</div>
+
+@if (Model.Calendars.Count == 0)
+{
+    <div class="card muted">Noch kein Kalender. Unter <a href="/Calendar/Calendars">Kalender verwalten</a> einen anlegen.</div>
+}
+else
+{
+    <div class="cal-month" role="grid" aria-label="@Model.Title">
+        @foreach (var name in Mailserver.Web.Pages.Calendar.IndexModel.DayNames) { <div class="cal-head" role="columnheader">@name</div> }
+        @for (var i = 0; i < Model.Weeks * 7; i++)
+        {
+            var day = Model.GridStart.AddDays(i);
+            var items = Model.On(day);
+            var classes = "cal-day" + (day.Month != Model.Month.Month ? " other" : "") + (day == Model.Today ? " today" : "") + (i % 7 >= 5 ? " weekend" : "");
+            <div class="@classes" role="gridcell">
+                <a class="num" href="/Calendar/Event?date=@day.ToString("yyyy-MM-dd")" title="Termin am @day.ToString("dd.MM.yyyy") anlegen">@day.Day</a>
+                @foreach (var item in items.Take(4))
+                {
+                    <a class="cal-event@(item.Occurrence.AllDay ? " all-day" : "")" href="@item.EditUrl" style="--cal: @(item.Calendar.Color ?? "var(--accent)")"
+                       title="@Mailserver.Web.Pages.Calendar.IndexModel.Range(item) @item.Occurrence.Summary@(item.Occurrence.Location is null ? "" : " · " + item.Occurrence.Location)">
+                        @if (!item.Occurrence.AllDay) { <span class="t">@Mailserver.Web.Pages.Calendar.IndexModel.Time(item)</span> }
+                        <span class="s">@item.Occurrence.Summary</span>
+                    </a>
+                }
+                @if (items.Count > 4) { <span class="more small muted">+@(items.Count - 4) weitere</span> }
+            </div>
+        }
+    </div>
+}
+
+@* On the phone the month grid is too small to read: the month as a list. *@
+<div class="cal-agenda">
+    @{ var any = false; }
+    @for (var day = Model.Month; day.Month == Model.Month.Month; day = day.AddDays(1))
+    {
+        var items = Model.On(day);
+        if (items.Count == 0) { continue; }
+        any = true;
+        <h3 class="@(day == Model.Today ? "today" : "")">@Mailserver.Web.Pages.Calendar.IndexModel.DayNames[((int)day.DayOfWeek + 6) % 7], @day.ToString("dd.MM.")</h3>
+        <ul class="panel">
+            @foreach (var item in items)
+            {
+                <li><a href="@item.EditUrl"><span class="dot" style="background: @(item.Calendar.Color ?? "var(--accent)")"></span>
+                    <span class="when small muted">@Mailserver.Web.Pages.Calendar.IndexModel.Range(item)</span>
+                    <span class="what">@item.Occurrence.Summary@if (item.Occurrence.Location is not null) { <span class="muted small"> · @item.Occurrence.Location</span> }</span>
+                    @if (item.Occurrence.Repeats) { <span class="muted" title="wiederholt sich">@Icons.Get("refresh")</span> }</a></li>
+            }
+        </ul>
+    }
+    @if (!any) { <div class="card muted">Keine Termine in diesem Monat.</div> }
+</div>
