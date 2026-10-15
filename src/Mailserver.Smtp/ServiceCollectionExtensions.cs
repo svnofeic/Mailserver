@@ -100,6 +100,8 @@ public static class ServiceCollectionExtensions
         services.AddHostedService(sp => sp.GetRequiredService<DeliveryService>());
         services.AddHostedService<BackupService>();
         services.AddSingleton<Mailserver.Core.Storage.SearchIndex>();
+        services.AddSingleton<Mailserver.Core.Storage.Conversations>();
+        services.AddSingleton<Mailserver.Core.Accounts.AccountPrefs>();
         services.AddHostedService<SearchIndexer>();
         services.AddSingleton<Mailserver.Core.Data.AppState>();
         services.AddSingleton<Mailserver.AntiSpam.Diagnostics.StatusReport>();

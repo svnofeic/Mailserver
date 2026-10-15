@@ -55,7 +55,14 @@
                             data-confirm="@($"{name} leeren? Alle {Model.Total} Nachrichten werden endgültig gelöscht.")">@Icons.Get("trash") @name leeren</button>
                 }
                 <span class="grow"></span>
-                <span class="muted">@Model.Total Nachricht(en)</span>
+                @if (Model.Search is null && !Mailserver.Core.Storage.Conversations.FlatFolders.Contains(Model.Folder.Name))
+                {
+                    <button type="submit" asp-page-handler="Conversations" name="on" value="@(Model.ConversationsOn ? "false" : "true")"
+                            class="secondary icon-button@(Model.ConversationsOn ? " active-toggle" : "")"
+                            title="@(Model.ConversationsOn ? "Konversationen an – klicken, um jede Mail einzeln zu zeigen" : "Konversationen aus – klicken, um zusammengehörige Mails zu gruppieren")"
+                            aria-label="Konversationsansicht" aria-pressed="@(Model.ConversationsOn ? "true" : "false")">@Icons.Get("threads")</button>
+                }
+                <span class="muted">@Model.Total @(Model.Grouped ? "Konversation(en)" : "Nachricht(en)")</span>
             </div>
 
             @if (Model.Items.Count == 0)
@@ -67,15 +74,17 @@
                 <div class="table-wrap">
                     <table class="messages">
                         <tbody>
-                        @foreach (var item in Model.Items)
+                        @foreach (var row in Model.Items)
                         {
-                            <tr class="@(item.Seen ? "" : "unread")">
-                                <td class="sel"><input type="checkbox" name="uids" value="@item.Message.Uid" aria-label="Auswählen" /></td>
+                            var item = row.Item;
+                            <tr class="@(row.Unread ? "unread" : "")">
+                                <td class="sel"><input type="checkbox" name="uids" value="@row.Uids" aria-label="Auswählen" /></td>
                                 @{ var person = Model.ShowRecipients ? item.Summary.To : item.Summary.From; }
-                                <td class="from"><span class="sender"><span class="avatar @Avatars.Class(person)">@Avatars.Initials(person)</span><span>@person</span></span></td>
+                                <td class="from"><span class="sender"><span class="avatar @Avatars.Class(person)">@Avatars.Initials(person)</span><span>@person</span>
+                                    @if (row.Count > 1) { <span class="thread-count" title="@row.Count Nachrichten in dieser Konversation">@row.Count</span> }</span></td>
                                 <td class="subject">
                                     <a href="/Mail/Read?folder=@Uri.EscapeDataString(Model.Folder.Name)&uid=@item.Message.Uid">
-                                        @if (item.Flagged) { <span class="mark" title="markiert">@Icons.Get("star", "star")</span> }
+                                        @if (row.Flagged) { <span class="mark" title="markiert">@Icons.Get("star", "star")</span> }
                                         @if (item.Answered) { <span title="beantwortet">@Icons.Get("reply")</span> }
                                         <span class="text">@item.Summary.Subject</span>
                                         @if (item.Summary.HasAttachments) { <span title="Anhang">@Icons.Get("paperclip")</span> }
@@ -113,7 +122,7 @@
                     }
                 </span>
                 @if (Model.PageNumber + 1 < Model.PageCount) { <a class="button secondary" href="@Model.PageUrl(Model.PageNumber + 1)" rel="next">Ältere →</a> }
-                <span class="muted small">Seite @(Model.PageNumber + 1) von @Model.PageCount · @Model.Total Mails</span>
+                <span class="muted small">Seite @(Model.PageNumber + 1) von @Model.PageCount · @Model.Total @(Model.Grouped ? "Konversationen" : "Mails")</span>
                 @if (Model.PageCount > 7)
                 {
                     <form method="get" action="/Mail" class="jump">

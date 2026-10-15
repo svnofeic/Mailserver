@@ -62,7 +62,7 @@ darauf öffnet die Mail.
 
 | Seite | Inhalt |
 |---|---|
-| **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl („Alle“ wählt die ganze Seite), Seitenauswahl mit direkt anklickbaren Seitenzahlen und „Gehe zu Seite“, **Papierkorb/Spam leeren** mit einem Klick, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen (einzeln hinzufügen, hineinziehen, wieder entfernen; beim Weiterleiten einzelne Anhänge abwählen), Entwürfe, **Später senden**, **Wiedervorlage**, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
+| **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl („Alle“ wählt die ganze Seite), Seitenauswahl mit direkt anklickbaren Seitenzahlen und „Gehe zu Seite“, **Papierkorb/Spam leeren** mit einem Klick, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen (einzeln hinzufügen, hineinziehen, wieder entfernen; beim Weiterleiten einzelne Anhänge abwählen), Entwürfe, **Konversationsansicht**, **Später senden**, **Wiedervorlage**, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
 | **Adressbuch** | gespeicherte Kontakte und alle Adressen, an die geschrieben wurde; anlegen, Namen vergeben, löschen, vCard-Import (iPhone, Outlook, Google) und -Export. Daraus kommen die **Vorschläge beim Tippen** in An/Cc/Bcc. |
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
@@ -371,6 +371,14 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
   Weiterleitungen über dem Zitat (lässt sich je Adresse abschalten). Wählt man beim Schreiben einen anderen Absender,
   tauscht der Editor die Signatur aus. Das übliche Trennzeichen „-- “ wird automatisch davorgesetzt.
 - **Adressbuch:** Löschen eines Kontakts fragt vorher nach.
+- **Konversationen:** Antworten werden mit der Mail gruppiert, auf die sie antworten (über die Header „In-Reply-To“ und
+  „References“, wie bei Gmail oder Outlook; bei Mailprogrammen ohne diese Angaben über den Betreff „AW: …“ innerhalb von
+  60 Tagen). In der Liste steht jede Konversation einmal mit der neuesten Mail und der Zahl ihrer Nachrichten – eigene
+  Antworten aus „Gesendet“ mitgezählt. Aktionen wie Löschen, Verschieben oder Markieren gelten für alle Mails der
+  Konversation im Ordner. Beim Lesen stehen die älteren Nachrichten zugeklappt darüber, neuere darunter; ungelesene sind
+  aufgeklappt und gelten danach als gelesen. Der Knopf mit der Sprechblase rechts über der Liste schaltet die Ansicht für
+  das Postfach an oder aus (die Wahl gilt auf allen Geräten). Entwürfe, Papierkorb, Spam, „Geplant“ und Suchergebnisse
+  werden immer einzeln gezeigt; Mailprogramme über IMAP sehen die Ordner unverändert.
 - **Später senden:** Beim Schreiben neben „Senden“ einen Zeitpunkt wählen (morgen 8:00, morgen 13:00, Montag 8:00 oder
   Datum und Uhrzeit). Die Nachricht wartet im Ordner „Geplant“ und wird zum Zeitpunkt vom Server gesendet – auch wenn
   niemand angemeldet ist, mit denselben Prüfungen wie beim direkten Senden (Absender, Versandlimit, Virenscan, DKIM,

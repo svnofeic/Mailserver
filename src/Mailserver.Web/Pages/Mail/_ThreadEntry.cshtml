@@ -1,0 +1,23 @@
+@model Mailserver.Web.Pages.Mail.ReadModel.ThreadEntry
+@{
+    var f = Uri.EscapeDataString(Model.Folder.Name);
+    var uid = Model.Message.Uid;
+    var body = $"/Mail/Body?folder={f}&uid={uid}&images=0";
+    var person = Model.Folder.Name is "Sent" or "Drafts" ? "an " + Model.Summary.To : Model.Summary.From;
+}
+<details class="thread-item card" open="@Model.Open">
+    <summary>
+        <span class="avatar @Avatars.Class(Model.Summary.From)">@Avatars.Initials(Model.Summary.From)</span>
+        <span class="thread-from">@Model.Summary.From @if (Model.Folder.Name is "Sent" or "Drafts") { <span class="muted small">@person</span> }</span>
+        @if (Model.Folder.Name != "INBOX") { <span class="pill small">@Format.FolderName(Model.Folder.Name)</span> }
+        @if (Model.Summary.HasAttachments) { <span title="Anhang">@Icons.Get("paperclip")</span> }
+        <span class="date small muted">@Format.Time(Model.Message.InternalDate)</span>
+    </summary>
+    <iframe class="mailbody thread-frame" title="Nachricht von @Model.Summary.From" src="@(Model.Open ? body : null)" data-src="@body"
+            sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+    <div class="row small thread-actions">
+        <a href="/Mail/Read?folder=@f&uid=@uid">Öffnen</a>
+        <a href="/Mail/Compose?mode=reply&folder=@f&uid=@uid">Antworten</a>
+        <a href="/Mail/Compose?mode=forward&folder=@f&uid=@uid">Weiterleiten</a>
+    </div>
+</details>

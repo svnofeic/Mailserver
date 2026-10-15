@@ -435,6 +435,32 @@ public sealed class Database
         );
         CREATE INDEX ix_follow_ups_due ON follow_ups (due_utc);
         """,
+        // Conversations: which messages belong together (Message-ID, References, In-Reply-To), and webmail preferences.
+        """
+        CREATE TABLE conversation_docs (
+            file_name   TEXT PRIMARY KEY,
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            thread_id   INTEGER NOT NULL,
+            message_id  TEXT,
+            subject_key TEXT NOT NULL,
+            date_utc    TEXT NOT NULL
+        );
+        CREATE INDEX ix_conversation_docs_thread ON conversation_docs (thread_id);
+        CREATE INDEX ix_conversation_docs_subject ON conversation_docs (account_id, subject_key, date_utc);
+        CREATE TABLE conversation_ids (
+            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            message_id TEXT NOT NULL,
+            thread_id  INTEGER NOT NULL,
+            PRIMARY KEY (account_id, message_id)
+        ) WITHOUT ROWID;
+        CREATE INDEX ix_conversation_ids_thread ON conversation_ids (thread_id);
+        CREATE TABLE account_prefs (
+            account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            name       TEXT NOT NULL,
+            value      TEXT NOT NULL,
+            PRIMARY KEY (account_id, name)
+        ) WITHOUT ROWID;
+        """,
     ];
 
     private readonly string _connectionString;

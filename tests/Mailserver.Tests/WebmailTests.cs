@@ -286,7 +286,7 @@ public sealed class WebmailTests : IAsyncLifetime
     [InlineData(19, 20, "1 … 18 19 20")]
     public void Page_links(int current, int pages, string expected)
     {
-        var model = new Mailserver.Web.Pages.Mail.IndexModel(null!, null!);
+        var model = new Mailserver.Web.Pages.Mail.IndexModel(null!, null!, null!, null!);
         typeof(Mailserver.Web.Pages.Mail.IndexModel).GetProperty("PageNumber")!.SetValue(model, current);
         typeof(Mailserver.Web.Pages.Mail.IndexModel).GetProperty("Total")!.SetValue(model, pages * Mailserver.Web.Pages.Mail.IndexModel.PageSize);
         Assert.Equal(expected, string.Join(' ', model.PageLinks().Select(p => p is { } n ? (n + 1).ToString() : "…")));

@@ -4,8 +4,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Mailserver.Smtp;
 
-/// <summary>Keeps the search index up to date: new messages every minute, deleted ones once an hour.</summary>
-public sealed class SearchIndexer(SearchIndex index, ILogger<SearchIndexer> logger) : BackgroundService
+/// <summary>
+/// Keeps the search index and the conversations up to date: new messages every minute, deleted ones once an hour.
+/// </summary>
+public sealed class SearchIndexer(SearchIndex index, Conversations conversations, ILogger<SearchIndexer> logger) : BackgroundService
 {
     private const int BatchSize = 200;
 
@@ -22,7 +24,8 @@ public sealed class SearchIndexer(SearchIndex index, ILogger<SearchIndexer> logg
                 int indexed;
                 do
                 {
-                    indexed = await index.IndexPendingAsync(BatchSize, cancellationToken: stoppingToken);
+                    indexed = Math.Max(await index.IndexPendingAsync(BatchSize, cancellationToken: stoppingToken),
+                        await conversations.IndexPendingAsync(BatchSize, cancellationToken: stoppingToken));
                     total += indexed;
                     // The first run after an update indexes every mail; short pauses keep the server responsive meanwhile.
                     await Task.Delay(TimeSpan.FromMilliseconds(500), stoppingToken);
@@ -37,6 +40,7 @@ public sealed class SearchIndexer(SearchIndex index, ILogger<SearchIndexer> logg
                 if (DateTimeOffset.UtcNow - lastCleanup > TimeSpan.FromHours(1))
                 {
                     index.RemoveStale();
+                    conversations.RemoveStale();
                     lastCleanup = DateTimeOffset.UtcNow;
                 }
             }

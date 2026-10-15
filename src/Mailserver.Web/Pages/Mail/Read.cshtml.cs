@@ -1,3 +1,4 @@
+using Mailserver.Core.Accounts;
 using Mailserver.Core.Storage;
 using Mailserver.Web.Webmail;
 using Microsoft.AspNetCore.Mvc;
@@ -5,8 +6,17 @@ using MimeKit;
 
 namespace Mailserver.Web.Pages.Mail;
 
-public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailActions actions, FollowUps followUps) : MailPageModel
+public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailActions actions, FollowUps followUps,
+    Conversations conversations, AccountPrefs prefs) : MailPageModel
 {
+    /// <summary>Another message of the conversation; <paramref name="Open"/> if it was unread (shown expanded, like in Gmail).</summary>
+    public sealed record ThreadEntry(Folder Folder, StoredMessage Message, MessageSummary Summary, bool Open);
+
+    /// <summary>The older messages of the conversation (above the opened one) and the newer ones (below).</summary>
+    public IReadOnlyList<ThreadEntry> Before { get; private set; } = [];
+    public IReadOnlyList<ThreadEntry> After { get; private set; } = [];
+    public int ThreadCount => Before.Count + After.Count + 1;
+
     public IReadOnlyList<(string Key, string Label)> FollowUpChoices => LaterChoices.FollowUp;
 
     /// <summary>"Wiedervorlage": the message leaves the folder and comes back unread at the chosen time.</summary>
@@ -48,7 +58,7 @@ public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailAc
     public string? SpamScore { get; private set; }
     public List<(string Name, string Type, long Size, bool Viewable)> Attachments { get; } = [];
 
-    public IActionResult OnGet(string folder, long uid, int images = 0)
+    public async Task<IActionResult> OnGetAsync(string folder, long uid, int images = 0, CancellationToken cancellationToken = default)
     {
         if (store.Folder(CurrentAccount.Id, folder) is not { } selected || store.Message(selected, uid) is not { } stored)
         {
@@ -71,8 +81,40 @@ public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailAc
             mailboxes.UpdateFlags(selected.Id, [uid], FlagOperation.Add, [MessageFlags.Seen]);
         }
 
+        if (prefs.GetBool(CurrentAccount.Id, AccountPrefs.Conversations, true) && !Conversations.FlatFolders.Contains(selected.Name))
+        {
+            await conversations.IndexPendingAsync(200, CurrentAccount.Id, cancellationToken);
+            LoadThread(selected, stored);
+        }
+
         Folders = store.Folders(CurrentAccount.Id);
         return Page();
+    }
+
+    private void LoadThread(Folder selected, StoredMessage stored)
+    {
+        var thread = conversations.Thread(CurrentAccount.Id, selected, stored);
+        var position = thread.ToList().FindIndex(t => t.Message.Id == stored.Id);
+        if (thread.Count < 2 || position < 0)
+        {
+            return;
+        }
+
+        var entries = new List<ThreadEntry>();
+        foreach (var (folder, message) in thread)
+        {
+            var unread = !message.HasFlag(MessageFlags.Seen) && message.Id != stored.Id;
+            if (unread && folder.Name is not ("Drafts" or "Sent"))
+            {
+                // Opening the conversation reads it as a whole.
+                mailboxes.UpdateFlags(folder.Id, [message.Uid], FlagOperation.Add, [MessageFlags.Seen]);
+            }
+
+            entries.Add(new ThreadEntry(folder, message, store.Summary(message), unread));
+        }
+
+        Before = entries.Take(position).ToList();
+        After = entries.Skip(position + 1).ToList();
     }
 
     public IActionResult OnPostAction(string folder, long uid, string op, string? target)

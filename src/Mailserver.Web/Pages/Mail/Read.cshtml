@@ -58,6 +58,11 @@
             </form>
         </div>
 
+        @if (Model.ThreadCount > 1)
+        {
+            <div class="thread-head small muted">@Icons.Get("threads") Konversation · @Model.ThreadCount Nachrichten</div>
+            @foreach (var entry in Model.Before) { <partial name="_ThreadEntry" model="entry" /> }
+        }
         <div class="card">
             <h1 style="margin-top: 0">@Model.Subject</h1>
             <dl class="headers">
@@ -105,5 +110,6 @@
             </tbody></table></div>
         }
         <p class="small"><a href="/Mail/Attachment?folder=@f&uid=@uid&source=1">Quelltext herunterladen (.eml)</a></p>
+        @foreach (var entry in Model.After) { <partial name="_ThreadEntry" model="entry" /> }
     </section>
 </div>

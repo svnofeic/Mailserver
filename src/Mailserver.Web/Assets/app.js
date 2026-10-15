@@ -20,6 +20,12 @@ document.querySelectorAll('[data-select-all]').forEach(all => {
     });
 });
 
+// Conversation: the text of a collapsed message is only loaded when it is opened.
+document.querySelectorAll('details.thread-item').forEach(item => item.addEventListener('toggle', () => {
+    const frame = item.querySelector('iframe[data-src]');
+    if (item.open && frame && !frame.getAttribute('src')) frame.src = frame.dataset.src;
+}));
+
 // Buttons that destroy data ask first.
 document.querySelectorAll('[data-confirm]').forEach(button => button.addEventListener('click', event => {
     if (!confirm(button.dataset.confirm)) event.preventDefault();
