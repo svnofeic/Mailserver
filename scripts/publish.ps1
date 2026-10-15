@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds a self-contained Windows package (no .NET installation needed on the server).
 .EXAMPLE
@@ -19,4 +19,4 @@ foreach ($project in 'Mailserver.Service', 'Mailserver.Admin') {
     if ($LASTEXITCODE -ne 0) { throw "Publishing $project failed." }
 }
 
-Write-Host "Package ready in $Output — copy it to the server and run scripts\install.ps1 there."
+Write-Host "Package ready in $Output - copy it to the server and run scripts\install.ps1 there."

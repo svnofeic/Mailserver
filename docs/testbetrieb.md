@@ -153,8 +153,18 @@ C:\Mailserver\update.ps1
 ```
 
 Das Skript lädt das neueste Paket, vergleicht die Version (`C:\Mailserver\version.txt`), stoppt den Dienst, ersetzt die
-Programmdateien, behält `appsettings.json` und den Ordner `data` und startet den Dienst wieder, falls er lief.
-Läuft der Server im Konsolenfenster, dieses vorher mit `Strg+C` beenden. Die laufende Version steht in der
+Programmdateien, behält `appsettings.json` und den Ordner `data` und startet den Dienst wieder. Im Einzelnen:
+
+- Es wartet bis zu 2 Minuten, bis der Dienst angehalten hat, und dann, bis `Mailserver.exe` wirklich beendet ist (sonst sind
+  die Dateien noch gesperrt); hängt der Prozess, wird er beendet.
+- Die bisherigen Programmdateien werden vorher gesichert. Schlägt das Kopieren fehl (z. B. weil ein Virenscanner eine Datei
+  festhält – gesperrte Dateien werden mehrmals versucht), wird die alte Version zurückgespielt.
+- Danach läuft der Dienst in jedem Fall wieder – auch wenn ein früheres, abgebrochenes Update ihn gestoppt zurückgelassen
+  hat (nur nicht, wenn er deaktiviert ist). Zum Schluss prüft das Skript, ob die Weboberfläche antwortet, und zeigt
+  sonst die letzten Fehler aus dem Ereignisprotokoll.
+- Jeder Lauf wird in `C:\Mailserver\logs\update-<Datum>.log` protokolliert – bei Problemen bitte diese Datei ansehen.
+
+Läuft der Server oder `mailadmin` in einem Konsolenfenster, dieses vorher beenden. Die laufende Version steht in der
 Weboberfläche unten in der Seitenleiste.
 
 **Beim ersten Mal** gibt es `update.ps1` noch nicht im Installationsordner – dann einmalig:

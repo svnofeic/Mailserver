@@ -16,6 +16,13 @@ dataPaths.EnsureCreated();
 builder.Configuration.AddJsonFile(dataPaths.SettingsFile, optional: true, reloadOnChange: true);
 
 builder.Services.AddWindowsService(options => options.ServiceName = "Mailserver");
+// Stopping (e.g. for an update) must not take longer than Windows waits: all parts stop at the same time, and whatever is
+// still busy after 20 seconds (a delivery, an IMAP fetch at another provider) is abandoned and done again after the start.
+builder.Services.Configure<HostOptions>(host =>
+{
+    host.ShutdownTimeout = TimeSpan.FromSeconds(20);
+    host.ServicesStopConcurrently = true;
+});
 builder.Services.AddMailserver(builder.Configuration);
 builder.Services.AddImapServer();
 builder.AddMailserverWeb();

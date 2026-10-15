@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Downloads the newest package from GitHub and installs it (stops and restarts the service).
     Run in an elevated PowerShell on the server.
