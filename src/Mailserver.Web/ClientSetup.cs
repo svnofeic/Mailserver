@@ -144,20 +144,58 @@ public static class ClientSetup
                   <key>OutgoingMailServerUsername</key><string>{address}</string>
                   <key>OutgoingPasswordSameAsIncomingPassword</key><true/>
                   <key>SMIMEEnabled</key><false/>
-                </dict>
+                </dict>{DavPayloads(options, account, id)}
               </array>
               <key>PayloadType</key><string>Configuration</string>
               <key>PayloadVersion</key><integer>1</integer>
               <key>PayloadIdentifier</key><string>{Escape(id)}</string>
               <key>PayloadUUID</key><string>{uuid.ToString().ToUpperInvariant()}</string>
               <key>PayloadDisplayName</key><string>E-Mail {address}</string>
-              <key>PayloadDescription</key><string>Richtet das Postfach {address} in der Mail-App ein. Das Passwort wird bei der Installation abgefragt.</string>
+              <key>PayloadDescription</key><string>Richtet das Postfach {address} in der Mail-App ein{(HasDav(options) ? ", dazu Kalender und Kontakte" : "")}. Das Passwort wird bei der Installation abgefragt.</string>
               <key>PayloadOrganization</key><string>{host}</string>
               <key>PayloadRemovalDisallowed</key><false/>
             </dict>
             </plist>
 
             """;
+    }
+
+    private static bool HasDav(MailserverOptions options) => options.Web.Enabled && options.Web.HttpsPort > 0;
+
+    /// <summary>Calendar (CalDAV) and contacts (CardDAV) accounts for the profile, when the web interface runs with HTTPS.</summary>
+    private static string DavPayloads(MailserverOptions options, Account account, string id)
+    {
+        if (!HasDav(options))
+        {
+            return "";
+        }
+
+        var address = Escape(account.Address.ToString());
+        var host = Escape(options.Hostname);
+        var principal = Escape($"{Dav.DavHandler.Root}principals/{account.Address}/");
+        string Payload(string kind, string type, string description)
+        {
+            var uuid = new Guid(System.Security.Cryptography.MD5.HashData(Encoding.UTF8.GetBytes($"{id}.{kind}")));
+            var prefix = kind == "caldav" ? "CalDAV" : "CardDAV";
+            return $"""
+
+                    <dict>
+                      <key>PayloadType</key><string>{type}</string>
+                      <key>PayloadVersion</key><integer>1</integer>
+                      <key>PayloadIdentifier</key><string>{Escape(id)}.{kind}</string>
+                      <key>PayloadUUID</key><string>{uuid.ToString().ToUpperInvariant()}</string>
+                      <key>PayloadDisplayName</key><string>{description} {address}</string>
+                      <key>{prefix}AccountDescription</key><string>{description} {address}</string>
+                      <key>{prefix}HostName</key><string>{host}</string>
+                      <key>{prefix}Port</key><integer>{options.Web.HttpsPort}</integer>
+                      <key>{prefix}PrincipalURL</key><string>{principal}</string>
+                      <key>{prefix}UseSSL</key><true/>
+                      <key>{prefix}Username</key><string>{address}</string>
+                    </dict>
+                """;
+        }
+
+        return Payload("caldav", "com.apple.caldav.account", "Kalender") + Payload("carddav", "com.apple.carddav.account", "Kontakte");
     }
 
     /// <summary>

@@ -13,7 +13,7 @@
     <ol class="small" style="padding-left: 20px; margin-bottom: 0">
         <li>Diese Seite in <strong>Safari</strong> öffnen (nicht in der App vom Home-Bildschirm) und auf den Knopf tippen → „Zulassen“.</li>
         <li><strong>Einstellungen</strong> öffnen → oben „Profil geladen“ (bzw. Allgemein → VPN und Geräteverwaltung) → <strong>Installieren</strong>.</li>
-        <li>Das Passwort des Postfachs eingeben – fertig. Das Postfach erscheint in der Mail-App.</li>
+        <li>Das Passwort des Postfachs eingeben – fertig. Das Postfach erscheint in der Mail-App@(s.Web.HttpsPort > 0 ? ", die Kalender in der Kalender-App und das Adressbuch in Kontakte (das Passwort wird dafür je einmal abgefragt)" : "").</li>
     </ol>
     <p class="small muted" style="margin-bottom: 0">Auf dem Mac: Datei doppelklicken, dann Systemeinstellungen → Allgemein → Geräteverwaltung (bzw. Profile).
         Das Profil enthält kein Passwort; erneutes Installieren ersetzt es.</p>
@@ -31,6 +31,20 @@
     </dl>
     <p class="small muted" style="margin-bottom: 0">Die Zwei-Faktor-Anmeldung gilt nur für diese Weboberfläche – Mailprogramme melden sich weiter mit dem Passwort an.</p>
 </div>
+
+@if (s.Web.HttpsPort > 0)
+{
+    <h2>@Icons.Get("calendar") Kalender und Kontakte</h2>
+    <div class="card">
+        <p class="small muted" style="margin-top: 0">Kalender (CalDAV) und Adressbuch (CardDAV) gleichen sich mit dem iPhone, dem Mac, Thunderbird und Android (App DAVx⁵) ab.</p>
+        <dl class="headers">
+            <dt>Server</dt><dd><strong>@Mailserver.Web.Dav.DavHandler.ServerUrl(s)</strong></dd>
+            <dt>Benutzername</dt><dd><strong>@Model.CurrentAddress</strong></dd>
+            <dt>Passwort</dt><dd>das Passwort dieses Postfachs</dd>
+        </dl>
+        <p class="small muted" style="margin-bottom: 0">Mehr dazu unter <a href="/Calendar/Calendars">Kalender verwalten</a>.</p>
+    </div>
+}
 
 @if (Model.IsAdmin)
 {

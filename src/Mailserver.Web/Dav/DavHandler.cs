@@ -27,7 +27,7 @@ namespace Mailserver.Web.Dav;
 /// /dav/addressbooks/{address}/{slug}/…   the same for address books (.vcf)
 /// </code>
 /// </summary>
-public sealed class DavHandler(DavStore store, AccountStore accounts, AuthThrottle throttle, Mailserver.Core.SpamLogging.SpamLog spamLog,
+public sealed class DavHandler(DavStore store, ContactCards contactCards, AccountStore accounts, AuthThrottle throttle, Mailserver.Core.SpamLogging.SpamLog spamLog,
     ILogger<DavHandler> logger)
 {
     public const string Root = "/dav/";
@@ -110,7 +110,7 @@ public sealed class DavHandler(DavStore store, AccountStore accounts, AuthThrott
                     await PutAsync(context, account, target);
                     break;
                 case "DELETE":
-                    Delete(context, target);
+                    Delete(context, account, target);
                     break;
                 case "MKCALENDAR" or "MKCOL":
                     await MakeCollectionAsync(context, account, target);
@@ -254,6 +254,12 @@ public sealed class DavHandler(DavStore store, AccountStore accounts, AuthThrott
         if (type == "principal")
         {
             return segments.Count == 2 ? new Target(Kind.Principal) : null;
+        }
+
+        if (type == DavStore.AddressBook)
+        {
+            // Contacts saved in the web interface before (or without) an address book get their vCards first.
+            contactCards.EnsureCards(account.Id);
         }
 
         if (segments.Count == 2)
@@ -865,11 +871,16 @@ public sealed class DavHandler(DavStore store, AccountStore accounts, AuthThrott
             return;
         }
 
+        if (target.Type == DavStore.AddressBook)
+        {
+            contactCards.Changed(account.Id, target.Collection, stored.Href, stored.Data);
+        }
+
         response.Headers.ETag = stored.ETag;
         response.StatusCode = existing is null ? StatusCodes.Status201Created : StatusCodes.Status204NoContent;
     }
 
-    private void Delete(HttpContext context, Target target)
+    private void Delete(HttpContext context, Account account, Target target)
     {
         var response = context.Response;
         switch (target)
@@ -883,10 +894,20 @@ public sealed class DavHandler(DavStore store, AccountStore accounts, AuthThrott
                 }
 
                 store.Delete(target.Collection!.Id, item.Href);
+                if (target.Type == DavStore.AddressBook)
+                {
+                    contactCards.Changed(account.Id, target.Collection, item.Href, null);
+                }
+
                 response.StatusCode = StatusCodes.Status204NoContent;
                 return;
             case { Kind: Kind.Collection, Collection: { } collection }:
                 store.DeleteCollection(collection.Id);
+                if (collection.Kind == DavStore.AddressBook)
+                {
+                    contactCards.BookDeleted(account.Id, collection.Id);
+                }
+
                 response.StatusCode = StatusCodes.Status204NoContent;
                 return;
             case { Kind: Kind.Object or Kind.Collection }:

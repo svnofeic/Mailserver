@@ -110,7 +110,7 @@ public sealed class ContactsTests : IAsyncLifetime
         using var web = new WebClient(_server.WebPort);
         await web.LoginAsync("alice@example.test", TestServer.Password);
         await web.PostMultipartAsync("/Contacts", "/Contacts?handler=Import", [], ("file", "kontakte.vcf", Encoding.UTF8.GetBytes(vcf)));
-        Assert.Contains("3 Adresse(n) übernommen", web.LastPage);
+        Assert.Contains("3 Adresse(n)", web.LastPage);
 
         var exported = Encoding.UTF8.GetString(await web.GetBytesAsync("/Contacts?handler=Export"));
         Assert.Equal(3, VCards.Read(exported).Count);

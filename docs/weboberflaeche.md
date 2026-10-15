@@ -63,7 +63,8 @@ darauf öffnet die Mail.
 | Seite | Inhalt |
 |---|---|
 | **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl („Alle“ wählt die ganze Seite), Seitenauswahl mit direkt anklickbaren Seitenzahlen und „Gehe zu Seite“, **Papierkorb/Spam leeren** mit einem Klick, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen (einzeln hinzufügen, hineinziehen, wieder entfernen; beim Weiterleiten einzelne Anhänge abwählen), Entwürfe, **Konversationsansicht**, **Später senden**, **Wiedervorlage**, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
-| **Adressbuch** | gespeicherte Kontakte und alle Adressen, an die geschrieben wurde; anlegen, Namen vergeben, löschen, vCard-Import (iPhone, Outlook, Google) und -Export. Daraus kommen die **Vorschläge beim Tippen** in An/Cc/Bcc. |
+| **Kalender** | Monatsansicht aller Kalender (am Handy als Liste), Termine anlegen, ändern, in einen anderen Kalender verschieben und löschen – ganztägig, mit Wiederholung und Erinnerung. *Kalender verwalten*: weitere Kalender mit Farbe, Import (.ics, z. B. aus Google) und Export. Abgleich mit iPhone, Mac, Thunderbird und Android (siehe unten). |
+| **Adressbuch** | gespeicherte Kontakte und alle Adressen, an die geschrieben wurde; anlegen, Namen vergeben, löschen, vCard-Import (iPhone, Outlook, Google) und -Export. Daraus kommen die **Vorschläge beim Tippen** in An/Cc/Bcc. Gespeicherte Kontakte gleichen sich mit dem Handy ab (CardDAV). |
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
 | **Spam-Verlauf** | jede Mail von außen mit Spam-Score, Ergebnis (Posteingang, Spam, gelöscht), greifender Regel und den einzelnen Tests. Ein Klick auf **„Absender erlauben“** bzw. **„Als Spam einstufen“** legt sofort eine passende Regel an. |
@@ -154,7 +155,7 @@ allein reicht dann nicht mehr.
 Unter **Einrichtung** gibt es:
 
 - **iPhone, iPad, Mac:** „Profil laden“ in **Safari** antippen (nicht in der App vom Home-Bildschirm), dann *Einstellungen →
-  Profil geladen → Installieren* und das Passwort eingeben. Das Profil enthält kein Passwort und ist mit dem Zertifikat des
+  Profil geladen → Installieren* und das Passwort eingeben (für Mail, Kalender und Kontakte je einmal). Das Profil enthält kein Passwort und ist mit dem Zertifikat des
   Servers signiert („Überprüft“). Erneutes Installieren ersetzt es.
 - **Alle anderen:** Server, Ports und Benutzername zum Abtippen.
 
@@ -168,6 +169,34 @@ Automatische Erkennung für die Administratoren (wird auf der Seite für Admins 
   `https://<domain>/.well-known/autoconfig/mail/config-v1.1.xml` – auf Port 443, den der IIS belegt. Die Seite bietet die
   Datei je Domain zum Herunterladen an; in Plesk im Dateimanager der Website unter `.well-known/autoconfig/mail/` ablegen.
   Ohne die Datei probiert Thunderbird `mail.<domain>` mit den üblichen Ports durch – das klappt meist ebenfalls.
+
+## Kalender und Kontakte (CalDAV/CardDAV)
+
+Der Mailserver ist auch Kalender- und Kontakteserver. Programme melden sich mit Adresse und Passwort des Postfachs an
+(wie beim Mailabruf; die Zwei-Faktor-Anmeldung gilt nur für die Weboberfläche), unter
+
+    https://mail.feicht.me:9443/dav/
+
+- **iPhone, iPad, Mac:** Das Profil unter *Einrichtung* enthält Mail, Kalender und Kontakte; bei der Installation wird das
+  Passwort je Konto einmal abgefragt. Von Hand: *Einstellungen → Kalender (bzw. Kontakte) → Accounts → Account hinzufügen →
+  Andere → CalDAV- bzw. CardDAV-Account*, Server `mail.feicht.me:9443`.
+- **Thunderbird:** *Kalender → Neuer Kalender → Im Netzwerk*, Adresse wie oben; Adressbücher genauso (Thunderbird findet
+  beide über `/.well-known/caldav` und `/.well-known/carddav`).
+- **Android:** App **DAVx⁵** → *Mit URL und Benutzername anmelden*.
+- **Outlook (Windows)** kann CalDAV nicht von sich aus; mit dem kostenlosen Zusatz *CalDav Synchronizer* geht es.
+
+Was wo landet:
+
+- Termine und Aufgaben vom Handy erscheinen im Webmail-Kalender und umgekehrt. Ändert man im Webmail einen Termin vom
+  iPhone, bleiben Teilnehmer, weitere Erinnerungen und einzeln geänderte Termine einer Serie erhalten.
+- Kalender lassen sich auf dem Handy oder im Webmail anlegen und löschen. Uhrzeiten im Webmail gelten in der Zeitzone des
+  Servers; Serientermine behalten ihre Uhrzeit auch über die Zeitumstellung.
+- Kontakte vom Handy (mit Telefonnummern, Anschrift, Foto) werden vollständig gespeichert; ihre E-Mail-Adressen erscheinen
+  im Adressbuch und in den Vorschlägen beim Schreiben. Ändert oder löscht man einen Kontakt im Webmail, ändert sich nur
+  Name bzw. Adresse in der vCard – der Rest bleibt. Bisher gespeicherte Kontakte bekommen beim ersten Abgleich eine vCard.
+- Einladungen werden nicht vom Server verschickt: Termine mit Teilnehmern legt man am besten im Mailprogramm an, das die
+  Einladung selbst sendet.
+- Alles liegt in der Datenbank des Mailservers und ist damit in der täglichen Sicherung enthalten.
 
 ## DMARC-Berichte
 

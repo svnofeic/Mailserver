@@ -498,6 +498,12 @@ public sealed class Database
             PRIMARY KEY (collection_id, href)
         ) WITHOUT ROWID;
         """,
+        // Saved contacts belong to a vCard of an address book (CardDAV), so the phone and the web interface show the same.
+        """
+        ALTER TABLE contacts ADD COLUMN card_collection INTEGER;
+        ALTER TABLE contacts ADD COLUMN card_href TEXT;
+        CREATE INDEX ix_contacts_card ON contacts (card_collection, card_href);
+        """,
     ];
 
     private readonly string _connectionString;

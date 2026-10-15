@@ -193,6 +193,11 @@ public sealed class CalDavTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound,
             (await SendAsync("PUT", "/dav/calendars/alice@example.test/default/x.ics", Event("x", "20261020T080000Z", "x"), http: bob, contentType: "text/calendar")).Status);
 
+        // A password change ends access with the old password at once (no waiting for the login cache).
+        Assert.Equal((HttpStatusCode)207, (await SendAsync("PROPFIND", "/dav/", PropFind(D + "current-user-principal"), "0")).Status);
+        _server.HostAccounts.SetPassword(Mailserver.Core.EmailAddress.Parse("alice@example.test"), "ein ganz neues Passwort");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync("PROPFIND", "/dav/", PropFind(D + "current-user-principal"), "0")).Status);
+
         var options = await SendAsync("OPTIONS", "/dav/");
         Assert.Contains("calendar-access", options.Response.Headers.GetValues("DAV").Single());
     }

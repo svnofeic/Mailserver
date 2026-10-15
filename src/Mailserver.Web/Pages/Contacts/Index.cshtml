@@ -11,7 +11,8 @@
     </form>
 </div>
 <p class="small muted">Beim Schreiben schlägt die Weboberfläche Adressen von hier vor. Jede Adresse, an die Sie schreiben (auch aus Outlook oder vom iPhone),
-    kommt automatisch dazu; Kontakte können Sie auch selbst anlegen und einen Namen vergeben.</p>
+    kommt automatisch dazu; Kontakte können Sie auch selbst anlegen und einen Namen vergeben. Gespeicherte Kontakte gleichen sich mit dem iPhone,
+    dem Mac und Android ab (CardDAV, siehe <a href="/Account/Setup">Einrichtung</a>) – dort angelegte Kontakte erscheinen hier und in den Vorschlägen.</p>
 
 <p class="small">@if (Model.SavedOnly) { <a href="/Contacts?q=@Uri.EscapeDataString(Model.Q ?? "")">Alle anzeigen</a> <span class="muted">· nur gespeicherte</span> }
     else { <span class="muted">Alle ·</span> <a href="/Contacts?savedOnly=true&q=@Uri.EscapeDataString(Model.Q ?? "")">nur gespeicherte</a> }</p>
@@ -63,7 +64,7 @@ else
         <label class="file-pick grow">vCard-Datei (.vcf)<input type="file" name="file" accept=".vcf,text/vcard" required /></label>
         <button type="submit" class="secondary">Importieren</button>
     </form>
-    <p style="margin: 12px 0 0"><a class="button secondary" href="?handler=Export">Gespeicherte Kontakte exportieren (.vcf)</a></p>
+    <p style="margin: 12px 0 0"><a class="button secondary" href="?handler=Export">Kontakte exportieren (.vcf)</a></p>
     <p class="small muted" style="margin-bottom: 0">Export aus dem iPhone/Mac: Kontakte-App → Kontakte auswählen → Exportieren als vCard; aus Outlook oder Google
-        Kontakte ebenfalls als vCard. Übernommen werden Namen und E-Mail-Adressen.</p>
+        Kontakte ebenfalls als vCard. Die Kontakte werden vollständig übernommen (auch Telefonnummern, für das Handy); hier erscheinen Namen und E-Mail-Adressen.</p>
 </div>

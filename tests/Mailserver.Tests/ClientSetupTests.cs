@@ -76,6 +76,11 @@ public sealed class ClientSetupTests : IAsyncLifetime
         Assert.Equal("alice@example.test", Value("IncomingMailServerUsername"));
         Assert.Equal(_server.ImapsPort.ToString(), Value("IncomingMailServerPortNumber"));
         Assert.DoesNotContain("<key>IncomingPassword</key>", text);
+        // Calendar and contacts come with it.
+        var caldav = plist.Descendants("dict").First(d => d.Elements("string").Any(s => s.Value == "com.apple.caldav.account"));
+        Assert.Contains("/dav/principals/alice@example.test/", caldav.ToString());
+        Assert.Contains(_server.WebPort.ToString(), caldav.ToString());
+        Assert.Contains(plist.Descendants("string"), s => s.Value == "com.apple.carddav.account");
         Assert.DoesNotContain(TestServer.Password, text);
 
         // Not signed in: no profile.
