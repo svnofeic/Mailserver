@@ -93,6 +93,8 @@ public static class WebHosting
         services.AddSingleton<Webmail.WebmailSender>();
         services.AddSingleton<Webmail.MailActions>();
         services.AddSingleton<Webmail.FolderManager>();
+        services.AddSingleton<Webmail.ScheduledMailService>();
+        services.AddHostedService(sp => sp.GetRequiredService<Webmail.ScheduledMailService>());
         services.AddAuthorizationBuilder().AddPolicy(AdminPolicy, policy => policy.RequireClaim(AdminClaim, "true"));
         services.AddAntiforgery(antiforgery =>
         {

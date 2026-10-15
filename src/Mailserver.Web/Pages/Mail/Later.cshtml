@@ -1,0 +1,78 @@
+@page
+@model Mailserver.Web.Pages.Mail.LaterModel
+@{ ViewData["Title"] = "Geplant & Wiedervorlage"; }
+<div class="mail">
+    <aside>
+        <a class="button" href="/Mail/Compose">@Icons.Get("pencil") Neue Mail</a>
+        <partial name="_Folders" model="(Model.Folders, string.Empty)" />
+    </aside>
+    <section>
+        <h1>Geplant &amp; Wiedervorlage</h1>
+
+        <h2>@Icons.Get("send") Später senden</h2>
+        @if (Model.Scheduled.Count == 0)
+        {
+            <div class="card small muted">Keine geplanten Nachrichten. Beim Schreiben unter „Später senden“ einen Zeitpunkt wählen.</div>
+        }
+        else
+        {
+            <ul class="contact-list panel">
+                @foreach (var entry in Model.Scheduled)
+                {
+                    <li>
+                        <span class="avatar @Avatars.Class(entry.Summary.To)">@Avatars.Initials(entry.Summary.To)</span>
+                        <div class="person">
+                            <div class="name" title="@entry.Summary.Subject">@entry.Summary.Subject</div>
+                            <div class="address">an @entry.Summary.To</div>
+                            <div class="meta small">@if (entry.Error is not null) { <span class="pill bad">nicht gesendet</span> <span>@entry.Error</span> }
+                                else { <span class="pill">@Format.Time(entry.When)</span> }</div>
+                        </div>
+                        <div class="actions">
+                            <form method="post" asp-page-handler="SendNow" asp-route-id="@entry.Id" class="inline">
+                                <button type="submit" class="secondary" title="Jetzt senden" aria-label="Jetzt senden">@Icons.Get("send")</button></form>
+                            <a class="button secondary" href="/Mail/Compose?mode=draft&folder=@Uri.EscapeDataString(entry.Folder.Name)&uid=@entry.Message.Uid" title="Bearbeiten" aria-label="Bearbeiten">@Icons.Get("pencil")</a>
+                            @if (entry.Error is not null)
+                            {
+                                <form method="post" asp-page-handler="Retry" asp-route-id="@entry.Id" class="inline">
+                                    <button type="submit" class="secondary" title="Erneut versuchen" aria-label="Erneut versuchen">@Icons.Get("refresh")</button></form>
+                            }
+                            <form method="post" asp-page-handler="Cancel" asp-route-id="@entry.Id" class="inline">
+                                <button type="submit" class="secondary" title="Nicht senden (in die Entwürfe)" aria-label="Nicht senden"
+                                        data-confirm="Nicht senden? Die Nachricht wird in die Entwürfe verschoben.">@Icons.Get("x-circle")</button></form>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+
+        <h2>@Icons.Get("clock") Wiedervorlage</h2>
+        @if (Model.Reminders.Count == 0)
+        {
+            <div class="card small muted">Keine Wiedervorlagen. Beim Lesen einer Mail unter „Wiedervorlage“ einen Zeitpunkt wählen – sie verschwindet dann bis dahin
+                aus dem Posteingang und kommt ungelesen zurück.</div>
+        }
+        else
+        {
+            <ul class="contact-list panel">
+                @foreach (var entry in Model.Reminders)
+                {
+                    <li>
+                        <span class="avatar @Avatars.Class(entry.Summary.From)">@Avatars.Initials(entry.Summary.From)</span>
+                        <div class="person">
+                            <div class="name"><a href="/Mail/Read?folder=@Uri.EscapeDataString(entry.Folder.Name)&uid=@entry.Message.Uid">@entry.Summary.Subject</a></div>
+                            <div class="address">von @entry.Summary.From</div>
+                            <div class="meta small"><span class="pill">@Format.Time(entry.When)</span> zurück nach „@Format.FolderName(entry.ReturnFolder)“</div>
+                        </div>
+                        <div class="actions">
+                            <form method="post" asp-page-handler="BringBack" asp-route-id="@entry.Id" class="inline">
+                                <button type="submit" class="secondary">Jetzt zurückholen</button></form>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+        <p class="small muted">Geplante Nachrichten liegen im Ordner „@Mailserver.Core.Storage.FollowUps.ScheduledFolder“, Wiedervorlagen im Ordner
+            „@Mailserver.Core.Storage.FollowUps.FollowUpFolder“ – auch in Outlook oder am iPhone sichtbar. Löschen Sie eine Nachricht dort, entfällt der Auftrag.
+            Gesendet wird auch, wenn niemand angemeldet ist; die Zeiten gelten in der Zeitzone des Servers.</p>
+    </section>
+</div>

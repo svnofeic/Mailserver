@@ -69,6 +69,8 @@ public static class Icons
         "Trash" => "trash",
         "Junk" => "shield-alert",
         "Archive" => "archive",
+        Mailserver.Core.Storage.FollowUps.ScheduledFolder => "calendar",
+        Mailserver.Core.Storage.FollowUps.FollowUpFolder => "bell",
         _ => "folder",
     });
 }

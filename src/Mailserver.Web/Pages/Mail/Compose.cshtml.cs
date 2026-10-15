@@ -46,6 +46,7 @@ public sealed class ComposeModel(
     IOptions<MailserverOptions> options,
     Mailserver.Core.External.ExternalAccountStore external,
     Mailserver.Core.Accounts.Signatures signatures,
+    FollowUps followUps,
     ILogger<ComposeModel> logger) : MailPageModel
 {
     /// <summary>Signature HTML per sender address (lower case), for swapping it when another sender is chosen.</summary>
@@ -365,10 +366,49 @@ public sealed class ComposeModel(
     /// <summary>A draft that was edited is replaced by the sent message or the newly saved draft.</summary>
     private void RemoveEditedDraft()
     {
-        if (Form.Mode == "draft" && OriginalLocation() is var (folder, uid) && folder.Name == "Drafts")
+        // A draft, or a scheduled message opened for editing: the new version replaces it.
+        if (Form.Mode == "draft" && OriginalLocation() is var (folder, uid) && folder.Name is "Drafts" or FollowUps.ScheduledFolder)
         {
+            if (folder.Name == FollowUps.ScheduledFolder && store.Message(folder, uid) is { } scheduled)
+            {
+                followUps.RemoveScheduledFile(CurrentAccount.Id, scheduled.FileName);
+            }
+
             mailboxes.UpdateFlags(folder.Id, [uid], FlagOperation.Add, [MessageFlags.Deleted]);
             mailboxes.Expunge(folder.Id, [uid]);
         }
+    }
+
+    public IReadOnlyList<(string Key, string Label)> SendChoices => LaterChoices.Send;
+
+    /// <summary>"Später senden": the message waits in the folder "Geplant" until the chosen time.</summary>
+    public async Task<IActionResult> OnPostScheduleAsync(string? sendChoice, string? sendAt, CancellationToken cancellationToken)
+    {
+        if (await RefusedAsync() is { } refused)
+        {
+            return refused;
+        }
+
+        if (LaterChoices.Resolve(sendChoice, sendAt, DateTimeOffset.Now) is not { } when)
+        {
+            ErrorMessage = "Bitte einen Zeitpunkt für „Später senden“ wählen.";
+            Prepare();
+            return Page();
+        }
+
+        try
+        {
+            await sender.ScheduleAsync(CurrentAccount, await BuildDraftAsync(cancellationToken), when, cancellationToken);
+        }
+        catch (ComposeException ex)
+        {
+            ErrorMessage = ex.Message;
+            Prepare();
+            return Page();
+        }
+
+        RemoveEditedDraft();
+        Message = $"Die Nachricht wird am {Format.Time(when)} gesendet. Bis dahin liegt sie im Ordner „{FollowUps.ScheduledFolder}“.";
+        return Redirect("/Mail");
     }
 }

@@ -48,7 +48,8 @@ public sealed class WebmailSender(
     IOptions<MailserverOptions> options,
     Mailserver.Core.External.ExternalAccountStore external,
     Mailserver.Core.External.IExternalMail externalMail,
-    Contacts contacts)
+    Contacts contacts,
+    FollowUps followUps)
 {
     public const int MaxRecipients = 100;
 
@@ -65,12 +66,76 @@ public sealed class WebmailSender(
     public async Task SendAsync(Account account, Draft draft, IPAddress? clientIp, CancellationToken cancellationToken)
     {
         var (message, recipients) = Build(account, draft, requireRecipients: true);
+        await SendBuiltAsync(account, message, recipients, clientIp, "Webmail", cancellationToken);
+    }
+
+    /// <summary>
+    /// "Später senden": checks the message like a send would (sender, recipients, size) and puts it into the folder
+    /// "Geplant", where it waits – Bcc included – until <paramref name="sendAt"/>.
+    /// </summary>
+    public async Task<long> ScheduleAsync(Account account, Draft draft, DateTimeOffset sendAt, CancellationToken cancellationToken)
+    {
+        if (sendAt <= DateTimeOffset.UtcNow.AddMinutes(1))
+        {
+            throw new ComposeException("Der Zeitpunkt für „Später senden“ muss in der Zukunft liegen.");
+        }
+
+        if (sendAt > DateTimeOffset.UtcNow.AddYears(1))
+        {
+            throw new ComposeException("„Später senden“ geht höchstens ein Jahr im Voraus.");
+        }
+
+        var (message, _) = Build(account, draft, requireRecipients: true);
+        message.Headers.Add("X-Mailserver-Send-At", sendAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        using var raw = new MemoryStream();
+        await message.WriteToAsync(raw, cancellationToken);
+        var stored = await mailboxes.AppendAsync(account, raw.ToArray(), FollowUps.ScheduledFolder, $"{MessageFlags.Seen}",
+            cancellationToken: cancellationToken);
+        return followUps.Schedule(account.Id, stored.FileName, sendAt);
+    }
+
+    /// <summary>Sends a message from the folder "Geplant" (its time has come, or "Jetzt senden") and removes it there.</summary>
+    public async Task SendScheduledAsync(Account account, ScheduledSend scheduled, CancellationToken cancellationToken)
+    {
+        if (followUps.Locate(account.Id, scheduled.FileName) is not { } location || location.Folder.Name != FollowUps.ScheduledFolder)
+        {
+            // Deleted or moved out of "Geplant" in the meantime (also in a mail program): not sent.
+            followUps.RemoveScheduled(scheduled.Id);
+            return;
+        }
+
+        MimeMessage message;
+        await using (var stream = mailboxes.OpenMessage(location.Message))
+        {
+            message = await MimeMessage.LoadAsync(stream, cancellationToken);
+        }
+
+        // The sender is checked again: an alias may have been removed since.
+        if (message.From.Mailboxes.FirstOrDefault() is not { } from || !EmailAddress.TryParse(from.Address, out var address) ||
+            (!accounts.MaySendAs(account, address) && external.FindSender(account.Id, address.ToString()) is null))
+        {
+            throw new ComposeException("Diese Absenderadresse darf nicht mehr verwendet werden.");
+        }
+
+        message.Headers.Remove("X-Mailserver-Send-At");
+        message.Date = DateTimeOffset.Now;
+        var recipients = message.To.Mailboxes.Concat(message.Cc.Mailboxes).Concat(message.Bcc.Mailboxes)
+            .Select(m => EmailAddress.Parse(m.Address)).Distinct().ToList();
+        await SendBuiltAsync(account, message, recipients, null, "Webmail, später gesendet", cancellationToken);
+        mailboxes.UpdateFlags(location.Folder.Id, [location.Message.Uid], FlagOperation.Add, [MessageFlags.Deleted]);
+        mailboxes.Expunge(location.Folder.Id, [location.Message.Uid]);
+        followUps.RemoveScheduled(scheduled.Id);
+    }
+
+    private async Task SendBuiltAsync(Account account, MimeMessage message, List<EmailAddress> recipients, IPAddress? clientIp, string origin,
+        CancellationToken cancellationToken)
+    {
         var envelopeSender = message.From.Mailboxes.Single().Address;
 
         // Bcc must not appear in the transmitted message.
         message.Bcc.Clear();
         var received = Encoding.ASCII.GetBytes(
-            $"Received: from webmail ([{clientIp}])\r\n\tby {options.Value.Hostname} with HTTPS (webmail) for {account.Address};\r\n\t{DateUtils.FormatDate(DateTimeOffset.Now)}\r\n");
+            $"Received: from webmail ([{clientIp?.ToString() ?? "scheduled"}])\r\n\tby {options.Value.Hostname} with HTTPS (webmail) for {account.Address};\r\n\t{DateUtils.FormatDate(DateTimeOffset.Now)}\r\n");
         using var raw = new MemoryStream();
         raw.Write(received);
         await message.WriteToAsync(raw, cancellationToken);
@@ -135,7 +200,7 @@ public sealed class WebmailSender(
             HeaderFrom = envelopeSender,
             Subject = message.Subject,
             MessageId = message.MessageId,
-            Detail = $"Webmail, angemeldet als {account.Address}" + (provider is null ? "" : $", gesendet über {provider.Settings.Smtp!.Host}"),
+            Detail = $"{origin}, angemeldet als {account.Address}" + (provider is null ? "" : $", gesendet über {provider.Settings.Smtp!.Host}"),
         });
     }
 

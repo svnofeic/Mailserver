@@ -9,9 +9,9 @@
     <section>
         <div class="toolbar small">
             <a class="button secondary" href="/Mail?folder=@f">← @Format.FolderName(Model.Folder.Name)</a>
-            @if (Model.Folder.Name == "Drafts")
+            @if (Model.Folder.Name is "Drafts" or Mailserver.Core.Storage.FollowUps.ScheduledFolder)
             {
-                <a class="button" href="/Mail/Compose?mode=draft&folder=@f&uid=@uid">Entwurf bearbeiten</a>
+                <a class="button" href="/Mail/Compose?mode=draft&folder=@f&uid=@uid">@(Model.Folder.Name == "Drafts" ? "Entwurf bearbeiten" : "Geplante Mail bearbeiten")</a>
             }
             else
             {
@@ -30,6 +30,21 @@
                 </select>
                 <button type="submit" name="op" value="move" class="secondary">Verschieben</button>
             </form>
+            @if (Model.Folder.Name is not ("Drafts" or "Sent" or "Trash" or "Junk" or Mailserver.Core.Storage.FollowUps.ScheduledFolder))
+            {
+                <details class="send-later">
+                    <summary class="button secondary">@Icons.Get("clock") Wiedervorlage</summary>
+                    <form method="post" asp-page="/Mail/Read" asp-page-handler="FollowUp" asp-route-folder="@Model.Folder.Name" asp-route-uid="@uid" class="send-later-panel">
+                        <label>Wieder anzeigen
+                            <select name="choice">
+                                @foreach (var (key, label) in Model.FollowUpChoices) { <option value="@key" selected="@(key == "tomorrow8")">@label</option> }
+                            </select></label>
+                        <label>Oder Datum und Uhrzeit<input type="datetime-local" name="at" /></label>
+                        <button type="submit">Wiedervorlage setzen</button>
+                        <span class="small muted">Die Mail verschwindet bis dahin in den Ordner „Wiedervorlage“ und kommt dann ungelesen zurück.</span>
+                    </form>
+                </details>
+            }
         </div>
 
         <div class="card">

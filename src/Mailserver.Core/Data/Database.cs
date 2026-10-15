@@ -413,6 +413,28 @@ public sealed class Database
         );
         CREATE INDEX ix_tls_failures_report ON tls_failures (report);
         """,
+        // Mail to send later (the message waits in the folder "Geplant") and mail to show again later ("Wiedervorlage").
+        // Both are found by their file, which stays the same when a message is moved.
+        """
+        CREATE TABLE scheduled_sends (
+            id          INTEGER PRIMARY KEY,
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            file_name   TEXT NOT NULL,
+            send_utc    TEXT NOT NULL,
+            created_utc TEXT NOT NULL,
+            last_error  TEXT
+        );
+        CREATE INDEX ix_scheduled_sends_due ON scheduled_sends (send_utc);
+        CREATE TABLE follow_ups (
+            id            INTEGER PRIMARY KEY,
+            account_id    INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            file_name     TEXT NOT NULL,
+            return_folder TEXT NOT NULL,
+            due_utc       TEXT NOT NULL,
+            created_utc   TEXT NOT NULL
+        );
+        CREATE INDEX ix_follow_ups_due ON follow_ups (due_utc);
+        """,
     ];
 
     private readonly string _connectionString;

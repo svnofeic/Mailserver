@@ -37,6 +37,17 @@
         Bei einem Fehler müssen neu hinzugefügte Anhänge erneut ausgewählt werden.</p>
     <div class="toolbar">
         <button type="submit" asp-page-handler="Send">@Icons.Get("send") Senden</button>
+        <details class="send-later">
+            <summary class="button secondary">@Icons.Get("clock") Später senden</summary>
+            <div class="send-later-panel">
+                <label>Wann
+                    <select name="sendChoice">
+                        @foreach (var (key, label) in Model.SendChoices) { <option value="@key">@label</option> }
+                    </select></label>
+                <label>Oder Datum und Uhrzeit<input type="datetime-local" name="sendAt" /></label>
+                <button type="submit" asp-page-handler="Schedule">Zum Zeitpunkt senden</button>
+            </div>
+        </details>
         <button type="submit" asp-page-handler="Draft" class="secondary">Als Entwurf speichern</button>
         <a class="button secondary" href="/Mail">Verwerfen</a>
     </div>

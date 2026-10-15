@@ -62,7 +62,7 @@ darauf öffnet die Mail.
 
 | Seite | Inhalt |
 |---|---|
-| **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl („Alle“ wählt die ganze Seite), Seitenauswahl mit direkt anklickbaren Seitenzahlen und „Gehe zu Seite“, **Papierkorb/Spam leeren** mit einem Klick, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen (einzeln hinzufügen, hineinziehen, wieder entfernen; beim Weiterleiten einzelne Anhänge abwählen), Entwürfe, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
+| **Mail** | Webmail: Ordner (inkl. Anlegen, Umbenennen, Löschen), Nachrichtenliste mit Suche und Mehrfachauswahl („Alle“ wählt die ganze Seite), Seitenauswahl mit direkt anklickbaren Seitenzahlen und „Gehe zu Seite“, **Papierkorb/Spam leeren** mit einem Klick, Lesen mit Anhängen, Antworten, Allen antworten, Weiterleiten (mit Anhängen), neue Mail mit Formatierungs-Editor und Anhängen (einzeln hinzufügen, hineinziehen, wieder entfernen; beim Weiterleiten einzelne Anhänge abwählen), Entwürfe, **Später senden**, **Wiedervorlage**, Löschen, Verschieben, Spam/Kein Spam. Nach der Anmeldung landet man hier. |
 | **Adressbuch** | gespeicherte Kontakte und alle Adressen, an die geschrieben wurde; anlegen, Namen vergeben, löschen, vCard-Import (iPhone, Outlook, Google) und -Export. Daraus kommen die **Vorschläge beim Tippen** in An/Cc/Bcc. |
 | **Übersicht** | Speicherbelegung, Ordner mit Anzahl (ungelesen), zuletzt eingegangene Mails, Daten zur Einrichtung des Mailprogramms |
 | **Regeln** | eigene Regeln anlegen, bearbeiten, (de)aktivieren, löschen – z. B. „Betreff enthält … → Spam / endgültig löschen / Ordner“. Regeln des Administrators werden zur Info angezeigt. |
@@ -371,6 +371,17 @@ oder gelöschte Mails sind sofort auch in Outlook, Thunderbird und am Handy so.
   Weiterleitungen über dem Zitat (lässt sich je Adresse abschalten). Wählt man beim Schreiben einen anderen Absender,
   tauscht der Editor die Signatur aus. Das übliche Trennzeichen „-- “ wird automatisch davorgesetzt.
 - **Adressbuch:** Löschen eines Kontakts fragt vorher nach.
+- **Später senden:** Beim Schreiben neben „Senden“ einen Zeitpunkt wählen (morgen 8:00, morgen 13:00, Montag 8:00 oder
+  Datum und Uhrzeit). Die Nachricht wartet im Ordner „Geplant“ und wird zum Zeitpunkt vom Server gesendet – auch wenn
+  niemand angemeldet ist, mit denselben Prüfungen wie beim direkten Senden (Absender, Versandlimit, Virenscan, DKIM,
+  Kopie in „Gesendet“). Bis dahin lässt sie sich unter *Mail → Geplant & Wiedervorlage* sofort senden, bearbeiten oder
+  absagen (sie wandert dann in die Entwürfe). Wird sie in einem Mailprogramm aus „Geplant“ gelöscht, entfällt der Versand.
+  Klappt das Senden nicht (z. B. Versandlimit), bleibt sie in „Geplant“, und eine Mail im Posteingang sagt Bescheid.
+- **Wiedervorlage:** Beim Lesen einer Mail unter „Wiedervorlage“ einen Zeitpunkt wählen (heute 18:00, morgen 8:00, in
+  3 Tagen, nächsten Montag, in einer Woche oder Datum und Uhrzeit). Die Mail wandert bis dahin in den Ordner
+  „Wiedervorlage“ und kommt dann **ungelesen** in ihren Ordner zurück, mit Push-Benachrichtigung wie neue Mail.
+  *Geplant & Wiedervorlage* zeigt alle Wiedervorlagen, „Jetzt zurückholen“ holt eine sofort zurück. Die Zeiten gelten in
+  der Zeitzone des Servers.
 - **Ordner verwalten** (Link unter der Ordnerliste): Ordner und Unterordner anlegen, umbenennen und löschen. Systemordner
   (Posteingang, Gesendet, Entwürfe, Papierkorb, Spam) sind geschützt. Beim Löschen wandern enthaltene Mails in den Papierkorb;
   Unterordner müssen zuerst gelöscht werden. Beim Umbenennen werden Regeln, die Mails in den Ordner verschieben, automatisch angepasst.

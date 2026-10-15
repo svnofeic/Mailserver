@@ -5,8 +5,39 @@ using MimeKit;
 
 namespace Mailserver.Web.Pages.Mail;
 
-public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailActions actions) : MailPageModel
+public sealed class ReadModel(WebmailStore store, MailboxStore mailboxes, MailActions actions, FollowUps followUps) : MailPageModel
 {
+    public IReadOnlyList<(string Key, string Label)> FollowUpChoices => LaterChoices.FollowUp;
+
+    /// <summary>"Wiedervorlage": the message leaves the folder and comes back unread at the chosen time.</summary>
+    public IActionResult OnPostFollowUp(string folder, long uid, string? choice, string? at)
+    {
+        if (store.Folder(CurrentAccount.Id, folder) is not { } selected || store.Message(selected, uid) is not { } stored)
+        {
+            return NotFound();
+        }
+
+        if (LaterChoices.Resolve(choice, at, DateTimeOffset.Now) is not { } due || due <= DateTimeOffset.Now)
+        {
+            ErrorMessage = "Bitte einen Zeitpunkt in der Zukunft wählen.";
+            return Redirect($"/Mail/Read?folder={Uri.EscapeDataString(folder)}&uid={uid}");
+        }
+
+        // Coming from the follow-up folder itself (a new time): back into the folder it originally came from.
+        var returnFolder = selected.Name == FollowUps.FollowUpFolder
+            ? followUps.FollowUpsOf(CurrentAccount.Id).FirstOrDefault(f => f.FileName == stored.FileName)?.ReturnFolder ?? MailboxStore.Inbox
+            : selected.Name;
+        followUps.AddFollowUp(CurrentAccount.Id, stored.FileName, returnFolder, due);
+        if (selected.Name != FollowUps.FollowUpFolder)
+        {
+            var target = mailboxes.GetOrCreateFolder(CurrentAccount.Id, FollowUps.FollowUpFolder);
+            mailboxes.Move(selected.Id, [uid], target.Id);
+        }
+
+        Message = $"Wiedervorlage am {Format.Time(due)}: Die Nachricht kommt dann ungelesen in „{Format.FolderName(returnFolder)}“ zurück.";
+        return Redirect($"/Mail?folder={Uri.EscapeDataString(folder)}");
+    }
+
     public Folder Folder { get; private set; } = null!;
     public IReadOnlyList<(Folder Folder, FolderStatus Status)> Folders { get; private set; } = [];
     public StoredMessage Stored { get; private set; } = null!;
