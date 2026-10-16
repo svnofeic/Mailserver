@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 namespace Mailserver.Web.Pages.Calendar;
 
 /// <summary>The calendars of the mailbox: add, rename, colour, delete, import and export; and how to set up phones.</summary>
-public sealed class CalendarsModel(DavStore store, IOptions<MailserverOptions> options) : MailPageModel
+public sealed class CalendarsModel(DavStore store, IOptions<MailserverOptions> options, Dav.DavActivity activity) : MailPageModel
 {
     public static readonly IReadOnlyList<(string Value, string Label)> Colors =
     [
@@ -20,11 +20,29 @@ public sealed class CalendarsModel(DavStore store, IOptions<MailserverOptions> o
 
     public IReadOnlyList<(DavCollection Calendar, int Events)> Items { get; private set; } = [];
     public string ServerUrl => Dav.DavHandler.ServerUrl(options.Value);
+    public IReadOnlyList<Dav.DavClient> Clients { get; private set; } = [];
 
     public void OnGet()
     {
         Items = store.Collections(CurrentAccount.Id, DavStore.Calendar).Select(c => (c, store.Objects(c.Id).Count)).ToList();
+        Clients = activity.Clients(CurrentAccount.Id);
     }
+
+    public static string StatusText(int status) => status switch
+    {
+        200 or 207 => "OK",
+        201 or 204 => "gespeichert",
+        304 => "unverändert",
+        401 => "Anmeldung fehlgeschlagen",
+        403 => "nicht erlaubt",
+        404 => "nicht gefunden",
+        409 => "Konflikt (gleiche UID)",
+        412 => "auf dem Server inzwischen geändert",
+        413 => "zu groß",
+        415 => "Daten nicht lesbar",
+        429 => "zu viele Fehlversuche, gesperrt",
+        _ => status.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
 
     public IActionResult OnPostCreate(string name, string? color)
     {

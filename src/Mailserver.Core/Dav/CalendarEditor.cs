@@ -246,5 +246,42 @@ public static class CalendarEditor
     private static DateTime Local(Ical.Net.DataTypes.IDateTime value) =>
         value.HasTime ? TimeZoneInfo.ConvertTimeFromUtc(CalendarData.ToUtc(value).UtcDateTime, TimeZoneInfo.Local) : value.Value.Date;
 
-    private static string Serialize(Ical.Net.Calendar calendar) => new CalendarSerializer().SerializeToString(calendar);
+    /// <summary>
+    /// As text, with the time zones before the events (as the iPhone, the Mac and Outlook write it; some programs read the
+    /// zone only if it comes first) and our own PRODID.
+    /// </summary>
+    private static string Serialize(Ical.Net.Calendar calendar)
+    {
+        var text = new CalendarSerializer().SerializeToString(calendar);
+        var lines = text.Replace("\r\n", "\n").TrimEnd('\n').Split('\n').ToList();
+        var zones = new List<string>();
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (!lines[i].Equals("BEGIN:VTIMEZONE", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var end = lines.FindIndex(i, l => l.Equals("END:VTIMEZONE", StringComparison.OrdinalIgnoreCase));
+            if (end < 0)
+            {
+                break;
+            }
+
+            zones.AddRange(lines.GetRange(i, end - i + 1));
+            lines.RemoveRange(i, end - i + 1);
+            i--;
+        }
+
+        var first = lines.FindIndex(l => l.StartsWith("BEGIN:V", StringComparison.OrdinalIgnoreCase) &&
+                                         !l.Equals("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase));
+        lines.InsertRange(first < 0 ? Math.Max(lines.Count - 1, 0) : first, zones);
+        var prodId = lines.FindIndex(l => l.StartsWith("PRODID:", StringComparison.OrdinalIgnoreCase));
+        if (prodId >= 0)
+        {
+            lines[prodId] = "PRODID:-//Mailserver//Kalender//DE";
+        }
+
+        return string.Join("\r\n", lines) + "\r\n";
+    }
 }

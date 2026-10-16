@@ -65,6 +65,44 @@ else
     </form>
 }
 
+<h2>Abgleich mit Geräten</h2>
+@if (Model.Clients.Count == 0)
+{
+    <div class="card small muted">Seit dem letzten Start des Mailservers hat sich noch kein Gerät gemeldet. Ist das iPhone eingerichtet, die Kalender-App öffnen
+        und in der Liste der Kalender (unten „Kalender“) nach unten ziehen – dann fragt es sofort nach.</div>
+}
+else
+{
+    <ul class="contact-list panel">
+        @foreach (var client in Model.Clients)
+        {
+            <li>
+                <span class="avatar" style="background: @(client.LastOk ? "var(--good)" : "var(--bad)")">@Icons.Get(client.LastOk ? "check-circle" : "alert")</span>
+                <div class="person">
+                    <div class="name">@client.Name</div>
+                    <div class="meta small muted">zuletzt @Format.Time(client.LastSeen) · @Mailserver.Web.Pages.Calendar.CalendarsModel.StatusText(client.LastStatus)</div>
+                    <details class="cal-edit">
+                        <summary class="small">Letzte Anfragen</summary>
+                        <div class="table-wrap"><table class="small"><tbody>
+                            @foreach (var request in client.Requests.Take(25))
+                            {
+                                <tr>
+                                    <td class="muted">@Format.Time(request.Time)</td>
+                                    <td>@request.What</td>
+                                    <td class="@(request.Status is >= 200 and < 400 ? "muted" : "")">@Mailserver.Web.Pages.Calendar.CalendarsModel.StatusText(request.Status)</td>
+                                </tr>
+                            }
+                        </tbody></table></div>
+                    </details>
+                </div>
+            </li>
+        }
+    </ul>
+}
+<p class="small muted">Das iPhone holt Änderungen nicht sofort, sondern in Abständen (Einstellungen → Apps → Kalender → Accounts → Datenabgleich,
+    z. B. „Alle 15 Minuten“). Sofort geht es, wenn man in der Kalender-App unten auf „Kalender“ tippt und die Liste nach unten zieht.
+    Termine, die am iPhone angelegt werden, schickt es dagegen gleich hierher.</p>
+
 <h2>Am Handy und am Computer</h2>
 <div class="card">
     <p style="margin-top: 0">Die Kalender lassen sich mit dem iPhone, dem Mac, Thunderbird und Android (DAVx⁵) abgleichen – in beide Richtungen.</p>

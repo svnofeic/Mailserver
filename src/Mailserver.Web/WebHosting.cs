@@ -93,6 +93,7 @@ public static class WebHosting
         services.AddSingleton<Webmail.WebmailSender>();
         services.AddSingleton<Webmail.MailActions>();
         services.AddSingleton<Webmail.FolderManager>();
+        services.AddSingleton<Dav.DavActivity>();
         services.AddSingleton<Dav.DavHandler>();
         services.AddSingleton<Webmail.ScheduledMailService>();
         services.AddHostedService(sp => sp.GetRequiredService<Webmail.ScheduledMailService>());

@@ -27,7 +27,7 @@ namespace Mailserver.Web.Dav;
 /// /dav/addressbooks/{address}/{slug}/…   the same for address books (.vcf)
 /// </code>
 /// </summary>
-public sealed class DavHandler(DavStore store, ContactCards contactCards, AccountStore accounts, AuthThrottle throttle, Mailserver.Core.SpamLogging.SpamLog spamLog,
+public sealed class DavHandler(DavStore store, ContactCards contactCards, DavActivity activity, AccountStore accounts, AuthThrottle throttle, Mailserver.Core.SpamLogging.SpamLog spamLog,
     ILogger<DavHandler> logger)
 {
     public const string Root = "/dav/";
@@ -87,6 +87,7 @@ public sealed class DavHandler(DavStore store, ContactCards contactCards, Accoun
         if (Resolve(account, path) is not { } target)
         {
             response.StatusCode = StatusCodes.Status404NotFound;
+            activity.Record(account.Id, request.Headers.UserAgent, request.Method, Uri.UnescapeDataString(path), response.StatusCode);
             return;
         }
 
@@ -128,6 +129,28 @@ public sealed class DavHandler(DavStore store, ContactCards contactCards, Accoun
         {
             response.StatusCode = StatusCodes.Status413PayloadTooLarge;
         }
+        finally
+        {
+            activity.Record(account.Id, request.Headers.UserAgent, request.Method, Describe(target, context), response.StatusCode);
+        }
+    }
+
+    private const string CountItem = "dav-count";
+    private const string ReportItem = "dav-report";
+
+    /// <summary>What a request was about, for the list of recent requests: "Kalender „Arbeit“: Abgleich (3 Einträge)".</summary>
+    private static string Describe(Target target, HttpContext context)
+    {
+        var name = target.Kind switch
+        {
+            Kind.Root or Kind.Principal => "Anmeldung/Suche nach Kalendern",
+            Kind.Home => target.Type == DavStore.Calendar ? "Liste der Kalender" : "Liste der Adressbücher",
+            Kind.Collection => $"{(target.Type == DavStore.Calendar ? "Kalender" : "Adressbuch")} „{target.Collection?.Name ?? target.Name}“",
+            _ => $"{(target.Type == DavStore.Calendar ? "Termin" : "Kontakt")} {target.Name}",
+        };
+        var report = context.Items[ReportItem] as string;
+        var count = context.Items[CountItem] is int n && target.Kind != Kind.Object ? $" ({n} {(n == 1 ? "Eintrag" : "Einträge")})" : "";
+        return report is null ? name + count : $"{name}: {report}{count}";
     }
 
     // ---- Login ----
@@ -180,6 +203,11 @@ public sealed class DavHandler(DavStore store, ContactCards contactCards, Accoun
 
                 var lockedOut = throttle.RecordFailure(ip);
                 logger.LogWarning("Failed calendar/contacts login for {User} from {Ip}", user, ip);
+                if (Mailserver.Core.EmailAddress.TryParse(user, out var tried) && accounts.FindAccount(tried) is { } owner)
+                {
+                    // Shown to the owner: a phone with an old password keeps failing here.
+                    activity.Record(owner.Id, context.Request.Headers.UserAgent, context.Request.Method, "Anmeldung: falsches Passwort", 401);
+                }
                 spamLog.WriteAuthFailure("CalDAV", user, ip, lockedOut);
             }
         }
@@ -601,6 +629,14 @@ public sealed class DavHandler(DavStore store, ContactCards contactCards, Accoun
 
         var (names, allProps) = RequestedProperties(report);
         var propRequest = report.Element(D + "prop");
+        context.Items[ReportItem] = report.Name.LocalName switch
+        {
+            "sync-collection" => "Änderungen abgleichen",
+            "calendar-multiget" or "addressbook-multiget" => "Einträge abholen",
+            "calendar-query" => "Termine im Zeitraum",
+            "addressbook-query" => "Kontakte suchen",
+            var other => other,
+        };
         if (report.Name == D + "expand-property")
         {
             // Delegation (proxy calendars) is not offered: an empty answer.
@@ -980,6 +1016,8 @@ public sealed class DavHandler(DavStore store, ContactCards contactCards, Accoun
 
     private static async Task WriteMultiStatusAsync(HttpContext context, IEnumerable<XElement> responses, XElement? extra = null)
     {
+        responses = responses.ToList();
+        context.Items[CountItem] = ((List<XElement>)responses).Count;
         var root = new XElement(D + "multistatus",
             new XAttribute(XNamespace.Xmlns + "d", D), new XAttribute(XNamespace.Xmlns + "c", C), new XAttribute(XNamespace.Xmlns + "card", CR),
             new XAttribute(XNamespace.Xmlns + "cs", CS), new XAttribute(XNamespace.Xmlns + "a", A), responses, extra);

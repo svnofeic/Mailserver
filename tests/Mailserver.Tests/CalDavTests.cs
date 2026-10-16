@@ -201,4 +201,27 @@ public sealed class CalDavTests : IAsyncLifetime
         var options = await SendAsync("OPTIONS", "/dav/");
         Assert.Contains("calendar-access", options.Response.Headers.GetValues("DAV").Single());
     }
+
+    [Fact]
+    public async Task The_calendar_page_shows_which_devices_synced()
+    {
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("iOS/26.0 (23A341) dataaccessd/1.0");
+        await SendAsync("PROPFIND", "/dav/calendars/alice@example.test/", PropFind(D + "displayname"), "1");
+        using (var wrong = Client("alice@example.test", "altes Passwort"))
+        {
+            wrong.DefaultRequestHeaders.UserAgent.ParseAdd("macOS/15.1 (24B83) CalendarAgent/1000");
+            await SendAsync("PROPFIND", "/dav/", PropFind(D + "current-user-principal"), "0", wrong);
+        }
+
+        using var web = new WebClient(_server.WebPort);
+        await web.LoginAsync("alice@example.test", TestServer.Password);
+        await web.GetAsync("/Calendar/Calendars");
+        Assert.Contains("iPhone/iPad (iOS 26.0)", web.LastPage);
+        Assert.Contains("Liste der Kalender (2 Einträge)", web.LastPage);
+        Assert.Contains("Mac (macOS 15.1)", web.LastPage);
+        Assert.Contains("falsches Passwort", web.LastPage);
+
+        Assert.Equal("DAVx⁵ (Android)", Mailserver.Web.Dav.DavActivity.ClientName("DAVx5/4.4.2-ose (2024/10/01; dav4jvm; okhttp/4.12.0) Android/14"));
+        Assert.Equal("Thunderbird", Mailserver.Web.Dav.DavActivity.ClientName("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Thunderbird/128.3.0"));
+    }
 }
