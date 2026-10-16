@@ -36,7 +36,7 @@ public sealed record MtaStsPolicy(string Mode, IReadOnlyList<string> Mx, TimeSpa
         string? version = null, mode = null;
         var mx = new List<string>();
         long maxAge = -1;
-        foreach (var line in text.Split('\n').Select(l => l.TrimEnd('\r')))
+        foreach (var line in text.TrimStart('\uFEFF').Split('\n').Select(l => l.TrimEnd('\r')))
         {
             var colon = line.IndexOf(':');
             if (colon <= 0)

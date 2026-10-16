@@ -107,8 +107,21 @@ public sealed class MtaStsTests
         diagnostics.FetchMtaStsPolicy = (_, _) => Task.FromResult<string?>(MtaStsPublisher.PolicyText(options));
         Assert.Equal(CheckStatus.Ok, Check(await diagnostics.RunAsync()).Status);
 
+        // Same content, other form (as written by hand or by the Plesk file manager): fine.
+        var maxAge = MtaStsPublisher.PolicyText(options).Split('\n').Single(l => l.StartsWith("max_age")).Trim();
+        diagnostics.FetchMtaStsPolicy = (_, _) => Task.FromResult<string?>($"\uFEFFversion: STSv1\nmx: MAIL.example.test\nmode: enforce  \n{maxAge}");
+        Assert.Equal(CheckStatus.Ok, Check(await diagnostics.RunAsync()).Status);
+
         diagnostics.FetchMtaStsPolicy = (_, _) => Task.FromResult<string?>(MtaStsPublisher.PolicyText(options).Replace("enforce", "testing"));
-        Assert.Equal(CheckStatus.Warning, Check(await diagnostics.RunAsync()).Status);
+        var different = Check(await diagnostics.RunAsync());
+        Assert.Equal(CheckStatus.Warning, different.Status);
+        Assert.Contains("mode: testing, eingestellt ist enforce", different.Detail);
+
+        // Right file, other id: only a hint.
+        dns.Txt.Remove("_mta-sts.example.test");
+        dns.AddTxt("_mta-sts.example.test", "v=STSv1; id=20261001");
+        diagnostics.FetchMtaStsPolicy = (_, _) => Task.FromResult<string?>(MtaStsPublisher.PolicyText(options));
+        Assert.Equal(CheckStatus.Info, Check(await diagnostics.RunAsync()).Status);
     }
 
     private static string TlsJson(string id, int ok, int failed) => $$"""

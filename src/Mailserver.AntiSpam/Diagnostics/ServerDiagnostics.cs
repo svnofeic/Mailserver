@@ -446,16 +446,44 @@ public sealed class ServerDiagnostics(
                 "Mit mode: enforce würden andere Server die Zustellung verweigern. Die Datei aus Verwaltung → Domains neu hochladen.");
         }
 
+        // Compared by content: line breaks, spaces or a byte order mark (Plesk file manager) do not matter.
         var expected = Mailserver.Core.Security.MtaStsPublisher.TxtRecord(settings);
-        if (!record.Replace(" ", "").Equals(expected.Replace(" ", ""), StringComparison.Ordinal) || text.Replace("\r", "") != Mailserver.Core.Security.MtaStsPublisher.PolicyText(settings).Replace("\r", ""))
+        var wanted = Mailserver.Core.Security.MtaStsPolicy.Parse(Mailserver.Core.Security.MtaStsPublisher.PolicyText(settings))!;
+        var differences = new List<string>();
+        if (policy.Mode != wanted.Mode)
         {
-            return new(group, "MTA-STS", CheckStatus.Warning, $"{record}, mode: {policy.Mode} – Datei oder id weicht von der aktuellen Einstellung ab",
-                $"Aktuelle Datei hochladen und den TXT-Eintrag auf „{expected}“ setzen (sonst holen andere Server die neue Richtlinie nicht ab).");
+            differences.Add($"die Datei sagt mode: {policy.Mode}, eingestellt ist {wanted.Mode}");
+        }
+
+        if (!policy.Mx.Select(m => m.TrimEnd('.').ToLowerInvariant()).Order().SequenceEqual(wanted.Mx.Select(m => m.TrimEnd('.').ToLowerInvariant()).Order()))
+        {
+            differences.Add($"die Datei nennt mx: {string.Join(", ", policy.Mx)}, eingestellt ist {string.Join(", ", wanted.Mx)}");
+        }
+
+        if (policy.MaxAge != wanted.MaxAge)
+        {
+            differences.Add($"die Datei sagt max_age: {(long)policy.MaxAge.TotalSeconds}, eingestellt ist {(long)wanted.MaxAge.TotalSeconds}");
+        }
+
+        if (differences.Count > 0)
+        {
+            return new(group, "MTA-STS", CheckStatus.Warning, $"{record}, mode: {policy.Mode} – {string.Join("; ", differences)}",
+                $"Die aktuelle Datei aus Verwaltung → Domains → {domain.Name} hochladen und den TXT-Eintrag auf „{expected}“ setzen (sonst holen andere Server die neue Richtlinie nicht ab).");
+        }
+
+        if (!RecordId(record).Equals(RecordId(expected), StringComparison.OrdinalIgnoreCase))
+        {
+            // The content is right; only the id tells other servers that something changed.
+            return new(group, "MTA-STS", CheckStatus.Info, $"{record}, mode: {policy.Mode} – Datei passt, die id im TXT-Eintrag ist eine andere",
+                $"Das schadet nicht. Nach einer Änderung der Datei muss sich die id aber ändern, sonst holen andere Server sie nicht neu ab – am einfachsten „{expected}“ eintragen.");
         }
 
         return new(group, "MTA-STS", policy.Enforce ? CheckStatus.Ok : CheckStatus.Info, $"mode: {policy.Mode}, mx: {string.Join(", ", policy.Mx)}",
             policy.Enforce ? null : "Wenn die TLS-Berichte einige Wochen ohne Fehler sind, auf mode: enforce stellen (Mailserver:MtaSts:Mode).");
     }
+
+    private static string RecordId(string record) =>
+        record.Split(';').Select(p => p.Trim()).FirstOrDefault(p => p.StartsWith("id=", StringComparison.OrdinalIgnoreCase))?[3..].Trim() ?? "";
 
     private static readonly HttpClient PolicyClient = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10) };
 
