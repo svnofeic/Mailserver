@@ -51,6 +51,14 @@ else
 }
 else
 {
+    @if (Model.Blockable > 0)
+    {
+        <form method="post" asp-page-handler="BlockAll" class="row" style="margin-bottom: 10px">
+            <button type="submit" class="danger" data-confirm="@($"Alle {Model.Blockable} Adresse(n) mit Fehl-Logins dauerhaft sperren? Ihre eigene Adresse und Adressen mit „nie sperren“ bleiben ausgenommen.")">
+                @Icons.Get("ban") Alle sperren (@Model.Blockable)</button>
+            <span class="small muted">dauerhaft, ohne Ihre eigene Adresse; einzelne Sperren lassen sich unten unter „Regeln“ wieder entfernen</span>
+        </form>
+    }
     <div class="table-wrap">
         <table>
             <thead><tr><th>Adresse</th><th>Fehl-Logins</th><th>versuchte Benutzer</th><th>zuletzt</th><th></th></tr></thead>

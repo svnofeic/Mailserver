@@ -198,4 +198,29 @@ public sealed class IpBlockIntegrationTests : IAsyncLifetime
         Assert.Contains("Sperre für 192.0.2.99 aufgehoben.", web.LastPage);
         Assert.False(throttle.IsLockedOut(bot));
     }
+
+    [Fact]
+    public async Task Admin_blocks_all_failing_addresses_at_once()
+    {
+        var log = _server.Services.GetRequiredService<Mailserver.Core.SpamLogging.SpamLog>();
+        foreach (var ip in new[] { "203.0.113.1", "203.0.113.2", "203.0.113.2", "203.0.113.3", "127.0.0.1" })
+        {
+            log.WriteAuthFailure("IMAP", "info@example.test", IPAddress.Parse(ip), false);
+        }
+
+        Rules.Add("203.0.113.3", IpRuleKind.Allow, "Büro", null);
+        var admin = _server.HostAccounts.AddAccount(EmailAddress.Parse("chef@example.test"), TestServer.Password);
+        _server.HostAccounts.SetAdmin(admin.Address, true);
+        using var web = new WebClient(_server.WebPort);
+        await web.LoginAsync("chef@example.test", TestServer.Password);
+        await web.GetAsync("/Admin/IpBlocks");
+        // 203.0.113.1 and .2; not the own address, and .3 is allowed.
+        Assert.Contains("Alle sperren (2)", web.LastPage);
+
+        await web.PostAsync("/Admin/IpBlocks", "/Admin/IpBlocks?handler=BlockAll");
+        Assert.Contains("2 Adresse(n) dauerhaft gesperrt.", web.LastPage);
+        var blocked = Rules.List().Where(r => r.Kind == IpRuleKind.Block).Select(r => r.NetworkText).Order().ToList();
+        Assert.Equal(["203.0.113.1", "203.0.113.2"], blocked);
+        Assert.DoesNotContain("Alle sperren (", web.LastPage);
+    }
 }
