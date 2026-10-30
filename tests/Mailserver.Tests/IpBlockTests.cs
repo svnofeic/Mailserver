@@ -223,4 +223,41 @@ public sealed class IpBlockIntegrationTests : IAsyncLifetime
         Assert.Equal(["203.0.113.1", "203.0.113.2"], blocked);
         Assert.DoesNotContain("Alle sperren (", web.LastPage);
     }
+
+    [Fact]
+    public async Task Rules_are_shown_in_pages_and_can_be_searched()
+    {
+        for (var i = 1; i <= 120; i++)
+        {
+            Rules.Add($"198.51.100.{i}", IpRuleKind.Block, i == 77 ? "Bot aus Liste" : "Fehl-Logins", null);
+        }
+
+        var admin = _server.HostAccounts.AddAccount(EmailAddress.Parse("chef@example.test"), TestServer.Password);
+        _server.HostAccounts.SetAdmin(admin.Address, true);
+        using var web = new WebClient(_server.WebPort);
+        await web.LoginAsync("chef@example.test", TestServer.Password);
+        int Shown() => web.LastPage.Split("handler=Remove").Length - 1;
+
+        await web.GetAsync("/Admin/IpBlocks");
+        Assert.Equal(50, Shown());
+        Assert.Contains("120 Regeln", web.LastPage);
+        Assert.Contains("Seite 1 von 3", web.LastPage);
+        // Newest first.
+        Assert.Contains("198.51.100.120<", web.LastPage);
+
+        await web.GetAsync("/Admin/IpBlocks?seite=3");
+        Assert.Equal(20, Shown());
+        Assert.Contains("198.51.100.1<", web.LastPage);
+
+        await web.GetAsync("/Admin/IpBlocks?q=Liste");
+        Assert.Equal(1, Shown());
+        Assert.Contains("1 von 120 Regeln", web.LastPage);
+
+        // Removing on page 2 leads back to page 2.
+        var rule = Rules.List().Single(r => r.NetworkText == "198.51.100.60");
+        await web.PostAsync("/Admin/IpBlocks?seite=2", "/Admin/IpBlocks?handler=Remove", ("id", rule.Id.ToString()), ("seite", "2"));
+        Assert.Contains("Regel entfernt.", web.LastPage);
+        Assert.Contains("Seite 2 von 3", web.LastPage);
+        Assert.Equal(119, Rules.List().Count);
+    }
 }

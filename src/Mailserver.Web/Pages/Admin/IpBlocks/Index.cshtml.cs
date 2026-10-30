@@ -12,16 +12,36 @@ public sealed class IndexModel(IpRules rules, AuthThrottle throttle, SpamLog log
 {
     public IReadOnlyList<Lockout> Lockouts { get; private set; } = [];
     public IReadOnlyList<FailingAddress> Failing { get; private set; } = [];
+    public const int RulesPerPage = 50;
+
+    /// <summary>The rules on the shown page (newest first), filtered by <see cref="Filter"/>.</summary>
     public IReadOnlyList<IpRule> Rules { get; private set; } = [];
+    public int RulesTotal { get; private set; }
+    public int RulesCount { get; private set; }
+    public int RulePage { get; private set; } = 1;
+    public int RulePages => Math.Max(1, (RulesTotal + RulesPerPage - 1) / RulesPerPage);
+    public string? Filter { get; private set; }
     public string? OwnAddress => Normalize(HttpContext.Connection.RemoteIpAddress)?.ToString();
 
     /// <summary>Addresses with failed logins in the last 24 hours that are not blocked or allowed yet (all, not only the 30 shown).</summary>
     public int Blockable { get; private set; }
 
-    public void OnGet()
+    /// <param name="seite">Page of the rules (from 1).</param>
+    /// <param name="q">Part of an address, network or comment.</param>
+    public void OnGet(int seite = 1, string? q = null)
     {
         Lockouts = throttle.ListLockouts();
-        Rules = rules.List();
+        var allRules = rules.List();
+        RulesCount = allRules.Count;
+        Filter = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+        var matching = allRules
+            .Where(r => Filter is null || r.NetworkText.Contains(Filter, StringComparison.OrdinalIgnoreCase) ||
+                        (r.Comment ?? "").Contains(Filter, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(r => r.Created).ThenByDescending(r => r.Id)
+            .ToList();
+        RulesTotal = matching.Count;
+        RulePage = Math.Clamp(seite, 1, RulePages);
+        Rules = matching.Skip((RulePage - 1) * RulesPerPage).Take(RulesPerPage).ToList();
         var all = FailingSinceYesterday(Lockouts);
         Failing = all.Take(30).ToList();
         Blockable = all.Count(f => CanBlock(f) && !IsOwn(f));
@@ -94,11 +114,15 @@ public sealed class IndexModel(IpRules rules, AuthThrottle throttle, SpamLog log
         return RedirectToPage();
     }
 
-    public IActionResult OnPostRemove(long id)
+    /// <summary>Removes a rule; back to the same page of the list (and the same filter).</summary>
+    public IActionResult OnPostRemove(long id, int seite = 1, string? q = null)
     {
         Message = rules.Remove(id) ? "Regel entfernt." : null;
-        return RedirectToPage();
+        return RedirectToPage(new { seite, q });
     }
+
+    public string RulesUrl(int page) =>
+        $"/Admin/IpBlocks?seite={page}{(Filter is null ? "" : "&q=" + Uri.EscapeDataString(Filter))}#regeln";
 
     public IActionResult OnPostRelease(string ip)
     {

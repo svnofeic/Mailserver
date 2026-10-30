@@ -92,7 +92,17 @@ else
     </div>
 }
 
-<h2>Regeln</h2>
+<h2 id="regeln">Regeln</h2>
+@if (Model.RulesCount > 0)
+{
+    <form method="get" class="search" action="/Admin/IpBlocks#regeln" style="margin-bottom: 10px">
+        @Icons.Get("search")
+        <input name="q" value="@Model.Filter" placeholder="Adresse, Netz oder Kommentar" aria-label="Regeln durchsuchen" />
+        <button type="submit" class="secondary">Suchen</button>
+        @if (Model.Filter is not null) { <a class="small" href="/Admin/IpBlocks#regeln">Alle zeigen</a> }
+    </form>
+    <p class="small muted">@(Model.Filter is null ? $"{Model.RulesCount} Regeln" : $"{Model.RulesTotal} von {Model.RulesCount} Regeln passen"), neueste zuerst.</p>
+}
 @if (Model.Rules.Count > 0)
 {
     <div class="table-wrap">
@@ -113,6 +123,8 @@ else
                         <td>
                             <form method="post" asp-page-handler="Remove" class="inline">
                                 <input type="hidden" name="id" value="@rule.Id" />
+                                <input type="hidden" name="seite" value="@Model.RulePage" />
+                                @if (Model.Filter is not null) { <input type="hidden" name="q" value="@Model.Filter" /> }
                                 <button type="submit" class="secondary">Entfernen</button>
                             </form>
                         </td>
@@ -121,6 +133,33 @@ else
             </tbody>
         </table>
     </div>
+    @if (Model.RulePages > 1)
+    {
+        <nav class="pager" aria-label="Seiten der Regeln">
+            @if (Model.RulePage > 1) { <a class="button secondary" href="@Model.RulesUrl(Model.RulePage - 1)" rel="prev">← Neuere</a> }
+            <span class="pages">
+                @for (var n = 1; n <= Model.RulePages; n++)
+                {
+                    // First, last and two around the current page; the rest as "…".
+                    if (n == 1 || n == Model.RulePages || Math.Abs(n - Model.RulePage) <= 2)
+                    {
+                        if (n == Model.RulePage) { <span class="current" aria-current="page">@n</span> }
+                        else { <a href="@Model.RulesUrl(n)">@n</a> }
+                    }
+                    else if (n == 2 || n == Model.RulePages - 1)
+                    {
+                        <span class="gap">…</span>
+                    }
+                }
+            </span>
+            @if (Model.RulePage < Model.RulePages) { <a class="button secondary" href="@Model.RulesUrl(Model.RulePage + 1)" rel="next">Ältere →</a> }
+            <span class="muted small">Seite @Model.RulePage von @Model.RulePages</span>
+        </nav>
+    }
+}
+else if (Model.Filter is not null)
+{
+    <p class="muted">Keine Regel passt zu „@Model.Filter“.</p>
 }
 <p class="small muted">„Nie sperren“ gilt für Fehl-Logins und für die Spam-Sperrlisten (z. B. Spamhaus): Leitet ein anderer Anbieter Mails
     hierher weiter und steht sein Server auf einer Sperrliste, dessen Adresse hier eintragen. Die übrigen Spam-Prüfungen gelten weiter.</p>
